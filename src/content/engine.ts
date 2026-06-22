@@ -1,5 +1,5 @@
 import { AlignedPair, Settings, TranslateResponse } from '../core/types';
-import { hasTranslatableText } from '../core/segmentation';
+import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
 import { el, isProcessed, markProcessed } from '../utils/dom';
 import { sendMessage, isContextGoneError } from '../utils/runtime';
 
@@ -103,6 +103,10 @@ export class Engine {
     if (!this.siteEnabled()) return;
     for (const unit of this.adapter.collect()) {
       if (isProcessed(unit.source) || this.pending.has(unit.source)) continue;
+      // Skip text already in the target language (e.g. a Chinese post when the
+      // target is Chinese) — no 中文→中文 duplicate. Not marked processed, so it
+      // re-evaluates if the target language is later changed.
+      if (isAlreadyTargetLang(unit.text, this.settings.targetLangCode)) continue;
       if (this.settings.translateOnVisible) {
         this.pending.add(unit.source);
         (unit.source as any).__ibtText = unit.text;

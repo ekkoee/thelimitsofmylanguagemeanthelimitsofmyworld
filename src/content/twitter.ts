@@ -1,6 +1,7 @@
 import { renderTranslationAfter } from './engine';
 import { SELECTORS, queryFirst } from './selectors';
 import { isProcessed, markProcessed } from '../utils/dom';
+import { isAlreadyTargetLang } from '../core/segmentation';
 import { Settings } from '../core/types';
 
 // X / Twitter. A tweet's text lives in one [data-testid="tweetText"], but the
@@ -84,9 +85,12 @@ export function scanTwitter(s: Settings): void {
       const lines = splitLines(tt);
       if (lines.length <= 1) {
         const text = tt.innerText?.trim() ?? '';
-        if (text) renderTranslationAfter(tt, text);
+        if (text && !isAlreadyTargetLang(text, s.targetLangCode)) renderTranslationAfter(tt, text);
       } else {
-        for (const ln of lines) renderTranslationAfter(ln.anchor, ln.text);
+        for (const ln of lines) {
+          if (isAlreadyTargetLang(ln.text, s.targetLangCode)) continue; // already Chinese → skip
+          renderTranslationAfter(ln.anchor, ln.text);
+        }
       }
     } catch {
       // never let a DOM quirk break the page; leave this tweet untranslated
@@ -102,9 +106,10 @@ export function scanTwitter(s: Settings): void {
     const substantial = leaves.filter((e) => (e.innerText || '').trim().length >= 40);
     if (substantial.length >= 2) {
       for (const leaf of leaves) {
-        markProcessed(leaf);
         const text = leaf.innerText?.trim() ?? '';
-        if (text) renderTranslationAfter(leaf, text);
+        if (!text || isAlreadyTargetLang(text, s.targetLangCode)) continue; // skip empty / already-Chinese
+        markProcessed(leaf);
+        renderTranslationAfter(leaf, text);
       }
     }
   }
@@ -113,9 +118,10 @@ export function scanTwitter(s: Settings): void {
   for (const node of queryFirst(SELECTORS.x.bio)) {
     const b = node as HTMLElement;
     if (isProcessed(b)) continue;
-    markProcessed(b);
     const text = b.innerText?.trim() ?? '';
-    if (text) renderTranslationAfter(b, text);
+    if (!text || isAlreadyTargetLang(text, s.targetLangCode)) continue; // skip empty / already-Chinese
+    markProcessed(b);
+    renderTranslationAfter(b, text);
   }
 }
 

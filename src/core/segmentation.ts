@@ -72,6 +72,20 @@ function legacySegment(blocks: string[]): string[] {
   return out.length ? out : blocks;
 }
 
+// True when the text is ALREADY in the target language (only meaningful for a
+// Chinese target): Han-dominant AND no Japanese kana / Korean hangul. Used to
+// skip pointless 中文→中文 (incl. Simplified→Traditional) re-translation across
+// every surface (X / Reddit / whole-page). Cheap — a few regex over one node.
+export function isAlreadyTargetLang(text: string, targetLangCode: string): boolean {
+  if (!(targetLangCode || '').toLowerCase().startsWith('zh')) return false;
+  const han = (text.match(/\p{Script=Han}/gu) || []).length;
+  if (!han) return false;
+  if (/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text)) return false;
+  const letters = (text.match(/\p{L}/gu) || []).length || 1;
+  const latin = (text.match(/[A-Za-z]/g) || []).length;
+  return han / letters >= 0.5 && latin / letters < 0.5;
+}
+
 export function hasTranslatableText(s: string): boolean {
   const trimmed = s.trim();
   if (trimmed.length < 2) return false;
