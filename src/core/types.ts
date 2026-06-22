@@ -12,6 +12,7 @@ export interface Settings {
   transStyle: string;           // visual style of the translated text (underline / box / blur / …)
   transColor: string;           // custom color for translated text ('' = use default)
   fontScale: number;            // 0.8 – 1.6
+  sourceLang: string;           // BCP-47 source-language code, or 'auto' to detect (default)
   targetLang: string;           // natural-language name, used by LLM prompts
   targetLangCode: string;       // BCP-47 code, used by the free Google engine (e.g. zh-TW)
   translateOnVisible: boolean;  // only translate elements scrolled into view
@@ -31,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   transStyle: 'plain',
   transColor: '',
   fontScale: 1,
+  sourceLang: 'auto',          // ← detect any source language (Korean/Japanese/…)
   targetLang: 'Traditional Chinese (zh-TW)',
   targetLangCode: 'zh-TW',
   translateOnVisible: true,

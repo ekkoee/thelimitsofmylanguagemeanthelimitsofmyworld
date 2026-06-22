@@ -50,7 +50,7 @@ async function handleTranslate(text: string): Promise<AlignedPair[]> {
   const settings = await loadSettings();
   const provider = getProvider(settings.provider);
 
-  const target = settings.provider === 'google' ? settings.targetLangCode : settings.targetLang;
+  const target = cacheTarget(settings);
   const key = cacheKey(settings.provider, settings.model, target, clean);
 
   if (settings.cacheEnabled) {
@@ -77,11 +77,21 @@ async function translateWith(
 
   // Fallback: segment here, then run the sentence-aligned LLM translate.
   if (provider.translate) {
-    const sentences = segment(text);
-    const translations = await provider.translate({ sentences, targetLang: settings.targetLang }, settings);
+    const sentences = segment(text, settings.sourceLang);
+    const translations = await provider.translate(
+      { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang },
+      settings,
+    );
     return sentences.map((o, i) => ({ o, t: translations[i] ?? '' }));
   }
   throw new Error('provider has no translate capability');
+}
+
+// Cache identity must include the source language too: changing it (e.g. auto → ja)
+// changes the LLM prompt, so cached results under the old source would be stale.
+function cacheTarget(settings: Settings): string {
+  const tgt = settings.provider === 'google' ? settings.targetLangCode : settings.targetLang;
+  return `${settings.sourceLang || 'auto'}>${tgt}`;
 }
 
 // Translate many independent lines while making as few provider calls as possible.
@@ -90,7 +100,7 @@ async function translateWith(
 async function handleTranslateBatch(texts: string[]): Promise<string[]> {
   const settings = await loadSettings();
   const provider = getProvider(settings.provider);
-  const target = settings.provider === 'google' ? settings.targetLangCode : settings.targetLang;
+  const target = cacheTarget(settings);
 
   const out: string[] = new Array(texts.length).fill('');
   const keys = texts.map((t) => cacheKey(settings.provider, settings.model, target, t.trim()));
@@ -114,7 +124,10 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
   if (provider.translate) {
     // one request for all missing lines
     const sentences = need.map((i) => texts[i].trim());
-    const translations = await queue.run(() => provider.translate!({ sentences, targetLang: settings.targetLang }, settings));
+    const translations = await queue.run(() => provider.translate!(
+      { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang },
+      settings,
+    ));
     need.forEach((idx, k) => {
       const t = translations[k] ?? '';
       out[idx] = t;

@@ -28,6 +28,11 @@
         <small class="hint">影片字幕量大，建議用 <b>gemini-2.5-flash-lite</b>（每日額度 1000 次，最不容易爆）。想要更高品質且用量不大時，可改 <b>gemini-2.5-flash</b>（每日約 250 次）。留空用預設。</small>
       </div>
       <div class="field">
+        <label for="sourceLang">來源語言</label>
+        <input type="text" id="sourceLang" placeholder="auto（自動偵測，建議）" />
+        <small class="hint">留空或填 <b>auto</b> 會自動偵測來源語言（韓文、日文、任何語言皆可）。也可指定 BCP-47 代碼，例如 <b>en</b>、<b>ja</b>、<b>ko</b>。</small>
+      </div>
+      <div class="field">
         <label for="targetLang">目標語言（給 AI 引擎）</label>
         <input type="text" id="targetLang" />
       </div>

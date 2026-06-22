@@ -16,10 +16,12 @@ async function init() {
 
   const provider = $<HTMLSelectElement>('provider');
   const model = $<HTMLInputElement>('model');
+  const sourceLang = $<HTMLInputElement>('sourceLang');
   const targetLang = $<HTMLInputElement>('targetLang');
   const targetLangCode = $<HTMLInputElement>('targetLangCode');
   provider.value = s.provider;
   model.value = s.model;
+  sourceLang.value = s.sourceLang;
   targetLang.value = s.targetLang;
   targetLangCode.value = s.targetLangCode;
 
@@ -30,6 +32,7 @@ async function init() {
     await save({ provider: id, model: model.value });
   });
   model.addEventListener('change', () => save({ model: model.value.trim() }));
+  sourceLang.addEventListener('change', () => save({ sourceLang: sourceLang.value.trim() || 'auto' }));
   targetLang.addEventListener('change', () => save({ targetLang: targetLang.value.trim() }));
   targetLangCode.addEventListener('change', () => save({ targetLangCode: targetLangCode.value.trim() }));
 

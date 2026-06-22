@@ -3,6 +3,7 @@ import { AlignedPair, Settings } from '../core/types';
 export interface TranslateInput {
   sentences: string[];
   targetLang: string;
+  sourceLang?: string; // BCP-47 code or 'auto' (detect). Undefined/'auto' → detect.
 }
 
 export interface TranslationProvider {
@@ -14,10 +15,14 @@ export interface TranslationProvider {
   translateBlock?(text: string, settings: Settings): Promise<AlignedPair[]>;
 }
 
-export function buildSystemPrompt(targetLang: string): string {
+export function buildSystemPrompt(targetLang: string, sourceLang?: string): string {
+  const src = sourceLang && sourceLang !== 'auto' ? sourceLang : '';
+  const translateLine = src
+    ? `Translate each input line from ${src} into ${targetLang}.`
+    : `Detect the source language of each input line and translate it into ${targetLang}.`;
   return [
     `You are a professional subtitle translator.`,
-    `Translate each input line into ${targetLang}.`,
+    translateLine,
     `Rules:`,
     `- Produce natural, fluent ${targetLang} the way a native speaker would actually say it; convey the meaning rather than translating word-for-word.`,
     `- Get proper nouns right: keep brand/product/person names accurate, and render well-known film, show, song and book titles using their official ${targetLang} name when one exists (otherwise keep the original).`,

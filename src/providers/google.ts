@@ -15,22 +15,23 @@ export const googleProvider: TranslationProvider = {
   id: 'google',
   async translateBlock(text: string, settings: Settings): Promise<AlignedPair[]> {
     const tl = settings.targetLangCode || 'zh-TW';
-    const chunks = chunkText(text, MAX_CHUNK);
+    const sl = settings.sourceLang || 'auto'; // 'auto' → Google detects the source language
+    const chunks = chunkText(text, MAX_CHUNK, sl);
     const out: AlignedPair[] = [];
     for (const chunk of chunks) {
-      const pairs = await fetchChunk(chunk, tl);
+      const pairs = await fetchChunk(chunk, sl, tl);
       out.push(...pairs);
     }
     return out;
   },
 };
 
-async function fetchChunk(text: string, tl: string, attempt = 0): Promise<AlignedPair[]> {
-  const url = `${ENDPOINT}?client=gtx&sl=auto&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
+async function fetchChunk(text: string, sl: string, tl: string, attempt = 0): Promise<AlignedPair[]> {
+  const url = `${ENDPOINT}?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
   const res = await fetch(url, { method: 'GET' });
   if (res.status === 429 && attempt < 2) {
     await sleep(400 * (attempt + 1));
-    return fetchChunk(text, tl, attempt + 1);
+    return fetchChunk(text, sl, tl, attempt + 1);
   }
   if (!res.ok) throw new Error(`Google ${res.status}`);
   const data = await res.json();
@@ -42,9 +43,9 @@ async function fetchChunk(text: string, tl: string, attempt = 0): Promise<Aligne
   return pairs.length ? pairs : [{ o: text.trim(), t: '' }];
 }
 
-function chunkText(text: string, limit: number): string[] {
+function chunkText(text: string, limit: number, locale?: string): string[] {
   if (text.length <= limit) return [text];
-  const sentences = segment(text);
+  const sentences = segment(text, locale);
   const chunks: string[] = [];
   let buf = '';
   for (const s of sentences) {
