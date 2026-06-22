@@ -11,6 +11,8 @@ export interface Settings {
   subtitleOrder: SubtitleOrder; // YouTube subtitle order (both languages shown); default Chinese on top
   transStyle: string;           // visual style of the translated text (underline / box / blur / …)
   transColor: string;           // custom color for translated text ('' = use default)
+  barStyle: string;             // left marker bar: 'bar' | 'thick' | 'dashed' | 'none'
+  barColor: string;             // custom color for the left marker bar ('' = use default)
   fontScale: number;            // 0.8 – 1.6
   sourceLang: string;           // BCP-47 source-language code, or 'auto' to detect (default)
   targetLang: string;           // natural-language name, used by LLM prompts
@@ -31,6 +33,8 @@ export const DEFAULT_SETTINGS: Settings = {
   subtitleOrder: 'zhTop',
   transStyle: 'plain',
   transColor: '',
+  barStyle: 'bar',
+  barColor: '',
   fontScale: 1,
   sourceLang: 'auto',          // ← detect any source language (Korean/Japanese/…)
   targetLang: 'Traditional Chinese (zh-TW)',

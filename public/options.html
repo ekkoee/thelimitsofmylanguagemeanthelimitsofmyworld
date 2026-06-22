@@ -86,9 +86,24 @@
         <small class="hint">選了顏色就套用到「中文譯文」。影片字幕預設白色、網頁譯文預設跟隨原文顏色，按「還原預設色」即可恢復。</small>
       </div>
       <div class="field">
+        <label for="barStyle">譯文左側標記</label>
+        <select id="barStyle">
+          <option value="bar">線條（預設）</option>
+          <option value="thick">粗線條</option>
+          <option value="dashed">虛線</option>
+          <option value="none">無（隱藏）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="barColor">標記顏色</label>
+        <input type="color" id="barColor" value="#6c7aff" />
+        <button id="barColorReset" class="ghost">還原預設色</button>
+        <small class="hint">譯文左側那條直線的顏色；選「無」可完全隱藏這條線。</small>
+      </div>
+      <div class="field">
         <label>即時預覽</label>
         <div id="stylePreview" class="preview-box">
-          <div class="ibt-block" style="border-left-color: rgba(108,122,255,0.55)">
+          <div class="ibt-block">
             <div class="ibt-pair">
               <div class="ibt-orig" style="display:block">Knowledge itself is power.</div>
               <div class="ibt-trans">知識本身就是力量。</div>

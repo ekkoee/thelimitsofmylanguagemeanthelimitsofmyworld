@@ -6,12 +6,17 @@
 .ibt-block {
   margin: 4px 0 8px;
   padding: 1px 0 1px 10px;
-  border-left: 3px solid rgba(108, 122, 255, 0.55);
+  border-left: 3px solid var(--ibt-bar-color, rgba(108, 122, 255, 0.55));
   font-size: calc(0.98em * var(--ibt-font-scale));
   line-height: 1.5;
   color: inherit;
   white-space: pre-wrap;
 }
+
+/* Left marker bar — user-configurable in options (style + color + hide). */
+:root[data-ibt-bar="thick"] .ibt-block { border-left-width: 6px; }
+:root[data-ibt-bar="dashed"] .ibt-block { border-left-style: dashed; }
+:root[data-ibt-bar="none"] .ibt-block { border-left: 0; padding-left: 0; }
 
 .ibt-pair { display: flex; flex-direction: column; gap: 1px; margin: 1px 0; }
 

@@ -55,18 +55,24 @@ async function init() {
   bindCheck('translateOnVisible', s.translateOnVisible, (v) => ({ translateOnVisible: v }));
   bindCheck('cacheEnabled', s.cacheEnabled, (v) => ({ cacheEnabled: v }));
 
-  // appearance: translated-text style + custom color, with a live preview
+  // appearance: translated-text style + custom color + left marker bar, live preview
   const transStyle = $<HTMLSelectElement>('transStyle');
   const transColor = $<HTMLInputElement>('transColor');
+  const barStyle = $<HTMLSelectElement>('barStyle');
+  const barColor = $<HTMLInputElement>('barColor');
   let appliedColor = s.transColor;
+  let appliedBarColor = s.barColor;
 
   const syncPreview = () => {
     const r = document.documentElement;
     r.setAttribute('data-ibt-style', transStyle.value || 'plain');
+    r.setAttribute('data-ibt-bar', barStyle.value || 'bar');
     const code = (targetLangCode.value || '').trim();
     r.setAttribute('data-ibt-lang', code === 'zh-CN' ? 'zh-CN' : 'zh-TW');
     if (appliedColor) r.style.setProperty('--ibt-trans-color', appliedColor);
     else r.style.removeProperty('--ibt-trans-color');
+    if (appliedBarColor) r.style.setProperty('--ibt-bar-color', appliedBarColor);
+    else r.style.removeProperty('--ibt-bar-color');
   };
 
   transStyle.value = s.transStyle || 'plain';
@@ -75,6 +81,13 @@ async function init() {
   if (s.transColor) transColor.value = s.transColor;
   transColor.addEventListener('change', () => { appliedColor = transColor.value; save({ transColor: appliedColor }); syncPreview(); });
   $('transColorReset').addEventListener('click', () => { appliedColor = ''; save({ transColor: '' }); syncPreview(); });
+
+  barStyle.value = s.barStyle || 'bar';
+  barStyle.addEventListener('change', () => { save({ barStyle: barStyle.value }); syncPreview(); });
+
+  if (s.barColor) barColor.value = s.barColor;
+  barColor.addEventListener('change', () => { appliedBarColor = barColor.value; save({ barColor: appliedBarColor }); syncPreview(); });
+  $('barColorReset').addEventListener('click', () => { appliedBarColor = ''; save({ barColor: '' }); syncPreview(); });
 
   // keep the preview font in sync if the language code is edited
   targetLangCode.addEventListener('input', syncPreview);

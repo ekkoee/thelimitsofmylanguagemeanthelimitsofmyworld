@@ -46,6 +46,7 @@ let rootApplied = false;
 export function applyRootState(s: {
   enabled: boolean; showOriginal: boolean; layout: string; fontScale: number;
   targetLangCode?: string; transStyle?: string; transColor?: string;
+  barStyle?: string; barColor?: string;
 }): void {
   const r = document.documentElement;
   // Default display is bilingual; never clobber a view the user has cycled to.
@@ -61,6 +62,10 @@ export function applyRootState(s: {
   // custom translated-text color (unset → CSS fallback to default)
   if (s.transColor) r.style.setProperty('--ibt-trans-color', s.transColor);
   else r.style.removeProperty('--ibt-trans-color');
+  // left marker bar: style + custom color (user-configurable / hideable)
+  r.setAttribute('data-ibt-bar', s.barStyle || 'bar');
+  if (s.barColor) r.style.setProperty('--ibt-bar-color', s.barColor);
+  else r.style.removeProperty('--ibt-bar-color');
   rootApplied = true;
 }
 export function rootStateApplied(): boolean { return rootApplied; }
