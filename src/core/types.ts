@@ -23,6 +23,7 @@ export interface Settings {
   apiKeys: Record<ProviderId, string>;
   ollamaEndpoint: string;
   cacheEnabled: boolean;
+  dblClickTranslate: boolean;   // double-click word popup (needs <all_urls>, off by default)
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -45,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   apiKeys: { google: '', openai: '', gemini: '', ollama: '' },
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,
+  dblClickTranslate: false,    // ← least privilege: opt-in, requests <all_urls> only when enabled
 };
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
@@ -81,4 +83,26 @@ export interface TranslateBatchResponse {
   error?: string;
 }
 
-export type RuntimeMessage = TranslateMessage | TranslateBatchMessage;
+/** One dictionary sense for a single word (free Google dt=bd data). */
+export interface DictEntry { pos: string; terms: string[]; }
+
+/** Result of a single-word/phrase lookup for the double-click popup. */
+export interface WordLookup {
+  translation: string;   // full translated text of the selection
+  sourceLang: string;    // detected source language (BCP-47, '' if unknown) — used to pick a TTS voice
+  dict?: DictEntry[];     // only present when the engine returned dictionary data
+}
+
+/** Look up a short selection: translation + detected source language (+ dictionary when available). */
+export interface LookupMessage {
+  type: 'lookup';
+  text: string;
+}
+
+export interface LookupResponse {
+  ok: boolean;
+  lookup?: WordLookup;
+  error?: string;
+}
+
+export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage;

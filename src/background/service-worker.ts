@@ -1,13 +1,34 @@
-import { loadSettings } from '../core/storage';
+import { loadSettings, saveSettings } from '../core/storage';
 import { cacheKey, getCached, putCached } from '../core/cache';
 import { TaskQueue } from '../core/queue';
 import { getProvider } from '../providers/index';
 import { segment } from '../core/segmentation';
-import { AlignedPair, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse } from '../core/types';
+import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
+import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 
 const queue = new TaskQueue(3);
 
-chrome.runtime.onInstalled.addListener(() => { loadSettings(); });
+chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); });
+chrome.runtime.onStartup.addListener(() => { reconcileDblClick(); });
+
+// If the user revokes <all_urls> from chrome://extensions, drop the dynamic
+// registration and flip the setting off so state stays consistent (least privilege).
+chrome.permissions.onRemoved.addListener((p) => {
+  if (p.origins?.includes('<all_urls>')) {
+    unregisterDblClick();
+    saveSettings({ dblClickTranslate: false });
+  }
+});
+
+// On install/startup, make the dynamic registration match the saved setting + the
+// permission we actually still hold (the permission persists across restarts, but
+// re-asserting registration is cheap insurance).
+async function reconcileDblClick(): Promise<void> {
+  const s = await loadSettings();
+  if (!s.dblClickTranslate) return;
+  if (await hasAllUrls()) await registerDblClick();
+  else await saveSettings({ dblClickTranslate: false }); // permission gone → setting can't be on
+}
 
 // Alt+A command. Granted activeTab for the tab where it was pressed, so we can
 // inject the whole-page translator into THAT tab only — no broad host access.
@@ -41,6 +62,12 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
       .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateBatchResponse));
     return true; // async response
   }
+  if (msg?.type === 'lookup') {
+    handleLookup(msg.text)
+      .then((lookup) => sendResponse({ ok: true, lookup } satisfies LookupResponse))
+      .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies LookupResponse));
+    return true; // async response
+  }
   return false;
 });
 
@@ -65,6 +92,40 @@ async function handleTranslate(text: string): Promise<AlignedPair[]> {
     await putCached(new Map([[key, JSON.stringify(pairs)]]), true);
   }
   return pairs;
+}
+
+// Word/selection lookup for the double-click popup. Reuses the same provider, queue
+// and cache as translation — just a different value shape (translation + detected
+// source language + optional dictionary). Providers without a dedicated lookup()
+// (the LLM engines) fall back to a plain translation.
+async function handleLookup(text: string): Promise<WordLookup> {
+  const clean = text.trim();
+  if (!clean) return { translation: '', sourceLang: '' };
+  const settings = await loadSettings();
+  const provider = getProvider(settings.provider);
+
+  // Separate cache namespace ('wl') so a lookup's richer value never collides with a
+  // plain translation of the same text.
+  const key = cacheKey(settings.provider, settings.model, `${cacheTarget(settings)}|wl`, clean);
+  if (settings.cacheEnabled) {
+    const hit = await getCached([key], true);
+    const cached = hit.get(key);
+    if (cached) { try { return JSON.parse(cached) as WordLookup; } catch { /* ignore */ } }
+  }
+
+  const result = await queue.run(async (): Promise<WordLookup> => {
+    if (provider.lookup) return provider.lookup(clean, settings);
+    // Fallback: no dictionary / language detection, just a translation.
+    const pairs = await translateWith(provider, clean, settings);
+    const translation = pairs.map((p) => p.t).filter(Boolean).join(' ').trim();
+    const sourceLang = settings.sourceLang && settings.sourceLang !== 'auto' ? settings.sourceLang : '';
+    return { translation, sourceLang };
+  });
+
+  if (settings.cacheEnabled && result.translation) {
+    await putCached(new Map([[key, JSON.stringify(result)]]), true);
+  }
+  return result;
 }
 
 async function translateWith(

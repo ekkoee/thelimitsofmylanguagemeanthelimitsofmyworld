@@ -1,4 +1,4 @@
-import { AlignedPair, Settings } from '../core/types';
+import { AlignedPair, Settings, WordLookup } from '../core/types';
 
 export interface TranslateInput {
   sentences: string[];
@@ -13,6 +13,10 @@ export interface TranslationProvider {
   /** Whole-block translation that returns its own aligned original/translation pairs.
    *  Free machine-translation engines (Google) use this — one request, perfect alignment. */
   translateBlock?(text: string, settings: Settings): Promise<AlignedPair[]>;
+  /** Single-selection lookup for the double-click popup: translation + detected source
+   *  language, plus dictionary data when the engine has it (free Google dt=bd). Optional —
+   *  providers without it fall back to translate()/translateBlock() in the background. */
+  lookup?(text: string, settings: Settings): Promise<WordLookup>;
 }
 
 export function buildSystemPrompt(targetLang: string, sourceLang?: string): string {

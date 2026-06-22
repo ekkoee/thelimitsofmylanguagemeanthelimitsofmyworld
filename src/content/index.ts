@@ -6,17 +6,24 @@ import { Engine } from './engine';
 import { scanTwitter } from './twitter';
 import { redditAdapter } from './reddit';
 import { startYouTube, updateYouTubeSettings } from './youtube';
+import { startWordPopup, stopWordPopup } from './word-popup';
 import { Settings } from '../core/types';
 
-// This script auto-runs ONLY on X / Reddit / YouTube (declared in the manifest).
-// The "translate any page" feature is injected on demand via the Alt+A command
-// (see background.js + universal-inject.js) so the extension needs no broad host
-// access.
+// This script auto-runs on X / Reddit / YouTube (declared in the manifest). When the
+// user opts in to "double-click word popup", it's ALSO dynamically registered on all
+// other sites (see core/dblclick.ts) — there detectSite() is null, so only the popup
+// runs. The "translate any page" feature is still injected on demand via Alt+A.
 (async function main() {
-  const site = detectSite();
-  if (!site) return;
-
   let settings = await loadSettings();
+
+  // Double-click word popup — works on ANY page, gated purely by the setting, and
+  // kept in sync if the user toggles it while the page is open.
+  if (settings.dblClickTranslate) startWordPopup();
+  onSettingsChanged((s) => { if (s.dblClickTranslate) startWordPopup(); else stopWordPopup(); });
+
+  const site = detectSite();
+  if (!site) return; // non-auto page: nothing below runs, only the word popup above
+
   applyRoot(settings);
 
   // Alt+A (or the popup button) on these auto-sites cycles the 3-state display:

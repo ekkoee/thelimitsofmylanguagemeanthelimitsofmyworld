@@ -1,5 +1,6 @@
 import { loadSettings, saveSettings } from '../../core/storage';
 import { clearPersistentCache } from '../../core/cache';
+import { disableDblClick, registerDblClick, requestAllUrls } from '../../core/dblclick';
 import { DEFAULT_MODELS, ProviderId, Settings, SiteId } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -97,6 +98,27 @@ async function init() {
     await clearPersistentCache();
     $('cacheMsg').textContent = '已清除';
     setTimeout(() => ($('cacheMsg').textContent = ''), 1500);
+  });
+
+  bindDblClickToggle(s.dblClickTranslate);
+}
+
+// The double-click popup needs broad host access, so enabling it requests <all_urls>
+// from a user gesture (this checkbox). If the user declines, we revert the toggle and
+// save nothing. Disabling unregisters the script and hands the permission back.
+function bindDblClickToggle(initial: boolean) {
+  const cb = $<HTMLInputElement>('dblClickTranslate');
+  cb.checked = initial;
+  cb.addEventListener('change', async () => {
+    if (cb.checked) {
+      const granted = await requestAllUrls();
+      if (!granted) { cb.checked = false; toast('需要授權才能啟用'); return; }
+      await registerDblClick();
+      await save({ dblClickTranslate: true });
+    } else {
+      await save({ dblClickTranslate: false });
+      await disableDblClick();
+    }
   });
 }
 

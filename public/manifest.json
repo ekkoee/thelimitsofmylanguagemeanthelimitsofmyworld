@@ -26,6 +26,9 @@
     "activeTab",
     "scripting"
   ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
   "host_permissions": [
     "https://x.com/*",
     "https://twitter.com/*",
