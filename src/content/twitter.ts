@@ -33,6 +33,36 @@ function isIbt(n: Node): boolean {
   return n.nodeType === 1 && (((n as Element).className as any)?.toString?.() || '').startsWith('ibt-');
 }
 
+// The tweet's ORIGINAL text only (excludes our inserted blocks). Used as a change
+// signature: when a long tweet is expanded via "Show more", X re-renders it with
+// more text → the length changes → we re-translate the now-full tweet.
+function origText(tt: HTMLElement): string {
+  let s = '';
+  const tw = document.createTreeWalker(tt, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode(n) {
+      if (n.nodeType === 1) return isIbt(n) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let c: Node | null;
+  while ((c = tw.nextNode())) s += c.nodeValue || '';
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+// Drop the translation blocks we previously inserted for this tweet (inside it
+// and the trailing sibling), plus our markers, before re-translating.
+function clearTweetBlocks(tt: HTMLElement): void {
+  tt.querySelectorAll('.ibt-block').forEach((b) => b.remove());
+  let sib = tt.nextElementSibling;
+  while (sib && sib.classList.contains('ibt-block')) {
+    const next = sib.nextElementSibling;
+    sib.remove();
+    sib = next;
+  }
+  tt.classList.remove('ibt-orig-src');
+  tt.querySelectorAll('.ibt-orig-src').forEach((e) => e.classList.remove('ibt-orig-src'));
+}
+
 function splitLines(tt: HTMLElement): Line[] {
   const out: Line[] = [];
   let buf = '';
@@ -79,8 +109,13 @@ export function scanTwitter(s: Settings): void {
   // 1) Tweets / replies / quotes — interleave a translation after each line.
   for (const node of queryFirst(SELECTORS.x.text)) {
     const tt = node as HTMLElement;
-    if (tt.getAttribute(SPLIT) === '1') continue;
-    tt.setAttribute(SPLIT, '1');
+    // Signature = length of the tweet's ORIGINAL text. When a long tweet is
+    // expanded via "Show more", X re-renders it with more text → signature
+    // changes → we drop the stale blocks and re-translate the now-full tweet.
+    const sig = String(origText(tt).length);
+    if (tt.getAttribute(SPLIT) === sig) continue;
+    clearTweetBlocks(tt);
+    tt.setAttribute(SPLIT, sig);
     try {
       const lines = splitLines(tt);
       if (lines.length <= 1) {
