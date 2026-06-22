@@ -2,6 +2,7 @@ import { Settings } from '../core/types';
 import { isAlreadyTargetLang } from '../core/segmentation';
 import { renderTranslationAfter } from './engine';
 import { collectUnits } from './blocks';
+import { matchSiteRule } from './selectors';
 
 const UNI_ATTR = 'data-ibt-uni'; // cheap hint we've handled a source (teardown aid)
 
@@ -36,6 +37,8 @@ export class UniversalTranslator {
   private blockBySource = new WeakMap<HTMLElement, HTMLElement>();
   private processed = new WeakSet<HTMLElement>();
   private fp = new WeakMap<HTMLElement, string>();
+  // Optional per-site exclude (chrome only) — generic detection still does the work.
+  private readonly excludeSel = matchSiteRule(location.hostname)?.exclude || '';
   private settings: Settings;
 
   constructor(getSettings: () => Settings) { this.settings = getSettings(); }
@@ -123,6 +126,7 @@ export class UniversalTranslator {
       for (const unit of collectUnits(root)) {
         const node = unit.element;
         if (node.closest('.ibt-block')) continue;        // never our own output
+        if (this.excludeSel && node.closest(this.excludeSel)) continue; // per-site chrome
         const sig = fingerprint(unit.text);
 
         // Skip text already in the target language (e.g. Chinese on a zh page).

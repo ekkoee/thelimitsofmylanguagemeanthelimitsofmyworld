@@ -38,3 +38,43 @@ export function queryFirst(selectors: readonly string[], root: ParentNode = docu
   }
   return [];
 }
+
+// ---------------------------------------------------------------------------
+// Per-site CORRECTION layer for the generic "translate any page" engine.
+//
+// The generic detector (content/blocks.ts) already works on most sites WITHOUT a
+// rule — these are only a thin, OPTIONAL safety net for a few SPA sites. Keep them
+// EXCLUDE-ONLY: a `closest(exclude)` that matches nothing is a harmless no-op, so a
+// stale/guessed selector can never drop real content — it only ever removes chrome
+// when it actually matches. Never put a post-body selector in `exclude`.
+export interface SiteRule {
+  /** Matched against location.hostname. */
+  match: RegExp;
+  /** Drop any generic unit whose element is inside one of these (UI chrome only). */
+  exclude?: string;
+}
+
+export const SITE_RULES: SiteRule[] = [
+  {
+    // Mastodon / Soapbox family (Truth Social is a Soapbox fork). Class names vary
+    // across forks, so these are safe no-ops where absent and only ever hit chrome.
+    match: /(^|\.)truthsocial\.com$|(^|\.)mastodon|(^|\.)hachyderm\.io$/,
+    exclude: [
+      '[role="button"]', '[role="toolbar"]', '[role="menu"]',
+      '.status__action-bar', '.status__relative-time', '.display-name', '.account',
+      '.status__content__spoiler-link', '.status__content__translate-button',
+      '.detailed-status__meta',
+    ].join(','),
+  },
+  {
+    // Facebook. The generic link-density/role gate already drops author names and
+    // action affordances; this just hardens the interactive-role exclusions. No root
+    // scoping (keeps the right-hand About panel translatable too).
+    match: /(^|\.)facebook\.com$/,
+    exclude: '[role="button"],[role="toolbar"],[role="menu"],[role="menuitem"]',
+  },
+];
+
+export function matchSiteRule(hostname: string): SiteRule | null {
+  return SITE_RULES.find((r) => r.match.test(hostname)) ?? null;
+}
