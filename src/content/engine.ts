@@ -18,11 +18,11 @@ function translateBlock(text: string): Promise<AlignedPair[]> {
 function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
   block.className = 'ibt-block';
   block.textContent = '';
+  // Our block holds ONLY the translation. The original stays as the page's own
+  // text (rich: links/mentions/media intact); the 3-state view shows/hides that
+  // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
   for (const p of pairs) {
-    const pair = el('div', 'ibt-pair');
-    pair.appendChild(el('div', 'ibt-orig', p.o));
-    pair.appendChild(el('div', 'ibt-trans', p.t));
-    block.appendChild(pair);
+    block.appendChild(el('div', 'ibt-trans', p.t));
   }
 }
 
@@ -51,6 +51,13 @@ export function renderTranslationAfter(anchor: Node, text: string): HTMLElement 
   // whose interleaved originals are text nodes that CSS can't hide anyway).
   if (anchor.nodeType === 1) {
     const elAnchor = anchor as HTMLElement;
+    // Reddit's <shreddit-post> projects light-DOM children into shadow <slot>s.
+    // An unslotted block lands in the DEFAULT slot — rendered at the BOTTOM of
+    // the post — which is why the title's translation showed up at the end.
+    // Mirror the source's slot so the translation renders right where the
+    // original is (e.g. directly under the title).
+    const slot = elAnchor.getAttribute('slot');
+    if (slot) block.setAttribute('slot', slot);
     if (elAnchor.tagName !== 'BR' && !elAnchor.querySelector('.ibt-block')) {
       elAnchor.classList.add('ibt-orig-src');
     }

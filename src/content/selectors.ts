@@ -7,6 +7,15 @@ export const SELECTORS = {
     // tweet body, replies, quoted tweets all share this testid
     text: ['[data-testid="tweetText"]'],
     bio: ['[data-testid="UserDescription"]'],
+    // X Articles (long-form). The rich-text body container; title + paragraphs
+    // live OUTSIDE tweetText, so they need their own pass. Fallbacks in order.
+    article: [
+      '[data-testid="twitterArticleRichTextView"]',
+      '[data-testid="longformRichTextRenderer"]',
+      '[data-testid="twitterArticleReader"]',
+    ],
+    // primary content column — used to also pick up the article title (an <h1>)
+    primaryColumn: ['[data-testid="primaryColumn"]'],
   },
   reddit: {
     title: ['[slot="title"]', 'a[slot="full-post-link"]', 'h1[slot="title"]'],
