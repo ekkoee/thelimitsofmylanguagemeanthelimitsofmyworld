@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="options.css" />
+  <link rel="stylesheet" href="bilingual.css" />
+  <title>雙語對照 — 設定</title>
+</head>
+<body>
+  <main>
+    <h1>雙語對照 · 設定</h1>
+
+    <fieldset>
+      <legend>翻譯引擎</legend>
+      <div class="field">
+        <label for="provider">提供者</label>
+        <select id="provider">
+          <option value="google">免費 · Google 翻譯（免 API key，預設）</option>
+          <option value="openai">OpenAI（需自備 key）</option>
+          <option value="gemini">Gemini（有免費額度，需免費 key）</option>
+          <option value="ollama">Ollama（本地模型，免 key）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="model">模型</label>
+        <input type="text" id="model" placeholder="例如 gemini-2.5-flash-lite" />
+        <small class="hint">影片字幕量大，建議用 <b>gemini-2.5-flash-lite</b>（每日額度 1000 次，最不容易爆）。想要更高品質且用量不大時，可改 <b>gemini-2.5-flash</b>（每日約 250 次）。留空用預設。</small>
+      </div>
+      <div class="field">
+        <label for="targetLang">目標語言（給 AI 引擎）</label>
+        <input type="text" id="targetLang" />
+      </div>
+      <div class="field">
+        <label for="targetLangCode">語言代碼（給免費引擎）</label>
+        <input type="text" id="targetLangCode" placeholder="zh-TW / zh-CN / ja ..." />
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>API Key（選填，只有用 OpenAI/Gemini 才需要；只存本機、不上傳）</legend>
+      <div class="field"><label for="key_openai">OpenAI</label>
+        <input type="password" id="key_openai" placeholder="sk-..." autocomplete="off" /></div>
+      <div class="field"><label for="key_gemini">Gemini</label>
+        <input type="password" id="key_gemini" placeholder="AIza..." autocomplete="off" />
+        <small class="hint">免費領取金鑰：<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>（免費額度，註冊即可用）</small></div>
+      <div class="field"><label for="ollamaEndpoint">Ollama 端點</label>
+        <input type="text" id="ollamaEndpoint" placeholder="http://localhost:11434" /></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>站點</legend>
+      <label class="check"><input type="checkbox" data-site="x" /> X / Twitter</label>
+      <label class="check"><input type="checkbox" data-site="reddit" /> Reddit</label>
+      <label class="check"><input type="checkbox" data-site="youtube" /> YouTube</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>外觀（譯文樣式）</legend>
+      <div class="field">
+        <label for="transStyle">譯文樣式</label>
+        <select id="transStyle">
+          <option value="plain">無（純文字）</option>
+          <option value="underline">直線底線</option>
+          <option value="dashed">虛線底線</option>
+          <option value="dotted">點狀底線</option>
+          <option value="wavy">波浪底線</option>
+          <option value="solidBox">實線框線</option>
+          <option value="dashedBox">虛線框線</option>
+          <option value="highlight">醒目提示（黃底）</option>
+          <option value="dim">弱化（變淡）</option>
+          <option value="italic">斜體</option>
+          <option value="bold">粗體</option>
+          <option value="blur">模糊（學習模式 · 滑過才顯示）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="transColor">譯文顏色</label>
+        <input type="color" id="transColor" value="#6c7aff" />
+        <button id="transColorReset" class="ghost">還原預設色</button>
+        <small class="hint">選了顏色就套用到「中文譯文」。影片字幕預設白色、網頁譯文預設跟隨原文顏色，按「還原預設色」即可恢復。</small>
+      </div>
+      <div class="field">
+        <label>即時預覽</label>
+        <div id="stylePreview" class="preview-box">
+          <div class="ibt-block" style="border-left-color: rgba(108,122,255,0.55)">
+            <div class="ibt-pair">
+              <div class="ibt-orig" style="display:block">Knowledge itself is power.</div>
+              <div class="ibt-trans">知識本身就是力量。</div>
+            </div>
+          </div>
+          <small class="hint" style="margin-top:8px">在這裡邊選邊看。選「模糊（學習模式）」時，把滑鼠移到中文上會顯示。</small>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>效能與成本</legend>
+      <label class="check"><input type="checkbox" id="translateOnVisible" /> 只翻譯捲到可見範圍的內容（建議，省 API）</label>
+      <label class="check"><input type="checkbox" id="cacheEnabled" /> 啟用持久化快取（chrome.storage.local）</label>
+      <div class="field">
+        <button id="clearCache" class="ghost">清除翻譯快取</button>
+        <span id="cacheMsg" class="muted"></span>
+      </div>
+    </fieldset>
+
+    <p id="status" class="status"></p>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

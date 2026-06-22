@@ -1,0 +1,21 @@
+# 相依套件（別人 clone 後自己 npm install）
+node_modules/
+
+# 建置輸出（別人自己 npm run build 產生；要分享成品請用 GitHub Releases 附 zip）
+dist/
+*.zip
+
+# 作業系統 / 編輯器雜項
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 記錄檔
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# 環境變數 / 密鑰（保險起見，別讓金鑰進版控）
+.env
+.env.*

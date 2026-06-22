@@ -1,0 +1,43 @@
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body {
+  width: 300px; margin: 0; padding: 12px 14px;
+  font: 13px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif;
+  background: Canvas; color: CanvasText;
+}
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+header strong { font-size: 15px; }
+section { display: flex; flex-direction: column; gap: 9px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.row > label:first-child { width: 78px; flex: none; color: #888; }
+.row.group { gap: 12px; }
+.row.group > span { color: #888; }
+.row.group label { display: inline-flex; align-items: center; gap: 4px; }
+select, input[type="text"] { flex: 1; padding: 4px 6px; border-radius: 7px;
+  border: 1px solid color-mix(in srgb, CanvasText 22%, transparent); background: Field; color: FieldText; }
+input[type="range"] { flex: 1; }
+.muted { color: #999; min-width: 30px; text-align: right; }
+footer { margin-top: 12px; }
+#openOptions { width: 100%; padding: 7px; border-radius: 8px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); background: transparent; color: inherit; }
+#openOptions:hover { background: color-mix(in srgb, CanvasText 8%, transparent); }
+
+/* toggle switch */
+.switch { position: relative; width: 40px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; inset: 0; cursor: pointer; border-radius: 22px;
+  background: #bbb; transition: 0.2s; }
+.slider::before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%; transition: 0.2s; }
+.switch input:checked + .slider { background: #6c7aff; }
+.switch input:checked + .slider::before { transform: translateX(18px); }
+
+/* translate-this-page CTA */
+.cta { margin: 2px 0 12px; }
+#translatePage { width: 100%; padding: 9px; border-radius: 9px; cursor: pointer;
+  border: none; font-weight: 700; font-size: 13.5px; color: #fff;
+  background: linear-gradient(135deg, #4f46e5, #7c5cff); }
+#translatePage:hover { filter: brightness(1.06); }
+#translatePage:active { transform: translateY(1px); }
+#translatePage:disabled { opacity: .6; cursor: default; }
+.cta-hint { margin-top: 6px; font-size: 11px; color: #999; text-align: center; line-height: 1.35; }

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>雙語對照</title>
+</head>
+<body>
+  <header>
+    <strong>雙語對照</strong>
+    <label class="switch">
+      <input type="checkbox" id="enabled" />
+      <span class="slider"></span>
+    </label>
+  </header>
+
+  <div class="cta">
+    <button id="translatePage">🌐 翻譯這個網頁</button>
+    <div id="ctaHint" class="cta-hint">也可用快速鍵 Alt+A（X／Reddit／YouTube 為顯示／隱藏）</div>
+  </div>
+
+  <section>
+    <div class="row group">
+      <span>站點</span>
+      <label><input type="checkbox" data-site="x" /> X</label>
+      <label><input type="checkbox" data-site="reddit" /> Reddit</label>
+      <label><input type="checkbox" data-site="youtube" /> YouTube</label>
+    </div>
+
+    <div class="row">
+      <label for="lang">翻譯成</label>
+      <select id="lang">
+        <option value="zh-TW">繁體中文</option>
+        <option value="zh-CN">简体中文</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="showOriginal">譯文呈現</label>
+      <select id="showOriginal">
+        <option value="trans">只顯示中文（推薦）</option>
+        <option value="both">原文＋中文對照</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="order">排列順序（影片字幕）</label>
+      <select id="order">
+        <option value="zhTop">中文上 / 英文下</option>
+        <option value="enTop">英文上 / 中文下</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="fontScale">字體大小</label>
+      <input type="range" id="fontScale" min="0.8" max="1.6" step="0.05" />
+      <span id="fontScaleVal" class="muted"></span>
+    </div>
+
+    <div class="row">
+      <label for="provider">翻譯引擎</label>
+      <select id="provider">
+        <option value="google">免費（Google）</option>
+        <option value="openai">OpenAI</option>
+        <option value="gemini">Gemini</option>
+        <option value="ollama">Ollama (本地)</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="model">模型</label>
+      <input type="text" id="model" placeholder="model" />
+    </div>
+  </section>
+
+  <footer>
+    <button id="openOptions">完整設定 / API key →</button>
+  </footer>
+  <script src="popup.js"></script>
+</body>
+</html>

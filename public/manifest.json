@@ -1,0 +1,77 @@
+{
+  "manifest_version": 3,
+  "name": "雙語對照翻譯 — 網頁與 YouTube 字幕",
+  "version": "1.0.0",
+  "description": "免費網頁雙語對照：原文一行、譯文一行。支援任何網頁（Alt+A）、X、Reddit 與 YouTube 雙語字幕。預設免費引擎、免 API 金鑰，繁簡中文皆可。",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://www.reddit.com/*",
+    "https://www.youtube.com/*",
+    "https://translate.googleapis.com/*",
+    "https://api.openai.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://x.com/*",
+        "https://twitter.com/*",
+        "https://www.reddit.com/*",
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "bilingual.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "yt-main.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "commands": {
+    "toggle-page-translation": {
+      "suggested_key": {
+        "default": "Alt+A"
+      },
+      "description": "在目前網頁開啟／關閉整頁雙語翻譯"
+    }
+  }
+}

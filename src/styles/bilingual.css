@@ -1,0 +1,192 @@
+/* Injected on X / Reddit / YouTube. Namespaced with .ibt- to avoid collisions.
+   Colors inherit from the host page so it adapts to light/dark automatically. */
+
+:root { --ibt-font-scale: 1; }
+
+.ibt-block {
+  margin: 4px 0 8px;
+  padding: 1px 0 1px 10px;
+  border-left: 3px solid rgba(108, 122, 255, 0.55);
+  font-size: calc(0.98em * var(--ibt-font-scale));
+  line-height: 1.5;
+  color: inherit;
+  white-space: pre-wrap;
+}
+
+.ibt-pair { display: flex; flex-direction: column; gap: 1px; margin: 1px 0; }
+
+/* The original text is ALREADY shown by the website, so by default we do NOT
+   repeat it — our block shows only the translation. The user can opt in to
+   "original + translation" side-by-side via the popup (data-ibt-show-original). */
+.ibt-orig { display: none; opacity: 0.55; font-size: 0.9em; }
+:root[data-ibt-show-original="true"] .ibt-orig { display: block; }
+
+.ibt-trans { color: var(--ibt-trans-color, inherit); }
+
+/* When showing original too, allow flipping order (translation above original) */
+:root[data-ibt-layout="transTop"] .ibt-pair { flex-direction: column-reverse; }
+
+/* global toggle */
+:root[data-ibt-enabled="false"] .ibt-block,
+
+/* loading / error states */
+.ibt-block.ibt-loading { opacity: 0.7; }
+.ibt-loading-dot { font-size: 0.85em; opacity: 0.7; }
+.ibt-block.ibt-error { border-left-color: rgba(220, 80, 80, 0.7); }
+.ibt-error-msg { font-size: 0.85em; opacity: 0.85; }
+.ibt-retry {
+  margin-left: 8px; font-size: 0.8em; padding: 1px 8px; cursor: pointer;
+  border-radius: 6px; border: 1px solid currentColor; background: transparent; color: inherit;
+}
+
+/* YouTube bilingual caption.
+   MOVIE MODE: our own block (.ibt-yt-overlay) drawn from the subtitle track,
+   Chinese on top of English, native caption hidden via the data-ibt-yt flag.
+   FALLBACK MODE: a single Chinese line (.ibt-yt-line) injected beside YouTube's
+   own on-screen caption (native NOT hidden). */
+.ibt-yt-overlay {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 8%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6%;
+  text-align: center;
+  pointer-events: none;
+  z-index: 60;
+}
+.ibt-yt-overlay > div {
+  display: inline-block;
+  max-width: 94%;
+  padding: 1px 8px;
+  border-radius: 3px;
+  background: rgba(8, 8, 8, 0.8);
+  color: #fff;
+  line-height: 1.32;
+  white-space: pre-wrap;
+}
+.ibt-yt-overlay .ibt-yt-zh { font-weight: 500; color: var(--ibt-trans-color, #fff); }
+
+.ibt-yt-line {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin: 2px 0 0;
+  clear: both;
+  position: relative;
+  pointer-events: none;
+}
+.ibt-yt-line > span {
+  display: inline-block;
+  max-width: 96%;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: rgba(8, 8, 8, 0.75);
+  color: #fff;
+  line-height: 1.3;
+  font-weight: 500;
+  white-space: pre-wrap;
+}
+
+/* Movie mode hides YouTube's native caption (only while our own is active) */
+:root[data-ibt-yt="on"]:not([data-ibt-paused="1"]) .ytp-caption-window-container { visibility: hidden !important; }
+
+/* Alt+A on auto-sites: hide our translations, restore original */
+:root[data-ibt-paused="1"] .ibt-block,
+:root[data-ibt-paused="1"] .ibt-yt-overlay { display: none !important; }
+
+:root[data-ibt-enabled="false"] .ibt-yt-overlay,
+:root[data-ibt-enabled="false"] .ibt-yt-line { display: none !important; }
+
+/* Alt+A universal-mode toast */
+.ibt-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%) translateY(12px);
+  z-index: 2147483647;
+  max-width: 90vw;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: rgba(20, 20, 22, 0.92);
+  color: #fff;
+  font-size: 14px;
+  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif;
+  line-height: 1.4;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.ibt-toast.ibt-toast-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ============================================================
+   Consistent CJK font per target language (fixes mixed bold/thin
+   glyphs when the page's own font doesn't fully cover the script).
+   One complete font → every character renders the same weight. */
+:root[data-ibt-lang="zh-CN"] .ibt-trans,
+:root[data-ibt-lang="zh-CN"] .ibt-yt-zh,
+:root[data-ibt-lang="zh-CN"] .ibt-yt-line > span {
+  font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
+    "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", sans-serif;
+}
+:root[data-ibt-lang="zh-TW"] .ibt-trans,
+:root[data-ibt-lang="zh-TW"] .ibt-yt-zh,
+:root[data-ibt-lang="zh-TW"] .ibt-yt-line > span {
+  font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC",
+    "Source Han Sans TC", "Segoe UI", sans-serif;
+}
+
+/* ============================================================
+   Translated-text display styles (chosen in the options page).
+   Applied to page/Reddit translations (.ibt-trans) and the
+   YouTube movie-mode Chinese line (.ibt-yt-zh). */
+:root[data-ibt-style="underline"] .ibt-trans,
+:root[data-ibt-style="underline"] .ibt-yt-zh {
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
+}
+:root[data-ibt-style="dashed"] .ibt-trans,
+:root[data-ibt-style="dashed"] .ibt-yt-zh {
+  text-decoration: underline dashed; text-underline-offset: 3px;
+}
+:root[data-ibt-style="dotted"] .ibt-trans,
+:root[data-ibt-style="dotted"] .ibt-yt-zh {
+  text-decoration: underline dotted; text-decoration-thickness: 2px; text-underline-offset: 3px;
+}
+:root[data-ibt-style="wavy"] .ibt-trans,
+:root[data-ibt-style="wavy"] .ibt-yt-zh {
+  text-decoration: underline wavy; text-decoration-color: rgba(108,122,255,0.9); text-underline-offset: 3px;
+}
+:root[data-ibt-style="solidBox"] .ibt-trans,
+:root[data-ibt-style="solidBox"] .ibt-yt-zh {
+  border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+:root[data-ibt-style="dashedBox"] .ibt-trans,
+:root[data-ibt-style="dashedBox"] .ibt-yt-zh {
+  border: 1px dashed currentColor; border-radius: 4px; padding: 0 5px; box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+:root[data-ibt-style="highlight"] .ibt-trans {
+  background: rgba(255, 214, 10, 0.30); border-radius: 3px; padding: 0 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+:root[data-ibt-style="highlight"] .ibt-yt-zh {
+  background: rgba(255, 214, 10, 0.45) !important; color: #111 !important;
+}
+:root[data-ibt-style="dim"] .ibt-trans,
+:root[data-ibt-style="dim"] .ibt-yt-zh { opacity: 0.6; }
+:root[data-ibt-style="italic"] .ibt-trans,
+:root[data-ibt-style="italic"] .ibt-yt-zh { font-style: italic; }
+:root[data-ibt-style="bold"] .ibt-trans,
+:root[data-ibt-style="bold"] .ibt-yt-zh { font-weight: 700; }
+
+/* Learning mode: hide the translation (blurred) until you hover it */
+:root[data-ibt-style="blur"] .ibt-trans,
+:root[data-ibt-style="blur"] .ibt-yt-zh {
+  filter: blur(5px); transition: filter 0.12s ease; cursor: help;
+}
+:root[data-ibt-style="blur"] .ibt-trans:hover,
+:root[data-ibt-style="blur"] .ibt-yt-overlay:hover .ibt-yt-zh { filter: none; }
+
+/* allow hover-to-reveal on the video subtitle when learning mode is on */
+:root[data-ibt-style="blur"] .ibt-yt-overlay { pointer-events: auto; }
