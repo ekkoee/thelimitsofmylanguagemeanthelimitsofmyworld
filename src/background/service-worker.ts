@@ -1,7 +1,7 @@
 import { loadSettings, saveSettings } from '../core/storage';
 import { cacheKey, getCached, putCached } from '../core/cache';
 import { TaskQueue } from '../core/queue';
-import { getProvider } from '../providers/index';
+import { getProvider, TranslationProvider } from '../providers/index';
 import { segment } from '../core/segmentation';
 import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
@@ -75,7 +75,6 @@ async function handleTranslate(text: string): Promise<AlignedPair[]> {
   const clean = text.trim();
   if (!clean) return [];
   const settings = await loadSettings();
-  const provider = getProvider(settings.provider);
 
   const target = cacheTarget(settings);
   const key = cacheKey(settings.provider, settings.model, target, clean);
@@ -86,7 +85,7 @@ async function handleTranslate(text: string): Promise<AlignedPair[]> {
     if (cached) { try { return JSON.parse(cached) as AlignedPair[]; } catch { /* ignore */ } }
   }
 
-  const pairs = await queue.run(() => translateWith(provider, clean, settings));
+  const pairs = await queue.run(() => withFreeFallback(settings, (p) => translateWith(p, clean, settings)));
 
   if (settings.cacheEnabled && pairs.length) {
     await putCached(new Map([[key, JSON.stringify(pairs)]]), true);
@@ -102,7 +101,6 @@ async function handleLookup(text: string): Promise<WordLookup> {
   const clean = text.trim();
   if (!clean) return { translation: '', sourceLang: '' };
   const settings = await loadSettings();
-  const provider = getProvider(settings.provider);
 
   // Separate cache namespace ('wl') so a lookup's richer value never collides with a
   // plain translation of the same text.
@@ -113,19 +111,43 @@ async function handleLookup(text: string): Promise<WordLookup> {
     if (cached) { try { return JSON.parse(cached) as WordLookup; } catch { /* ignore */ } }
   }
 
-  const result = await queue.run(async (): Promise<WordLookup> => {
+  const result = await queue.run(() => withFreeFallback(settings, async (provider): Promise<WordLookup> => {
     if (provider.lookup) return provider.lookup(clean, settings);
     // Fallback: no dictionary / language detection, just a translation.
     const pairs = await translateWith(provider, clean, settings);
     const translation = pairs.map((p) => p.t).filter(Boolean).join(' ').trim();
     const sourceLang = settings.sourceLang && settings.sourceLang !== 'auto' ? settings.sourceLang : '';
     return { translation, sourceLang };
-  });
+  }));
 
   if (settings.cacheEnabled && result.translation) {
     await putCached(new Map([[key, JSON.stringify(result)]]), true);
   }
   return result;
+}
+
+// The free Google gtx endpoint is unofficial and occasionally returns 403/429. When the
+// active engine is that free Google one and it gets throttled, transparently retry the
+// SAME operation once with the free Microsoft engine, so "always free, no key" keeps
+// working. The user's chosen engine is unchanged — this only kicks in for google, only
+// on a rate-limit/forbidden, and only once. Other engines (LLMs) surface their error.
+function isRateLimited(err: unknown): boolean {
+  return /\b(403|429)\b/.test(String((err as { message?: unknown })?.message ?? err));
+}
+
+async function withFreeFallback<T>(
+  settings: Settings,
+  run: (provider: TranslationProvider) => Promise<T>,
+): Promise<T> {
+  try {
+    return await run(getProvider(settings.provider));
+  } catch (err) {
+    if (settings.provider === 'google' && isRateLimited(err)) {
+      console.warn('[IBT] Google free endpoint throttled → falling back to Microsoft');
+      return run(getProvider('microsoft'));
+    }
+    throw err;
+  }
 }
 
 async function translateWith(
@@ -151,7 +173,9 @@ async function translateWith(
 // Cache identity must include the source language too: changing it (e.g. auto → ja)
 // changes the LLM prompt, so cached results under the old source would be stale.
 function cacheTarget(settings: Settings): string {
-  const tgt = settings.provider === 'google' ? settings.targetLangCode : settings.targetLang;
+  // Free engines (Google/Microsoft) key off the BCP-47 code; LLM engines off the name.
+  const usesLangCode = settings.provider === 'google' || settings.provider === 'microsoft';
+  const tgt = usesLangCode ? settings.targetLangCode : settings.targetLang;
   return `${settings.sourceLang || 'auto'}>${tgt}`;
 }
 
@@ -195,9 +219,10 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
       if (settings.cacheEnabled && t) writeBack.set(keys[idx], JSON.stringify([{ o: texts[idx].trim(), t }] satisfies AlignedPair[]));
     });
   } else {
-    // block engines (Google): translate each missing line, but in parallel via the queue
+    // block engines (Google/Microsoft): translate each missing line, but in parallel via
+    // the queue. withFreeFallback retries a throttled Google line on Microsoft.
     await Promise.all(need.map((idx) => queue.run(async () => {
-      const pairs = await translateWith(provider, texts[idx].trim(), settings);
+      const pairs = await withFreeFallback(settings, (p) => translateWith(p, texts[idx].trim(), settings));
       const t = pairs.map((p) => p.t).join(' ').trim();
       out[idx] = t;
       if (settings.cacheEnabled && t) writeBack.set(keys[idx], JSON.stringify(pairs));

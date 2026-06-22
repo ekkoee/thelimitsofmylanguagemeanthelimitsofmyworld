@@ -1,4 +1,4 @@
-export type ProviderId = 'google' | 'openai' | 'gemini' | 'ollama';
+export type ProviderId = 'google' | 'microsoft' | 'openai' | 'gemini' | 'ollama';
 export type Layout = 'origTop' | 'transTop';
 export type SubtitleOrder = 'zhTop' | 'enTop';   // YouTube movie-mode line order
 export type SiteId = 'x' | 'reddit' | 'youtube';
@@ -43,7 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   translateOnVisible: true,
   provider: 'google',          // ← FREE by default, no API key required
   model: '',
-  apiKeys: { google: '', openai: '', gemini: '', ollama: '' },
+  apiKeys: { google: '', microsoft: '', openai: '', gemini: '', ollama: '' },
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,
   dblClickTranslate: false,    // ← least privilege: opt-in, requests <all_urls> only when enabled
@@ -51,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
   google: '',
+  microsoft: '',
   openai: 'gpt-4o-mini',
   gemini: 'gemini-2.5-flash-lite',
   ollama: 'qwen2.5:7b',
