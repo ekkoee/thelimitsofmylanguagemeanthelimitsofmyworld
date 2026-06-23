@@ -51,7 +51,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
   if (msg?.type === 'translate') {
-    handleTranslate(msg.text)
+    handleTranslate(msg.text, { title: msg.title, mode: msg.mode })
       .then((pairs) => sendResponse({ ok: true, pairs } satisfies TranslateResponse))
       .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateResponse));
     return true; // async response
@@ -71,7 +71,10 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
   return false;
 });
 
-async function handleTranslate(text: string): Promise<AlignedPair[]> {
+async function handleTranslate(
+  text: string,
+  opts?: { title?: string; mode?: 'prose' | 'subtitle' },
+): Promise<AlignedPair[]> {
   const clean = text.trim();
   if (!clean) return [];
   const settings = await loadSettings();
@@ -85,7 +88,10 @@ async function handleTranslate(text: string): Promise<AlignedPair[]> {
     if (cached) { try { return JSON.parse(cached) as AlignedPair[]; } catch { /* ignore */ } }
   }
 
-  const pairs = await queue.run(() => withFreeFallback(settings, (p) => translateWith(p, clean, settings)));
+  // Carry the caller's register + page title to the LLM prompt. A missing mode
+  // defaults to 'subtitle' (preserves prior behavior); pageTitle is prose-only.
+  const llmOpts = { mode: opts?.mode ?? 'subtitle', pageTitle: opts?.title } as const;
+  const pairs = await queue.run(() => withFreeFallback(settings, (p) => translateWith(p, clean, settings, llmOpts)));
 
   if (settings.cacheEnabled && pairs.length) {
     await putCached(new Map([[key, JSON.stringify(pairs)]]), true);
@@ -154,6 +160,7 @@ async function translateWith(
   provider: ReturnType<typeof getProvider>,
   text: string,
   settings: Settings,
+  opts?: { mode?: 'prose' | 'subtitle'; pageTitle?: string },
 ): Promise<AlignedPair[]> {
   // Preferred: provider aligns the whole block itself (free Google engine).
   if (provider.translateBlock) return provider.translateBlock(text, settings);
@@ -162,7 +169,10 @@ async function translateWith(
   if (provider.translate) {
     const sentences = segment(text, settings.sourceLang);
     const translations = await provider.translate(
-      { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang },
+      {
+        sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang,
+        mode: opts?.mode, pageTitle: opts?.pageTitle,
+      },
       settings,
     );
     return sentences.map((o, i) => ({ o, t: translations[i] ?? '' }));
@@ -207,10 +217,11 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
   const writeBack = new Map<string, string>();
 
   if (provider.translate) {
-    // one request for all missing lines
+    // one request for all missing lines. Batch is YouTube movie-mode subtitles →
+    // subtitle register, no page-title context.
     const sentences = need.map((i) => texts[i].trim());
     const translations = await queue.run(() => provider.translate!(
-      { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang },
+      { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
       settings,
     ));
     need.forEach((idx, k) => {

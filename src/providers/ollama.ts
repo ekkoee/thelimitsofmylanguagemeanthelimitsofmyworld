@@ -17,7 +17,7 @@ export const ollamaProvider: TranslationProvider = {
         format: 'json',
         options: { temperature: 0.2 },
         messages: [
-          { role: 'system', content: buildSystemPrompt(input.targetLang, input.sourceLang) },
+          { role: 'system', content: buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode }) },
           { role: 'user', content: JSON.stringify({ sentences: input.sentences }) },
         ],
       }),

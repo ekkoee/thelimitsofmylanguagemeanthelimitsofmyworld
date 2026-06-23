@@ -16,7 +16,7 @@ export const openaiProvider: TranslationProvider = {
         temperature: 0.2,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: buildSystemPrompt(input.targetLang, input.sourceLang) },
+          { role: 'system', content: buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode }) },
           { role: 'user', content: JSON.stringify({ sentences: input.sentences }) },
         ],
       }),

@@ -6,9 +6,12 @@ import { Settings } from '../core/types';
 
 // X / Twitter. A tweet's text lives in one [data-testid="tweetText"], but the
 // line breaks inside it can be <br> elements (often nested) OR '\n' inside text
-// nodes. We walk the WHOLE subtree, split at every break, and insert each
-// line's translation right after it → true "English line / Chinese line"
-// interleaving (the core feature). The original stays intact.
+// nodes. We walk the WHOLE subtree and split it into PARAGRAPHS (a blank line
+// separates them; a single break is a soft wrap that stays in one paragraph),
+// then insert each paragraph's translation right after it. Translating a whole
+// paragraph keeps context (a sentence soft-wrapped across two lines is sent as
+// one); the endpoint still returns per-sentence pairs, so sentence-level
+// "original / Chinese" interleaving is preserved. The original stays intact.
 //
 // "Only-Chinese" view can't CSS-hide the interleaved original (text nodes aren't
 // selectable), so it's handled with a scoped zh-view rule in bilingual.css that
@@ -63,12 +66,22 @@ function clearTweetBlocks(tt: HTMLElement): void {
   tt.querySelectorAll('.ibt-orig-src').forEach((e) => e.classList.remove('ibt-orig-src'));
 }
 
-function splitLines(tt: HTMLElement): Line[] {
-  const out: Line[] = [];
+// Split a tweet into PARAGRAPHS (not single lines), so each block keeps its
+// context when sent to translate. A single break (one <br> or one '\n') is a
+// SOFT wrap → same paragraph; a blank line (<br><br>, '\n\n', or a mix of
+// consecutive breaks) is a paragraph boundary. Each returned Line is one whole
+// paragraph; the Google endpoint still returns per-sentence [zh, src] pairs, so
+// fillPairs keeps sentence-level interleaving WITHIN the paragraph.
+function splitParagraphs(tt: HTMLElement): Line[] {
+  // Phase 1: build the sequence of PHYSICAL lines (same break logic as before),
+  // but KEEP empty lines — they're what marks a paragraph boundary. Each line
+  // records the anchor of its terminating break: the <br>, the text node ending
+  // in '\n', or tt for the trailing line.
+  interface Phys { text: string; anchor: Node }
+  const phys: Phys[] = [];
   let buf = '';
-  const flush = (anchor: Node | null) => {
-    const t = buf.replace(/\s+/g, ' ').trim();
-    if (t && anchor) out.push({ anchor, text: t });
+  const pushLine = (anchor: Node) => {
+    phys.push({ text: buf.replace(/\s+/g, ' ').trim(), anchor });
     buf = '';
   };
 
@@ -87,19 +100,41 @@ function splitLines(tt: HTMLElement): Line[] {
   while ((c = tw.nextNode())) items.push(c);
 
   for (const node of items) {
-    if (node.nodeName === 'BR') { flush(node); continue; }
+    if (node.nodeName === 'BR') { pushLine(node); continue; }
     let tn = node as Text;
     let val = tn.nodeValue || '';
     let nl = val.indexOf('\n');
     while (nl !== -1) {
       buf += val.slice(0, nl);
       const rest = tn.splitText(nl + 1);   // tn now ends with the '\n'
-      flush(tn);
+      pushLine(tn);
       tn = rest; val = rest.nodeValue || ''; nl = val.indexOf('\n');
     }
     buf += val;
   }
-  flush(tt); // trailing line → insert after the whole tweet text
+  pushLine(tt); // trailing physical line → maps to after the whole tweet text
+
+  // Phase 2: coalesce runs of non-empty physical lines into one paragraph; a
+  // blank line flushes the current paragraph. The paragraph's anchor is its
+  // LAST non-empty line's anchor → its translation lands after the paragraph's
+  // last line of text, before the blank line. Consecutive blanks collapse into
+  // one boundary (an empty pbuf flush is a no-op), so no empty paragraphs.
+  const out: Line[] = [];
+  let pbuf: string[] = [];
+  let panchor: Node | null = null;
+  const flushPara = () => {
+    if (pbuf.length && panchor) {
+      const text = pbuf.join(' ').replace(/\s+/g, ' ').trim();
+      if (text) out.push({ anchor: panchor, text });
+    }
+    pbuf = [];
+    panchor = null;
+  };
+  for (const p of phys) {
+    if (p.text) { pbuf.push(p.text); panchor = p.anchor; }
+    else flushPara();
+  }
+  flushPara();
   return out;
 }
 
@@ -117,7 +152,7 @@ export function scanTwitter(s: Settings): void {
     clearTweetBlocks(tt);
     tt.setAttribute(SPLIT, sig);
     try {
-      const lines = splitLines(tt);
+      const lines = splitParagraphs(tt);
       if (lines.length <= 1) {
         const text = tt.innerText?.trim() ?? '';
         if (text && !isAlreadyTargetLang(text, s.targetLangCode)) renderTranslationAfter(tt, text);

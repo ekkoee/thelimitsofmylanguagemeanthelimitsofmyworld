@@ -13,7 +13,7 @@ export const geminiProvider: TranslationProvider = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: buildSystemPrompt(input.targetLang, input.sourceLang) }] },
+        systemInstruction: { parts: [{ text: buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode }) }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify({ sentences: input.sentences }) }] }],
         generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
       }),

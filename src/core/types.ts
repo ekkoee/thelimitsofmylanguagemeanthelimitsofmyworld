@@ -63,6 +63,8 @@ export interface AlignedPair { o: string; t: string; }
 export interface TranslateMessage {
   type: 'translate';
   text: string;
+  title?: string;                // page title, sent by the content script as LLM context (prose path)
+  mode?: 'prose' | 'subtitle';   // translation register; service worker treats a missing mode as 'subtitle'
 }
 
 export interface TranslateResponse {

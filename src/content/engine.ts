@@ -6,8 +6,61 @@ import { sendMessage, isContextGoneError } from '../utils/runtime';
 export interface TextUnit { source: HTMLElement; text: string; }
 export interface SiteAdapter { id: string; collect(): TextUnit[]; }
 
+// Content fingerprint (copied from universal.ts): identifies "this exact text
+// already has a translation here" even after the framework swaps the source
+// node. Reddit (shreddit) re-renders / re-slots post nodes, so a re-scanned
+// source loses its data-ibt-done and looks unprocessed → would translate again.
+function sigOf(text: string): string {
+  const s = text.trim();
+  return `${s.length}|${s.slice(0, 24)}|${s.slice(-12)}`;
+}
+
+// First .ibt-block sitting just after `anchor` (one of OUR insertions),
+// tolerating a few framework-injected siblings in between (copied from
+// universal.ts findAdjacentBlock).
+function findAdjacentBlock(anchor: HTMLElement): HTMLElement | null {
+  let sib = anchor.nextElementSibling as HTMLElement | null;
+  for (let hops = 0; sib && hops < 4; hops++) {
+    if (sib.classList.contains('ibt-block') && sib.dataset.ibtOut === '1') return sib;
+    sib = sib.nextElementSibling as HTMLElement | null;
+  }
+  return null;
+}
+
+// POST-scan cleanup. Reddit (shreddit) re-renders asynchronously: when a second
+// block is inserted the old one hasn't yet been moved next to the new source, so
+// the pre-insert guard (findAdjacentBlock) sees nothing and lets it through. By
+// the time layout settles the two duplicates ARE adjacent — so we sweep them here.
+function sameSig(a: HTMLElement, b: HTMLElement): boolean {
+  const sa = a.dataset.ibtSig; const sb = b.dataset.ibtSig;
+  return !!sa && sa === sb;            // both stamped (sig is written at insert time, so reliable even while loading) and equal
+}
+function dedupeAdjacentBlocks(root: ParentNode): void {
+  const blocks = root.querySelectorAll<HTMLElement>('.ibt-block[data-ibt-out="1"]');
+  blocks.forEach((b) => {
+    if (!b.isConnected) return;
+    let next = b.nextElementSibling as HTMLElement | null;
+    // Drop the duplicate block(s) sitting right after with the same signature.
+    while (next && next.classList.contains('ibt-block') && next.dataset.ibtOut === '1' && sameSig(b, next)) {
+      const toRemove = next;
+      next = next.nextElementSibling as HTMLElement | null;
+      toRemove.remove();
+    }
+  });
+}
+
+// A pair whose ORIGINAL is just a URL or bare domain (e.g. ui.hindsight.vectorize.io):
+// translating it yields a meaningless second copy of the link, so skip it. Only
+// matches when the WHOLE string is a URL — a sentence that merely contains a link
+// is a different pair and is unaffected.
+function isPureUrl(s: string): boolean {
+  const t = s.trim();
+  return /^(https?:\/\/|www\.)\S+$/i.test(t) || /^[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(t);
+}
+
 async function translateBlock(text: string): Promise<AlignedPair[]> {
-  const resp = await sendMessage<TranslateResponse>({ type: 'translate', text });
+  // Reddit / X / universal are prose; carry the page title as background context.
+  const resp = await sendMessage<TranslateResponse>({ type: 'translate', text, title: document.title, mode: 'prose' });
   if (!resp?.ok) throw new Error(resp?.error || 'translate failed');
   return resp.pairs || [];
 }
@@ -19,6 +72,7 @@ function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
   // text (rich: links/mentions/media intact); the 3-state view shows/hides that
   // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
   for (const p of pairs) {
+    if (isPureUrl(p.o)) continue;   // a pair that's just a URL → no useful translation
     block.appendChild(el('div', 'ibt-trans', p.t));
   }
 }
@@ -115,15 +169,40 @@ export class Engine {
       // target is Chinese) — no 中文→中文 duplicate. Not marked processed, so it
       // re-evaluates if the target language is later changed.
       if (isAlreadyTargetLang(unit.text, this.settings.targetLangCode)) continue;
+
+      // Re-render guard (Reddit re-slots nodes → source loses data-ibt-done).
+      // If a block we placed still sits after this source, decide by fingerprint:
+      // same text → already translated, just re-stamp the source and skip; changed
+      // text → drop the stale block(s) and translate fresh. Protects BOTH the
+      // immediate and the translateOnVisible (IO) paths, since it runs before either.
+      const sig = sigOf(unit.text);
+      const existing = findAdjacentBlock(unit.source);
+      if (existing) {
+        if (existing.dataset.ibtSig === sig) {
+          markProcessed(unit.source);   // re-stamp the swapped-in node so we don't re-check it
+          continue;
+        }
+        let b: Element | null = existing;   // text changed → remove this block + any consecutive ones
+        while (b && b.classList.contains('ibt-block')) {
+          const next: Element | null = b.nextElementSibling;
+          b.remove();
+          b = next;
+        }
+      }
+
       if (this.settings.translateOnVisible) {
         this.pending.add(unit.source);
         (unit.source as any).__ibtText = unit.text;
+        (unit.source as any).__ibtSig = sig;
         this.ensureIO().observe(unit.source);
       } else {
         markProcessed(unit.source);
-        renderTranslationAfter(unit.source, unit.text);
+        renderTranslationAfter(unit.source, unit.text, { sig });
       }
     }
+    // Async re-renders can slip a duplicate past the pre-insert guard; once both
+    // copies are in the DOM (next debounced scan) they're adjacent → sweep them.
+    dedupeAdjacentBlocks(document.body);
   }
 
   private ensureIO(): IntersectionObserver {
@@ -136,7 +215,8 @@ export class Engine {
         this.pending.delete(src);
         if (isProcessed(src)) continue;
         markProcessed(src);
-        renderTranslationAfter(src, (src as any).__ibtText || src.innerText || '');
+        const text = (src as any).__ibtText || src.innerText || '';
+        renderTranslationAfter(src, text, { sig: (src as any).__ibtSig || sigOf(text) });
       }
     }, { rootMargin: '300px' });
     return this.io;

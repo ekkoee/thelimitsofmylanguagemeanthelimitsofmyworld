@@ -376,7 +376,8 @@ class DomCaptions {
 
 // ---- helpers ----
 async function translateBlock(text: string): Promise<AlignedPair[]> {
-  const resp = await sendMessage<TranslateResponse>({ type: 'translate', text });
+  // DOM-caption fallback → keep the subtitle register (no page-title context).
+  const resp = await sendMessage<TranslateResponse>({ type: 'translate', text, mode: 'subtitle' });
   if (!resp?.ok) throw new Error(resp?.error || 'failed');
   return resp.pairs || [];
 }
