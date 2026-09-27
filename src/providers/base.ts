@@ -21,6 +21,33 @@ export interface TranslationProvider {
   lookup?(text: string, settings: Settings): Promise<WordLookup>;
 }
 
+/**
+ * fetch() that rides out rate limits. LLM APIs (esp. free-tier keys) 429 when a
+ * page fires a burst of requests (e.g. a social feed translating dozens of posts
+ * at once). Retries with exponential backoff + jitter, honoring Retry-After when
+ * the server sends one. Only 429/503 are retried — anything else returns as-is.
+ */
+export async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  opts?: { label?: string; maxRetries?: number },
+): Promise<Response> {
+  const maxRetries = opts?.maxRetries ?? 3;
+  let last: Response | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, init);
+    if (res.status !== 429 && res.status !== 503) return res;
+    last = res;
+    if (attempt === maxRetries) return res;
+    const retryAfter = Number(res.headers.get('retry-after'));
+    const base = Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(8000, 1000 * 2 ** attempt); // 1s, 2s, 4s, cap 8s
+    await new Promise((r) => setTimeout(r, base * (0.8 + Math.random() * 0.4)));
+  }
+  return last as Response;
+}
+
 export function buildSystemPrompt(
   targetLang: string,
   sourceLang?: string,
@@ -49,19 +76,28 @@ export function buildSystemPrompt(
   lines.push(`Rules:`);
   // Shared tone + proper-noun + preserve rules (both modes).
   lines.push(`- Produce natural, fluent ${targetLang} the way a native speaker would actually say it; convey the meaning rather than translating word-for-word.`);
+  // Script fidelity: LLMs sometimes leak the wrong Han script (e.g. Simplified
+  // chars when asked for Traditional). State the script as a hard rule.
+  if (/traditional/i.test(targetLang)) {
+    lines.push(`- Write ENTIRELY in Traditional Chinese (繁體中文, as used in Taiwan). NEVER output Simplified Chinese characters (简体字) — every single character must be Traditional.`);
+  } else if (/simplified/i.test(targetLang)) {
+    lines.push(`- Write ENTIRELY in Simplified Chinese (简体字). NEVER output Traditional Chinese characters (繁體字) — every single character must be Simplified.`);
+  }
   if (prose) {
     lines.push(`- Produce fluent, idiomatic ${targetLang} as a native writer would phrase it, while keeping each numbered element's meaning and staying aligned 1:1.`);
   }
   lines.push(`- Get proper nouns right: keep brand/product/person names accurate, and render well-known film, show, song and book titles using their official ${targetLang} name when one exists (otherwise keep the original).`);
   if (!prose) {
-    // Subtitle-only register (wording unchanged from the original prompt).
+    // Subtitle-only register.
     lines.push(`- Input often comes from speech-to-text, so it may lack punctuation or contain small recognition errors — infer the intended meaning and translate that.`);
+    lines.push(`- The input lines are CONSECUTIVE subtitle lines from one video, in playback order. Use the surrounding lines (both earlier AND later) as context: resolve pronouns (he/she/it/this), disambiguate words with several meanings, and keep names and terms consistent across lines. A line that looks odd on its own usually makes sense with its neighbors — translate the intended meaning, never word-for-word.`);
+    lines.push(`- Never translate sound-effect / non-speech annotations in brackets or parentheses — e.g. [music], [applause], (laughing), ♪. If a line consists ONLY of such annotations, output that line unchanged.`);
     lines.push(`- Keep it concise and readable as an on-screen subtitle.`);
   }
   lines.push(`- Preserve @mentions, #hashtags, URLs and code verbatim.`);
 
   // Hardened 1:1 alignment contract (both modes).
-  lines.push(`- You will receive a JSON object {"sentences": [...]}. Translate EACH element independently and in order.`);
+  lines.push(`- You will receive a JSON object {"sentences": [...]}. Translate EACH element in order, using the neighboring elements as context per the rules above — but keep each translation aligned to its own element.`);
   lines.push(`- Output array length MUST EXACTLY equal input array length. Do NOT merge, split, reorder, add, or drop any element.`);
   lines.push(`- If an element is impossible to translate, output the original element unchanged at that index — never omit it.`);
   lines.push(`- Return ONLY {"t": [...]} with the same number of items, no extra text.`);

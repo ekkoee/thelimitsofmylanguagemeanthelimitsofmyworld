@@ -1,8 +1,8 @@
 // Self-test for the FREE translation engines. Run: node scripts/smoke.mjs
 //   1) Google offline: verifies we parse Google's response into aligned pairs
 //   2) Google live:    calls the free gtx endpoint, prints a bilingual sample
-//   3) Microsoft live: gets a keyless Edge auth token, translates via the free
-//                      api-edge endpoint — this is the Tier-1 fallback engine.
+//   3) Microsoft live: translates via the free keyless Edge endpoint
+//                      (translatetext — this is the Tier-1 fallback engine).
 // Exit code is non-zero if a live test fails, so CI / Claude Code can detect it.
 
 const SAMPLE = 'The quick brown fox jumps over the lazy dog. This is a second sentence.';
@@ -42,18 +42,13 @@ async function googleLive() {
 // ---------- 3) Microsoft: live keyless Edge endpoint ----------
 async function microsoftLive() {
   try {
-    // a) auth token (JWT, no API key)
-    const authRes = await fetch('https://edge.microsoft.com/translate/auth');
-    if (!authRes.ok) throw new Error('auth HTTP ' + authRes.status);
-    const token = (await authRes.text()).trim();
-    if (token.split('.').length !== 3) throw new Error('auth did not return a JWT');
-
-    // b) translate (array of {Text}); Microsoft uses zh-Hant for Traditional Chinese
-    const url = 'https://api-edge.cognitive.microsofttranslator.com/translate?api-version=3.0&to=zh-Hant';
+    // single-step: POST a bare JSON string array, no API key, no JWT
+    // (the old two-step auth → api-edge flow died when the auth endpoint 404'd)
+    const url = 'https://edge.microsoft.com/translate/translatetext?from=&to=zh-Hant&isEnterpriseClient=false';
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify([{ Text: SAMPLE }]),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([SAMPLE]),
     });
     if (!res.ok) throw new Error('translate HTTP ' + res.status);
     const data = await res.json();

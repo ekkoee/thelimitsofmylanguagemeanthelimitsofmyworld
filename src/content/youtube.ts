@@ -3,6 +3,7 @@ import { SELECTORS, queryFirst } from './selectors';
 import { onUrlChange } from '../utils/observer';
 import { el } from '../utils/dom';
 import { extensionAlive, isContextGoneError, sendMessage } from '../utils/runtime';
+import { isAnnotationOnly } from '../core/subtitle-noise';
 
 const ROOT_FLAG = 'data-ibt-yt';
 const SETTLE_MS = 180;
@@ -10,6 +11,11 @@ const POLL_MS = 100;
 const EMPTY_GRACE_MS = 400;
 const LOOKAHEAD = 16;           // translate this many upcoming cues ahead (batched in one request)
 const AHEAD_THROTTLE_MS = 400;
+
+// Fallback typeface when YouTube's native caption element isn't readable —
+// mirrors YouTube's own caption stack, then system CJK fonts.
+const YT_FONT_FALLBACK =
+  '"YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif';
 
 interface Cue { start: number; end: number; text: string }
 
@@ -209,6 +215,9 @@ class TrackCaptions {
     const batch: number[] = [];
     for (let i = base; i <= base + LOOKAHEAD && i < this.cues.length; i++) {
       if (this.trans.has(i) || this.inflight.has(i)) continue;
+      // A cue that is only sound-effect annotations ([music], (applause), ♪…)
+      // gets no Chinese line — translating it is pure noise.
+      if (isAnnotationOnly(this.cues[i].text)) { this.trans.set(i, ''); continue; }
       batch.push(i);
     }
     if (!batch.length) return;
@@ -227,7 +236,7 @@ class TrackCaptions {
         this.cooldownUntil = Date.now() + (quota ? 60000 : 4000); // quota: wait a minute; other: brief
         if (!this.warned) {
           this.warned = true;
-          if (quota) console.warn('[IBT] 翻譯額度用盡（Gemini 429）。建議把模型改成 gemini-2.5-flash-lite（額度較高），或改用免費 Google；額度每天會重置。');
+          if (quota) console.warn('[IBT] 翻譯額度用盡（Gemini 429）。建議把模型改成 gemini-3.5-flash-lite（免費額度較高），或改用免費 Google；額度會定期重置，詳見 Google 官方額度說明。');
           else console.warn('[IBT] 翻譯失敗：', msg, '（稍後重試）');
         }
       })
@@ -248,8 +257,22 @@ class TrackCaptions {
   private applyFont(): void {
     const base = Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
     const size = Math.round(base * this.settings.fontScale);
-    if (this.enEl) this.enEl.style.fontSize = `${size}px`;
-    if (this.zhEl) this.zhEl.style.fontSize = `${size}px`;
+    // Match YouTube's own caption typeface: read it live off the native caption
+    // segment (also respects the viewer's caption-style customization), with a
+    // YouTube-like stack as fallback.
+    const fam = this.nativeCaptionFont();
+    if (this.enEl) { this.enEl.style.fontSize = `${size}px`; this.enEl.style.fontFamily = fam; }
+    if (this.zhEl) { this.zhEl.style.fontSize = `${size}px`; this.zhEl.style.fontFamily = fam; }
+  }
+
+  private cachedNativeFont = '';
+  private nativeCaptionFont(): string {
+    if (!this.cachedNativeFont) {
+      const seg = queryFirst(SELECTORS.youtube.captionSegment, this.player)[0] as HTMLElement | undefined;
+      const fam = seg ? getComputedStyle(seg).fontFamily : '';
+      this.cachedNativeFont = fam || YT_FONT_FALLBACK;
+    }
+    return this.cachedNativeFont;
   }
 
   private applyOrder(): void {
@@ -383,7 +406,10 @@ async function translateBlock(text: string): Promise<AlignedPair[]> {
 }
 
 async function translateBatch(texts: string[]): Promise<string[]> {
-  const resp = await sendMessage<TranslateBatchResponse>({ type: 'translateBatch', texts });
+  // Video title as background context (read-frog style) — helps the model
+  // disambiguate terms; never translated itself.
+  const title = document.title.replace(/\s*-\s*YouTube\s*$/i, '').trim();
+  const resp = await sendMessage<TranslateBatchResponse>({ type: 'translateBatch', texts, title });
   if (!resp?.ok) throw new Error(resp?.error || 'failed');
   return resp.translations || [];
 }

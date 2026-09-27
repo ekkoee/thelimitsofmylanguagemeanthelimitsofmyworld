@@ -25,8 +25,8 @@
       </div>
       <div class="field">
         <label for="model">模型</label>
-        <input type="text" id="model" placeholder="例如 gemini-2.5-flash-lite" />
-        <small class="hint">影片字幕量大，建議用 <b>gemini-2.5-flash-lite</b>（每日額度 1000 次，最不容易爆）。想要更高品質且用量不大時，可改 <b>gemini-2.5-flash</b>（每日約 250 次）。留空用預設。</small>
+        <input type="text" id="model" placeholder="例如 gemini-3.5-flash-lite" />
+        <small class="hint">影片字幕量大，建議用 <b>gemini-3.5-flash-lite</b>（免費額度較高，最不容易爆）。想要更高品質且用量不大時，可改 <b>gemini-3.8-flash</b>。留空用預設。實際額度以 <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener">Google 官方額度說明</a>為準（各專案登入 AI Studio 查看）。</small>
       </div>
       <div class="field">
         <label for="sourceLang">來源語言</label>
@@ -82,7 +82,7 @@
       </div>
       <div class="field">
         <label for="transColor">譯文顏色</label>
-        <input type="color" id="transColor" value="#6c7aff" />
+        <input type="color" id="transColor" value="#1d9bf0" />
         <button id="transColorReset" class="ghost">預設</button>
         <small class="hint">選了顏色就套用到「中文譯文」。影片字幕預設白色、網頁譯文預設跟隨原文顏色，按「預設」即可恢復。</small>
       </div>
@@ -97,7 +97,7 @@
       </div>
       <div class="field">
         <label for="barColor">標記顏色</label>
-        <input type="color" id="barColor" value="#6c7aff" />
+        <input type="color" id="barColor" value="#71767b" />
         <button id="barColorReset" class="ghost">預設</button>
         <small class="hint">譯文左側那條直線的顏色；選「無」可完全隱藏這條線。</small>
       </div>

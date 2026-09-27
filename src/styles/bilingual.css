@@ -6,8 +6,8 @@
 .ibt-block {
   margin: 4px 0 8px;
   padding: 1px 0 1px 10px;
-  border-left: 3px solid var(--ibt-bar-color, rgba(108, 122, 255, 0.55));
-  font-size: calc(0.98em * var(--ibt-font-scale));
+  border-left: 3px solid var(--ibt-bar-color, rgba(113, 118, 123, 0.55));
+  font-size: calc(0.98rem * var(--ibt-font-scale));
   line-height: 1.5;
   color: inherit;
   white-space: pre-wrap;
@@ -25,7 +25,7 @@
   contain: layout;
   /* match the source element's size (set per-block in universal.ts) so a heading's
      translation reads as a heading; falls back to the default body size. */
-  font-size: calc(var(--ibt-src-fs, 0.98em) * var(--ibt-font-scale));
+  font-size: calc(var(--ibt-src-fs, 0.98rem) * var(--ibt-font-scale));
 }
 
 /* Left marker bar — user-configurable in options (style + color + hide). */
@@ -41,7 +41,7 @@
 .ibt-orig { display: none; opacity: 0.55; font-size: 0.9em; }
 :root[data-ibt-show-original="true"] .ibt-orig { display: block; }
 
-.ibt-trans { color: var(--ibt-trans-color, inherit); }
+.ibt-trans { color: var(--ibt-trans-color, #1d9bf0); }
 
 /* The title's translation block is projected into the title slot — give it a
    touch more size/weight so it reads like the headline it translates. */
@@ -92,7 +92,7 @@
   line-height: 1.32;
   white-space: pre-wrap;
 }
-.ibt-yt-overlay .ibt-yt-zh { font-weight: 500; color: var(--ibt-trans-color, #fff); }
+.ibt-yt-overlay .ibt-yt-zh { font-weight: 500; color: var(--ibt-trans-color, #1d9bf0); }
 
 .ibt-yt-line {
   display: block;

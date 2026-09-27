@@ -53,7 +53,7 @@ export const DEFAULT_MODELS: Record<ProviderId, string> = {
   google: '',
   microsoft: '',
   openai: 'gpt-4o-mini',
-  gemini: 'gemini-2.5-flash-lite',
+  gemini: 'gemini-3.5-flash-lite',
   ollama: 'qwen2.5:7b',
 };
 
@@ -78,6 +78,8 @@ export interface TranslateResponse {
 export interface TranslateBatchMessage {
   type: 'translateBatch';
   texts: string[];
+  /** Optional background context (e.g. YouTube video title) — disambiguation only. */
+  title?: string;
 }
 
 export interface TranslateBatchResponse {
