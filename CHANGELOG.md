@@ -2,6 +2,12 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [Unreleased]
+
+### 變更 Changed
+- **Hybrid 策略重設**：`hybridPolish` 僅在引擎為 Google／Microsoft 時啟用（免費草稿 → Gemini 潤飾）。若引擎已選 Gemini／OpenAI，hybrid 為 no-op，直接走該引擎——避免「先看差的免費稿再等 10+ 秒潤飾」比純 Gemini 更慢的體驗。
+- 免費引擎繁體安全網：Traditional 判定同時看 `targetLangCode` 與 `targetLang` 名稱；快取命中也會再跑 `toTraditional`；免費快取命名空間 `#glossary-v1` → `#glossary-v2`。
+
 ## [1.3.3] - 2026-09-27
 
 ### 變更 Changed

@@ -169,8 +169,9 @@ async function handleTranslate(
   if (!clean) return { pairs: [] };
   const settings = await loadSettings();
 
-  // Hybrid: free MT first for instant display; Gemini polish follows via `polish`.
-  // If a polished cache hit exists, serve it immediately (no second round-trip).
+  // Hybrid (free provider only): free MT first; Gemini polish via `polish`.
+  // Skipped when provider is already Gemini/OpenAI/… — see hybridEnabled().
+  // Polished cache hit → serve immediately (no second round-trip).
   if (hybridEnabled(settings)) {
     const polishedKey = polishCacheKey(settings, clean);
     if (settings.cacheEnabled) {
@@ -197,7 +198,10 @@ async function handleTranslate(
         await putCached(new Map([[freeKey, JSON.stringify(free)]]), true);
       }
     }
-    return { pairs: free, polishPending: true };
+    // Re-apply st2t even on cache hits: older entries (or incomplete maps) can
+    // still leak Simplified glyphs into a zh-TW draft the user stares at for
+    // seconds before Gemini polish arrives.
+    return { pairs: ensureTraditional(free, settings), polishPending: true };
   }
 
   const target = cacheTarget(settings);
@@ -206,7 +210,14 @@ async function handleTranslate(
   if (settings.cacheEnabled) {
     const hit = await getCached([key], true);
     const cached = hit.get(key);
-    if (cached) { try { return { pairs: JSON.parse(cached) as AlignedPair[] }; } catch { /* ignore */ } }
+    if (cached) {
+      try {
+        const pairs = JSON.parse(cached) as AlignedPair[];
+        // Free-engine caches may predate st2t fixes; re-run the safety net.
+        const freeEng = settings.provider === 'google' || settings.provider === 'microsoft';
+        return { pairs: freeEng ? ensureTraditional(pairs, settings) : pairs };
+      } catch { /* ignore */ }
+    }
   }
 
   // Carry the caller's register + page title to the LLM prompt. A missing mode
@@ -230,9 +241,16 @@ async function handleTranslate(
   return { pairs };
 }
 
-/** True when hybrid free→Gemini polish is opted in and a Gemini key is present. */
+/** True when free→Gemini polish should run.
+ *  Hybrid only makes sense when the *selected* engine is already a free MT
+ *  endpoint: show Google/MS instantly, then polish with Gemini in place.
+ *  If the user already selected Gemini (or another LLM) as provider, forcing
+ *  free-first is strictly worse UX — free draft quality + Simplified leaks,
+ *  then a 10s+ wait for the same Gemini call they could have gotten first.
+ *  In that case hybrid is a no-op and the normal metered path runs. */
 function hybridEnabled(settings: Settings): boolean {
-  return !!(settings.hybridPolish && settings.apiKeys.gemini?.trim());
+  const freeProvider = settings.provider === 'google' || settings.provider === 'microsoft';
+  return !!(settings.hybridPolish && settings.apiKeys.gemini?.trim() && freeProvider);
 }
 
 function polishCacheKey(settings: Settings, text: string): string {
@@ -250,8 +268,8 @@ async function translateFree(
   settings: Settings,
   llmOpts: { mode: 'prose' | 'subtitle'; pageTitle?: string },
 ): Promise<AlignedPair[]> {
-  // Always start from Google for hybrid (and free-engine path); withFreeFallback
-  // still retries Microsoft on throttle/echo. Ignore the user's LLM provider here.
+  // Free path always starts on Google; withFreeFallback retries Microsoft on
+  // throttle/echo. (Hybrid only reaches here when provider is already free.)
   const freeSettings = { ...settings, provider: 'google' as const };
   return queue.run(() => withFreeFallback(freeSettings, async (p) => {
     // Free MT renders plain English far more naturally than idiom-heavy social
@@ -435,9 +453,17 @@ async function translateWith(
 // Google's auto language detection (text comes back untranslated).
 const MAX_TERM_PROBES = 8; // extra per-paragraph requests, first-seen terms only
 const TRAD_TARGET_RE = /tw|hant|hk/i;
+const TRAD_NAME_RE = /traditional|繁體|繁体/i;
 const CJK_RE = /[\u4e00-\u9fff]/;
 // Free MT engines (no key) — the simplified-leak safety net applies to these.
 const FREE_ENGINE_IDS = new Set(['google', 'microsoft']);
+
+/** Traditional target? Prefer BCP-47 code; also honor the LLM display name so a
+ *  mismatched/empty targetLangCode still gets the Simplified→Traditional net. */
+function isTraditionalTarget(settings: Settings): boolean {
+  return TRAD_TARGET_RE.test(settings.targetLangCode || '')
+    || TRAD_NAME_RE.test(settings.targetLang || '');
+}
 
 async function correctTerminology(
   source: string,
@@ -446,7 +472,7 @@ async function correctTerminology(
   provider: TranslationProvider,
   pageTitle?: string,
 ): Promise<AlignedPair[]> {
-  const tradTarget = TRAD_TARGET_RE.test(settings.targetLangCode || '');
+  const tradTarget = isTraditionalTarget(settings);
   const matches = findTermMatches(source, [pageTitle ?? '', source].join('\n'));
   const terms = matches.filter((m) => m.en.length <= 60);
   // Simplified-leak safety net: free engines occasionally emit simplified chars
@@ -531,6 +557,11 @@ function applySt2t(pairs: AlignedPair[]): AlignedPair[] {
   return changed ? out : pairs;
 }
 
+/** Apply Simplified→Traditional when the user asked for Traditional Chinese. */
+function ensureTraditional(pairs: AlignedPair[], settings: Settings): AlignedPair[] {
+  return isTraditionalTarget(settings) ? applySt2t(pairs) : pairs;
+}
+
 // Translate one glossary term alone through the same free engine.
 async function translateTermAlone(
   provider: TranslationProvider,
@@ -560,7 +591,7 @@ function cacheTarget(settings: Settings): string {
   const tgt = usesLangCode ? settings.targetLangCode : settings.targetLang;
   // Bump the namespace when post-translation behavior / the LLM prompt changes so
   // stale cached translations are re-fetched instead of served forever.
-  const v = usesLangCode ? '#glossary-v1' : '#prompt-v2';
+  const v = usesLangCode ? '#glossary-v2' : '#prompt-v2';
   return `${settings.sourceLang || 'auto'}>${tgt}${v}`;
 }
 

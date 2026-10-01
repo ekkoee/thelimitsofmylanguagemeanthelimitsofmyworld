@@ -119,8 +119,8 @@
       <legend>效能與成本</legend>
       <label class="check"><input type="checkbox" id="translateOnVisible" /> 只翻譯捲到可見範圍的內容（建議，省 API）</label>
       <label class="check"><input type="checkbox" id="cacheEnabled" /> 啟用持久化快取（chrome.storage.local）</label>
-      <label class="check"><input type="checkbox" id="hybridPolish" /> 先顯示免費翻譯，背景用 Gemini 潤飾</label>
-      <small class="hint">開啟後先用 Google／Microsoft 立刻顯示譯文；若已填 Gemini API key，再於背景潤飾並<strong>就地更新</strong>同一區塊（盡量不閃爍）。未填 key 時僅走免費引擎。關閉則依上方所選引擎一次翻完。</small>
+      <label class="check"><input type="checkbox" id="hybridPolish" /> 免費引擎先顯示，背景用 Gemini 潤飾</label>
+      <small class="hint">僅在上方引擎選 <b>Google／Microsoft</b> 時生效：先立刻顯示免費譯文，若已填 Gemini key 再於背景潤飾並<strong>就地更新</strong>（盡量不閃爍）。若引擎已選 Gemini／OpenAI 等，此選項不作用——直接走該引擎（速度與品質通常優於「免費草稿再等潤飾」）。未填 Gemini key 時僅走免費引擎。</small>
       <div class="field">
         <button id="clearCache" class="ghost">清除翻譯快取</button>
         <span id="cacheMsg" class="muted"></span>

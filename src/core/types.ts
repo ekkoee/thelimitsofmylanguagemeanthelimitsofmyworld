@@ -24,7 +24,7 @@ export interface Settings {
   ollamaEndpoint: string;
   cacheEnabled: boolean;
   dblClickTranslate: boolean;   // double-click word popup (needs <all_urls>, off by default)
-  /** Free MT first (Google/MS), then optional Gemini polish in the background. */
+  /** When provider is Google/MS: free MT first, then Gemini polish in background. No-op if provider is already an LLM. */
   hybridPolish: boolean;
 }
 
@@ -49,7 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,
   dblClickTranslate: false,    // ← least privilege: opt-in, requests <all_urls> only when enabled
-  hybridPolish: false,         // ← opt-in: free MT first, Gemini polish in place when key present
+  hybridPolish: false,         // ← opt-in: free MT→Gemini polish (only when provider is google/microsoft)
 };
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
