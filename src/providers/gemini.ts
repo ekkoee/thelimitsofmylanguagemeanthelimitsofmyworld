@@ -13,9 +13,15 @@ export const geminiProvider: TranslationProvider = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode }) }] },
+        systemInstruction: { parts: [{ text: buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode, compact: true }) }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify({ sentences: input.sentences }) }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+        // Compact prompt + modest maxOutputTokens: less prefill/decode work → lower TTFT.
+        // Model stays settings.model || gemini-3.5-flash-lite (configurable in options).
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: 'application/json',
+          maxOutputTokens: Math.min(8192, Math.max(512, input.sentences.length * 96)),
+        },
       }),
     }, { label: 'gemini' });
     if (!res.ok) throw new Error(`Gemini ${res.status}: ${await safeBody(res)}`);
