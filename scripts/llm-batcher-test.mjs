@@ -140,5 +140,58 @@ function makeProvider(log) {
   check('empty → [] without request', Array.isArray(out) && out.length === 0 && log.length === 0);
 }
 
+
+// --- first-fire: few sentences flush on short window, not after a long wait ---
+{
+  const log = [];
+  const batcher = new LlmBatcher(
+    { pace: async () => {}, run: (fn) => fn(), onBatchFallback: async () => { throw new Error('no fallback'); } },
+    { firstWindowMs: 25, windowMs: 200 },
+  );
+  const t0 = Date.now();
+  const provider = makeProvider(log);
+  const result = await batcher.submit({
+    text: 'Only one sentence.', settings: makeSettings(), provider, mode: 'prose',
+  });
+  const elapsed = Date.now() - t0;
+  check('first-fire under long windowMs', elapsed < 150 && log.length === 1);
+  check('first-fire result ok', result[0]?.t === 'ZH:Only one sentence.');
+}
+
+// --- eagerFlushSentences: flush before window when enough sentences queued ---
+{
+  const log = [];
+  const batcher = new LlmBatcher(
+    { pace: async () => {}, run: (fn) => fn(), onBatchFallback: async () => { throw new Error('no fallback'); } },
+    { windowMs: 500, firstWindowMs: 500, eagerFlushSentences: 3 },
+  );
+  const settings = makeSettings();
+  const provider = makeProvider(log);
+  const t0 = Date.now();
+  const results = await Promise.all([
+    batcher.submit({ text: 'One.', settings, provider, mode: 'prose' }),
+    batcher.submit({ text: 'Two.', settings, provider, mode: 'prose' }),
+    batcher.submit({ text: 'Three.', settings, provider, mode: 'prose' }),
+  ]);
+  const elapsed = Date.now() - t0;
+  check('eager flush before long window', elapsed < 200 && log.length === 1 && log[0].length === 3);
+  check('eager flush fan-out', results.every((pairs, i) => pairs[0]?.t === `ZH:${['One.', 'Two.', 'Three.'][i]}`));
+}
+
+// --- pace receives provider id ---
+{
+  const paced = [];
+  const batcher = new LlmBatcher(
+    {
+      pace: async (id) => { paced.push(id); },
+      run: (fn) => fn(),
+      onBatchFallback: async () => { throw new Error('no fallback'); },
+    },
+    { windowMs: 20 },
+  );
+  await batcher.submit({ text: 'Hi.', settings: makeSettings(), provider: makeProvider([]), mode: 'prose' });
+  check('pace gets provider id', paced[0] === 'gemini');
+}
+
 console.log(failures ? `${failures} FAILURES` : 'all batcher tests passed');
 process.exit(failures ? 1 : 0);

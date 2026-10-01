@@ -55,6 +55,7 @@ async function init() {
 
   bindCheck('translateOnVisible', s.translateOnVisible, (v) => ({ translateOnVisible: v }));
   bindCheck('cacheEnabled', s.cacheEnabled, (v) => ({ cacheEnabled: v }));
+  bindCheck('hybridPolish', s.hybridPolish, (v) => ({ hybridPolish: v }));
 
   // appearance: translated-text style + custom color + left marker bar, live preview
   const transStyle = $<HTMLSelectElement>('transStyle');
