@@ -20,13 +20,26 @@ const queue = new TaskQueue(3);
 // translates, bottom shows retry buttons). This gate spaces LLM request
 // *starts* by at least LLM_SPACING_MS so a burst becomes a steady trickle.
 // Free Google/Microsoft endpoints are unmetered for our purposes and skip it.
+// Default spacing keeps OpenAI free-tier RPM safe (~50 req/min theoretical).
+// Gemini Flash-Lite free tiers typically allow a higher effective RPM once
+// batched; a tighter gap cuts multi-batch TTFT without blowing quota on long threads.
 const LLM_SPACING_MS = 1200;
+const LLM_SPACING_MS_BY_PROVIDER: Record<string, number> = {
+  gemini: 450,
+};
 let lastLLMStart = 0;
+function spacingFor(providerId?: string): number {
+  if (providerId && providerId in LLM_SPACING_MS_BY_PROVIDER) {
+    return LLM_SPACING_MS_BY_PROVIDER[providerId];
+  }
+  return LLM_SPACING_MS;
+}
 /** Space LLM request starts (free-tier RPM protection). Only waits when the
- *  previous request started less than LLM_SPACING_MS ago — the first batch
- *  after idle goes immediately instead of paying a gratuitous 1.2s. */
-function paceLLM(): Promise<void> {
-  const wait = LLM_SPACING_MS - (Date.now() - lastLLMStart);
+ *  previous request started less than the provider spacing ago — the first
+ *  batch after idle goes immediately instead of paying a gratuitous delay. */
+function paceLLM(providerId?: string): Promise<void> {
+  const spacing = spacingFor(providerId);
+  const wait = spacing - (Date.now() - lastLLMStart);
   lastLLMStart = Date.now() + Math.max(0, wait);
   return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)) : Promise.resolve();
 }
@@ -66,6 +79,11 @@ const llmBatcher = new LlmBatcher({
     });
     return pairs;
   }))),
+}, {
+  // Faster first-fire → lower TTFT when few sentences are ready; burst still
+  // coalesces inside the window without waiting for a full 80-sentence batch.
+  firstWindowMs: 40,
+  windowMs: 100,
 });
 
 chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); });
@@ -482,7 +500,7 @@ async function handleTranslateBatch(texts: string[], opts?: { title?: string }):
     // one request for all missing lines. Batch is YouTube movie-mode subtitles →
     // subtitle register; video title rides along as background context.
     const sentences = need.map((i) => cleaned[i].trim());
-    if (isMetered(provider)) await paceLLM();
+    if (isMetered(provider)) await paceLLM(provider.id);
     const translations = await queue.run(() => provider.translate!(
       { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle', pageTitle: opts?.title },
       settings,

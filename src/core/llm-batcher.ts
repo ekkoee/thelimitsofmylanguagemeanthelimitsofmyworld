@@ -31,8 +31,8 @@ interface Item {
 }
 
 export interface BatcherDeps {
-  /** Space LLM request starts (free-tier RPM protection). */
-  pace: () => Promise<void>;
+  /** Space LLM request starts (free-tier RPM protection). Provider id lets hosts use tighter spacing for faster APIs (e.g. Gemini). */
+  pace: (providerId?: string) => Promise<void>;
   /** Run the provider call through the concurrency queue. */
   run: <T>(fn: () => Promise<T>) => Promise<T>;
   /** Quota/rate-limit failure: translate the batch another way, or rethrow. */
@@ -60,12 +60,24 @@ export class LlmBatcher {
 
   constructor(
     private readonly deps: BatcherDeps,
-    private readonly opts: { windowMs?: number; maxSentences?: number; maxChars?: number } = {},
+    private readonly opts: {
+      /** Debounce window after the first item (coalesce a burst). Default 100ms (was 250). */
+      windowMs?: number;
+      /** Faster first-fire after idle so TTFT drops when only a few sentences are ready. Default 40ms. */
+      firstWindowMs?: number;
+      maxSentences?: number;
+      maxChars?: number;
+      /** Flush as soon as this many sentences are queued (don't wait out the window). Default 12. */
+      eagerFlushSentences?: number;
+    } = {},
   ) {}
 
-  get windowMs(): number { return this.opts.windowMs ?? 250; }
+  get windowMs(): number { return this.opts.windowMs ?? 100; }
+  get firstWindowMs(): number { return this.opts.firstWindowMs ?? 40; }
   get maxSentences(): number { return this.opts.maxSentences ?? 80; }
   get maxChars(): number { return this.opts.maxChars ?? 8000; }
+  /** Disabled by default — size/timer flushes only. Set explicitly to cap wait when a partial burst is already useful. */
+  get eagerFlushSentences(): number { return this.opts.eagerFlushSentences ?? Number.POSITIVE_INFINITY; }
 
   /** For tests: how many requests are currently waiting to be flushed. */
   get pending(): number { return this.items.length; }
@@ -85,10 +97,17 @@ export class LlmBatcher {
       this.items.push({ key, text: req.text, sentences, req, resolve, reject });
       this.sentences += sentences.length;
       this.chars += req.text.length;
-      if (this.sentences >= this.maxSentences || this.chars >= this.maxChars) {
+      if (
+        this.sentences >= this.maxSentences
+        || this.chars >= this.maxChars
+        || this.sentences >= this.eagerFlushSentences
+      ) {
         void this.flush();
       } else if (!this.timer) {
-        this.timer = setTimeout(() => void this.flush(), this.windowMs);
+        // Short first-fire after idle (TTFT). Later items ride along — timer is
+        // not reset, so a burst still coalesces without waiting for max batch size.
+        const delay = this.opts.firstWindowMs ?? this.windowMs;
+        this.timer = setTimeout(() => void this.flush(), delay);
       }
     });
   }
@@ -127,7 +146,7 @@ export class LlmBatcher {
     try {
       // One paced request for the whole group — this is what keeps a long
       // thread under the free-tier per-minute limit.
-      await this.deps.pace();
+      await this.deps.pace(first.req.provider.id);
       const translations = await this.deps.run(() =>
         first.req.provider.translate!(input, first.req.settings));
       items.forEach((it, i) => {

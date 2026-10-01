@@ -51,7 +51,7 @@ export async function fetchWithRetry(
 export function buildSystemPrompt(
   targetLang: string,
   sourceLang?: string,
-  opts?: { pageTitle?: string; mode?: 'prose' | 'subtitle' },
+  opts?: { pageTitle?: string; mode?: 'prose' | 'subtitle'; compact?: boolean },
 ): string {
   const src = sourceLang && sourceLang !== 'auto' ? sourceLang : '';
   const translateLine = src
@@ -59,6 +59,12 @@ export function buildSystemPrompt(
     : `Detect the source language of each input line and translate it into ${targetLang}.`;
   const prose = opts?.mode === 'prose'; // anything else (incl. missing) → subtitle register
   const title = opts?.pageTitle?.trim();
+
+  // Compact prompt for latency-sensitive providers (Gemini): keep Traditional/
+  // Simplified script fidelity + the JSON 1:1 alignment contract, drop verbosity.
+  if (opts?.compact) {
+    return buildCompactSystemPrompt(targetLang, translateLine, prose, title);
+  }
 
   const lines: string[] = [];
 
@@ -102,6 +108,36 @@ export function buildSystemPrompt(
   lines.push(`- If an element is impossible to translate, output the original element unchanged at that index — never omit it.`);
   lines.push(`- Return ONLY {"t": [...]} with the same number of items, no extra text.`);
 
+  return lines.join('\n');
+}
+
+/** Shorter system prompt for Gemini (and similar) — fewer prefill tokens, same contract. */
+function buildCompactSystemPrompt(
+  targetLang: string,
+  translateLine: string,
+  prose: boolean,
+  title: string | undefined,
+): string {
+  const lines: string[] = [];
+  lines.push(prose
+    ? `Professional translator for web/social text → ${targetLang}.`
+    : `Professional subtitle translator → ${targetLang}.`);
+  lines.push(translateLine);
+  if (title) {
+    lines.push(`Page title context (do not translate/echo): "${title}".`);
+  }
+  if (/traditional/i.test(targetLang)) {
+    lines.push(`Output ENTIRELY Traditional Chinese (繁體中文). Never Simplified (简体).`);
+  } else if (/simplified/i.test(targetLang)) {
+    lines.push(`Output ENTIRELY Simplified Chinese (简体). Never Traditional (繁體).`);
+  }
+  lines.push(`Natural fluent ${targetLang}; meaning over word-for-word.`);
+  lines.push(`Keep proper nouns / official titles accurate; preserve @mentions #hashtags URLs code.`);
+  if (!prose) {
+    lines.push(`Speech-to-text may lack punctuation — infer meaning. Use neighboring lines for context; keep 1:1 alignment.`);
+    lines.push(`Leave sound-effect annotations like [music] / (laughing) unchanged if a line is only that.`);
+  }
+  lines.push(`Input JSON {"sentences":[...]}. Return ONLY {"t":[...]} same length/order. Never merge/split/drop; if untranslatable keep original at that index.`);
   return lines.join('\n');
 }
 
