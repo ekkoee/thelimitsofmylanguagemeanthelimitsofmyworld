@@ -24,6 +24,8 @@ export interface Settings {
   ollamaEndpoint: string;
   cacheEnabled: boolean;
   dblClickTranslate: boolean;   // double-click word popup (needs <all_urls>, off by default)
+  /** Free MT first (Google/MS), then optional Gemini polish in the background. */
+  hybridPolish: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,
   dblClickTranslate: false,    // ← least privilege: opt-in, requests <all_urls> only when enabled
+  hybridPolish: false,         // ← opt-in: free MT first, Gemini polish in place when key present
 };
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
@@ -71,6 +74,8 @@ export interface TranslateResponse {
   ok: boolean;
   pairs?: AlignedPair[];
   error?: string;
+  /** Hybrid mode: free MT shown first; content should request `polish` and update in place. */
+  polishPending?: boolean;
 }
 
 /** Translate several independent lines in ONE request (keeps LLM calls low so
@@ -110,4 +115,18 @@ export interface LookupResponse {
   error?: string;
 }
 
-export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage;
+/** Background Gemini polish after free MT (hybrid path). Same shape as translate. */
+export interface PolishMessage {
+  type: 'polish';
+  text: string;
+  title?: string;
+  mode?: 'prose' | 'subtitle';
+}
+
+export interface PolishResponse {
+  ok: boolean;
+  pairs?: AlignedPair[];
+  error?: string;
+}
+
+export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage | PolishMessage;

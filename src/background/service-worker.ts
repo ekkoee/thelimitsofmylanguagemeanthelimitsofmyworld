@@ -9,7 +9,7 @@ import { toTraditional } from '../core/st2t';
 import { LlmBatcher } from '../core/llm-batcher';
 import { stripSubtitleNoise } from '../core/subtitle-noise';
 import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
-import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
+import { AlignedPair, LookupResponse, PolishResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 
 const queue = new TaskQueue(3);
 
@@ -130,7 +130,9 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
   if (msg?.type === 'translate') {
     handleTranslate(msg.text, { title: msg.title, mode: msg.mode })
-      .then((pairs) => sendResponse({ ok: true, pairs } satisfies TranslateResponse))
+      .then((r) => sendResponse({
+        ok: true, pairs: r.pairs, polishPending: r.polishPending || undefined,
+      } satisfies TranslateResponse))
       .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateResponse));
     return true; // async response
   }
@@ -146,20 +148,57 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
       .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies LookupResponse));
     return true; // async response
   }
+  if (msg?.type === 'polish') {
+    handlePolish(msg.text, { title: msg.title, mode: msg.mode })
+      .then((pairs) => sendResponse({ ok: true, pairs } satisfies PolishResponse))
+      .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies PolishResponse));
+    return true; // async response
+  }
   return false;
 });
 
 async function handleTranslate(
   text: string,
   opts?: { title?: string; mode?: 'prose' | 'subtitle' },
-): Promise<AlignedPair[]> {
+): Promise<{ pairs: AlignedPair[]; polishPending?: boolean }> {
   const mode = opts?.mode ?? 'subtitle';
   let clean = text.trim();
   // Subtitle register: sound-effect annotations ([music], (applause), ♪…) are
   // never translated — an annotation-only line yields no Chinese line at all.
   if (mode === 'subtitle') clean = stripSubtitleNoise(clean);
-  if (!clean) return [];
+  if (!clean) return { pairs: [] };
   const settings = await loadSettings();
+
+  // Hybrid: free MT first for instant display; Gemini polish follows via `polish`.
+  // If a polished cache hit exists, serve it immediately (no second round-trip).
+  if (hybridEnabled(settings)) {
+    const polishedKey = polishCacheKey(settings, clean);
+    if (settings.cacheEnabled) {
+      const hit = await getCached([polishedKey], true);
+      const cached = hit.get(polishedKey);
+      if (cached) {
+        try { return { pairs: JSON.parse(cached) as AlignedPair[] }; } catch { /* ignore */ }
+      }
+    }
+    // Prefer cached free draft when available (same key as plain Google path).
+    const freeSettings = { ...settings, provider: 'google' as const };
+    const freeKey = cacheKey('google', '', cacheTarget(freeSettings), clean);
+    let free: AlignedPair[] | null = null;
+    if (settings.cacheEnabled) {
+      const freeHit = await getCached([freeKey], true);
+      const cachedFree = freeHit.get(freeKey);
+      if (cachedFree) {
+        try { free = JSON.parse(cachedFree) as AlignedPair[]; } catch { /* ignore */ }
+      }
+    }
+    if (!free) {
+      free = await translateFree(clean, settings, { mode, pageTitle: opts?.title });
+      if (settings.cacheEnabled && free.length) {
+        await putCached(new Map([[freeKey, JSON.stringify(free)]]), true);
+      }
+    }
+    return { pairs: free, polishPending: true };
+  }
 
   const target = cacheTarget(settings);
   const key = cacheKey(settings.provider, settings.model, target, clean);
@@ -167,7 +206,7 @@ async function handleTranslate(
   if (settings.cacheEnabled) {
     const hit = await getCached([key], true);
     const cached = hit.get(key);
-    if (cached) { try { return JSON.parse(cached) as AlignedPair[]; } catch { /* ignore */ } }
+    if (cached) { try { return { pairs: JSON.parse(cached) as AlignedPair[] }; } catch { /* ignore */ } }
   }
 
   // Carry the caller's register + page title to the LLM prompt. A missing mode
@@ -182,26 +221,87 @@ async function handleTranslate(
       text: clean, settings, provider, mode: llmOpts.mode, pageTitle: llmOpts.pageTitle,
     });
   } else {
-    pairs = await queue.run(() => withFreeFallback(settings, async (p) => {
-      // Free MT renders plain English far more naturally than idiom-heavy social
-      // copy, so paraphrase idioms into plain equivalents before the request.
-      // English→English only (injected Chinese would flip Google's language
-      // detection). Glossary correction below still uses the ORIGINAL source.
-      const raw = await translateWith(p, paraphraseForMT(clean), settings, llmOpts);
-      // Free engines mistranslate AI/tech terms; correct against the glossary with
-      // the provider that actually translated (Google may have fallen back to MS).
-      const corrected = await correctTerminology(clean, raw, settings, p, opts?.title);
-      // Echo guard (圖二): a free engine occasionally returns the source text as
-      // its own "translation" (seen with Korean). Any language should come back
-      // as Chinese — an echo means this engine failed, so throw to trigger the
-      // other free engine via withFreeFallback instead of showing the echo.
-      if (isEcho(clean, corrected)) throw new Error('IBT_ECHO');
-      return corrected;
-    }));
+    pairs = await translateFree(clean, settings, llmOpts);
   }
 
   if (settings.cacheEnabled && pairs.length) {
     await putCached(new Map([[key, JSON.stringify(pairs)]]), true);
+  }
+  return { pairs };
+}
+
+/** True when hybrid free→Gemini polish is opted in and a Gemini key is present. */
+function hybridEnabled(settings: Settings): boolean {
+  return !!(settings.hybridPolish && settings.apiKeys.gemini?.trim());
+}
+
+function polishCacheKey(settings: Settings, text: string): string {
+  const model = settings.model || 'gemini-3.5-flash-lite';
+  return cacheKey('gemini', model, polishCacheTarget(settings), text);
+}
+
+function polishCacheTarget(settings: Settings): string {
+  return `${settings.sourceLang || 'auto'}>${settings.targetLang}#hybrid-polish-v1`;
+}
+
+/** Free Google/MS path with paraphrase, glossary, and echo guard. */
+async function translateFree(
+  clean: string,
+  settings: Settings,
+  llmOpts: { mode: 'prose' | 'subtitle'; pageTitle?: string },
+): Promise<AlignedPair[]> {
+  // Always start from Google for hybrid (and free-engine path); withFreeFallback
+  // still retries Microsoft on throttle/echo. Ignore the user's LLM provider here.
+  const freeSettings = { ...settings, provider: 'google' as const };
+  return queue.run(() => withFreeFallback(freeSettings, async (p) => {
+    // Free MT renders plain English far more naturally than idiom-heavy social
+    // copy, so paraphrase idioms into plain equivalents before the request.
+    // English→English only (injected Chinese would flip Google's language
+    // detection). Glossary correction below still uses the ORIGINAL source.
+    const raw = await translateWith(p, paraphraseForMT(clean), freeSettings, llmOpts);
+    // Free engines mistranslate AI/tech terms; correct against the glossary with
+    // the provider that actually translated (Google may have fallen back to MS).
+    const corrected = await correctTerminology(clean, raw, freeSettings, p, llmOpts.pageTitle);
+    // Echo guard: a free engine occasionally returns the source text as its own
+    // "translation". Throw to trigger the other free engine via withFreeFallback.
+    if (isEcho(clean, corrected)) throw new Error('IBT_ECHO');
+    return corrected;
+  }));
+}
+
+/** Gemini polish after free MT. Failures leave the free draft on screen. */
+async function handlePolish(
+  text: string,
+  opts?: { title?: string; mode?: 'prose' | 'subtitle' },
+): Promise<AlignedPair[]> {
+  const mode = opts?.mode ?? 'subtitle';
+  let clean = text.trim();
+  if (mode === 'subtitle') clean = stripSubtitleNoise(clean);
+  if (!clean) return [];
+  const settings = await loadSettings();
+  if (!hybridEnabled(settings)) {
+    throw new Error('hybrid polish disabled or missing Gemini key');
+  }
+
+  const polishedKey = polishCacheKey(settings, clean);
+  if (settings.cacheEnabled) {
+    const hit = await getCached([polishedKey], true);
+    const cached = hit.get(polishedKey);
+    if (cached) { try { return JSON.parse(cached) as AlignedPair[]; } catch { /* ignore */ } }
+  }
+
+  const geminiSettings = { ...settings, provider: 'gemini' as const };
+  const provider = getProvider('gemini');
+  const pairs = await llmBatcher.submit({
+    text: clean,
+    settings: geminiSettings,
+    provider,
+    mode,
+    pageTitle: opts?.title,
+  });
+
+  if (settings.cacheEnabled && pairs.length) {
+    await putCached(new Map([[polishedKey, JSON.stringify(pairs)]]), true);
   }
   return pairs;
 }

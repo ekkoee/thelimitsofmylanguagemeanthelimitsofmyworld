@@ -1,4 +1,4 @@
-import { AlignedPair, Settings, TranslateResponse } from '../core/types';
+import { AlignedPair, PolishResponse, Settings, TranslateResponse } from '../core/types';
 import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
 import { el, isProcessed, markProcessed } from '../utils/dom';
 import { sendMessage, isContextGoneError } from '../utils/runtime';
@@ -58,11 +58,15 @@ function isPureUrl(s: string): boolean {
   return /^(https?:\/\/|www\.)\S+$/i.test(t) || /^[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(t);
 }
 
-async function translateBlock(text: string): Promise<AlignedPair[]> {
+async function translateBlock(text: string): Promise<{ pairs: AlignedPair[]; polishPending?: boolean }> {
   // Reddit / X / universal are prose; carry the page title as background context.
   const resp = await sendMessage<TranslateResponse>({ type: 'translate', text, title: document.title, mode: 'prose' });
   if (!resp?.ok) throw new Error(resp?.error || 'translate failed');
-  return resp.pairs || [];
+  return { pairs: resp.pairs || [], polishPending: resp.polishPending };
+}
+
+function usablePairs(pairs: AlignedPair[]): AlignedPair[] {
+  return pairs.filter((p) => !isPureUrl(p.o));
 }
 
 function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
@@ -71,10 +75,40 @@ function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
   // Our block holds ONLY the translation. The original stays as the page's own
   // text (rich: links/mentions/media intact); the 3-state view shows/hides that
   // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
-  for (const p of pairs) {
-    if (isPureUrl(p.o)) continue;   // a pair that's just a URL → no useful translation
+  for (const p of usablePairs(pairs)) {
     block.appendChild(el('div', 'ibt-trans', p.t));
   }
+}
+
+/** Update existing .ibt-trans nodes in place (hybrid polish) — avoid wiping the
+ *  block so the reader doesn't see a flicker/reload. Falls back to fillPairs when
+ *  the sentence count changed. */
+function updatePairsInPlace(block: HTMLElement, pairs: AlignedPair[]): void {
+  if (!block.isConnected) return;
+  const next = usablePairs(pairs);
+  const nodes = Array.from(block.querySelectorAll<HTMLElement>('.ibt-trans'));
+  if (!nodes.length || nodes.length !== next.length) {
+    fillPairs(block, pairs);
+    return;
+  }
+  next.forEach((p, i) => {
+    if (nodes[i].textContent !== p.t) nodes[i].textContent = p.t;
+  });
+}
+
+/** Fire-and-forget Gemini polish; keep free MT on screen if polish fails. */
+function schedulePolish(block: HTMLElement, text: string): void {
+  void (async () => {
+    try {
+      const resp = await sendMessage<PolishResponse>({
+        type: 'polish', text, title: document.title, mode: 'prose',
+      });
+      if (!resp?.ok || !resp.pairs?.length) return;
+      updatePairsInPlace(block, resp.pairs);
+    } catch {
+      // Keep the free draft; polish is best-effort.
+    }
+  })();
 }
 
 // Shown when the extension context is gone (reload/update): a refresh reloads
@@ -135,8 +169,9 @@ export function renderTranslationAfter(
     block.textContent = '';
     block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
     try {
-      const pairs = await translateBlock(text);
+      const { pairs, polishPending } = await translateBlock(text);
       fillPairs(block, pairs);
+      if (polishPending) schedulePolish(block, text);
     } catch (err: any) {
       // Extension was reloaded/updated → quiet "refresh" hint, no retry spam.
       if (isContextGoneError(err)) { showReloadHint(block); return; }
