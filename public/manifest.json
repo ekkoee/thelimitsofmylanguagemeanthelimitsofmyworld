@@ -37,6 +37,7 @@
     "https://translate.googleapis.com/*",
     "https://edge.microsoft.com/*",
     "https://api.openai.com/*",
+    "https://api.groq.com/*",
     "https://generativelanguage.googleapis.com/*",
     "http://localhost/*",
     "http://127.0.0.1/*"

@@ -4,6 +4,7 @@ import { googleProvider } from './google';
 import { microsoftProvider } from './microsoft';
 import { openaiProvider } from './openai';
 import { geminiProvider } from './gemini';
+import { groqProvider } from './groq';
 import { ollamaProvider } from './ollama';
 
 const registry: Record<ProviderId, TranslationProvider> = {
@@ -11,6 +12,7 @@ const registry: Record<ProviderId, TranslationProvider> = {
   microsoft: microsoftProvider,
   openai: openaiProvider,
   gemini: geminiProvider,
+  groq: groqProvider,
   ollama: ollamaProvider,
 };
 

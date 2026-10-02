@@ -39,6 +39,7 @@ async function init() {
 
   bindKey('key_openai', s.apiKeys.openai, 'openai');
   bindKey('key_gemini', s.apiKeys.gemini, 'gemini');
+  bindKey('key_groq', s.apiKeys.groq, 'groq');
 
   const ollama = $<HTMLInputElement>('ollamaEndpoint');
   ollama.value = s.ollamaEndpoint;

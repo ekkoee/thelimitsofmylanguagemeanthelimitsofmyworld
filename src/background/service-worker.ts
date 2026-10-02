@@ -26,6 +26,8 @@ const queue = new TaskQueue(3);
 const LLM_SPACING_MS = 1200;
 const LLM_SPACING_MS_BY_PROVIDER: Record<string, number> = {
   gemini: 450,
+  // Groq llama-3.1-8b-instant is very fast; keep a small gap for free-tier RPM.
+  groq: 150,
 };
 let lastLLMStart = 0;
 function spacingFor(providerId?: string): number {

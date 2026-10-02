@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### 新增 Added
+- **Groq 快速引擎**：設定可選 Groq（OpenAI 相容 `https://api.groq.com/openai/v1`），預設模型 `llama-3.1-8b-instant`，沿用精簡 prompt 與 `{"t":[...]}` 契約（繁體硬性規則）。請求間隔約 150ms。需自備免費 API key。
+
 ### 變更 Changed
 - **Hybrid 策略重設**：`hybridPolish` 僅在引擎為 Google／Microsoft 時啟用（免費草稿 → Gemini 潤飾）。若引擎已選 Gemini／OpenAI，hybrid 為 no-op，直接走該引擎——避免「先看差的免費稿再等 10+ 秒潤飾」比純 Gemini 更慢的體驗。
 - 免費引擎繁體安全網：Traditional 判定同時看 `targetLangCode` 與 `targetLang` 名稱；快取命中也會再跑 `toTraditional`；免費快取命名空間 `#glossary-v1` → `#glossary-v2`。
