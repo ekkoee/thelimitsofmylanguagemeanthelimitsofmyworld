@@ -88,9 +88,14 @@ function showReloadHint(block: HTMLElement): void {
 function showError(block: HTMLElement, message: string, retry: () => void): void {
   block.className = 'ibt-block ibt-error';
   block.textContent = '';
+  // 429 = rate/quota limit: retries with backoff already happened inside the
+  // provider, so this only shows when the quota is genuinely exhausted.
+  const isQuota = /(^|\W)429(\W|$)|quota|rate.?limit/i.test(message);
   const friendly = message.startsWith('NO_API_KEY')
     ? '此引擎需要 API key — 點擊擴充功能圖示 → 選項頁填入（或切回免費引擎）。'
-    : `翻譯失敗：${message}`;
+    : isQuota
+      ? '翻譯額度暫時用盡（請求太頻繁或配額已滿），已自動重試多次。請稍後按「重試」，或到選項頁切換免費引擎。'
+      : `翻譯失敗：${message.replace(/\{[\s\S]*$/, '').trim().slice(0, 120) || message.slice(0, 120)}`;
   block.appendChild(el('span', 'ibt-error-msg', friendly));
   const btn = el('button', 'ibt-retry', '重試');
   btn.addEventListener('click', retry);

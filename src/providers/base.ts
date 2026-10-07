@@ -21,6 +21,33 @@ export interface TranslationProvider {
   lookup?(text: string, settings: Settings): Promise<WordLookup>;
 }
 
+/**
+ * fetch() that rides out rate limits. LLM APIs (esp. free-tier keys) 429 when a
+ * page fires a burst of requests (e.g. a social feed translating dozens of posts
+ * at once). Retries with exponential backoff + jitter, honoring Retry-After when
+ * the server sends one. Only 429/503 are retried — anything else returns as-is.
+ */
+export async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  opts?: { label?: string; maxRetries?: number },
+): Promise<Response> {
+  const maxRetries = opts?.maxRetries ?? 3;
+  let last: Response | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, init);
+    if (res.status !== 429 && res.status !== 503) return res;
+    last = res;
+    if (attempt === maxRetries) return res;
+    const retryAfter = Number(res.headers.get('retry-after'));
+    const base = Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(8000, 1000 * 2 ** attempt); // 1s, 2s, 4s, cap 8s
+    await new Promise((r) => setTimeout(r, base * (0.8 + Math.random() * 0.4)));
+  }
+  return last as Response;
+}
+
 export function buildSystemPrompt(
   targetLang: string,
   sourceLang?: string,
@@ -49,6 +76,13 @@ export function buildSystemPrompt(
   lines.push(`Rules:`);
   // Shared tone + proper-noun + preserve rules (both modes).
   lines.push(`- Produce natural, fluent ${targetLang} the way a native speaker would actually say it; convey the meaning rather than translating word-for-word.`);
+  // Script fidelity: LLMs sometimes leak the wrong Han script (e.g. Simplified
+  // chars when asked for Traditional). State the script as a hard rule.
+  if (/traditional/i.test(targetLang)) {
+    lines.push(`- Write ENTIRELY in Traditional Chinese (繁體中文, as used in Taiwan). NEVER output Simplified Chinese characters (简体字) — every single character must be Traditional.`);
+  } else if (/simplified/i.test(targetLang)) {
+    lines.push(`- Write ENTIRELY in Simplified Chinese (简体字). NEVER output Traditional Chinese characters (繁體字) — every single character must be Simplified.`);
+  }
   if (prose) {
     lines.push(`- Produce fluent, idiomatic ${targetLang} as a native writer would phrase it, while keeping each numbered element's meaning and staying aligned 1:1.`);
   }

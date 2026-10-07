@@ -1,6 +1,6 @@
 # Chrome Web Store — 上架文案
 
-> 與 manifest（v1.2.0）一致的商店文案。完整送審資料包（含可公開的隱私權政策全文、逐項權限理由、上架步驟）另行維護，本檔為精簡對照版。
+> 與 manifest（v1.3.0）一致的商店文案。完整送審資料包（含可公開的隱私權政策全文、逐項權限理由、上架步驟）另行維護，本檔為精簡對照版。
 
 ## 名稱
 雙語對照翻譯 — 網頁與 YouTube 字幕
@@ -38,7 +38,7 @@
 • 選用 `<all_urls>`（預設不啟用）：僅當使用者開啟「雙擊單字浮窗」時，於點擊當下請求；關閉功能即撤除。
 • 主機權限 `x.com` / `twitter.com` / `www.reddit.com` / `www.youtube.com`：在這四個網站自動顯示雙語（內容指令碼）。
 • 主機權限 `translate.googleapis.com`：預設免費引擎，傳送選取文字取得 Google 譯文。
-• 主機權限 `edge.microsoft.com`、`api-edge.cognitive.microsofttranslator.com`：免費後備引擎，向 Microsoft 取得免金鑰授權並傳送選取文字取得譯文（Google 被限流時自動使用）。
+• 主機權限 `edge.microsoft.com`：免費後備引擎，免金鑰直接傳送選取文字取得譯文（Google 被限流時自動使用）。
 • 主機權限 `generativelanguage.googleapis.com`、`api.openai.com`：選用，使用者自備 Gemini / OpenAI 金鑰時傳送文字。
 • 主機權限 `http://localhost`、`http://127.0.0.1`：選用，連線使用者本機 Ollama；資料不離開使用者電腦。
 
@@ -46,4 +46,4 @@
 **遠端程式碼：** 否，所有程式碼皆打包於擴充功能內。
 
 ## 隱私
-本擴充不蒐集、不販售個人資料，無分析或追蹤。要翻譯的文字只在你觸發翻譯時，傳送至你所選擇的翻譯服務以取得譯文：預設 Google 免費端點（`translate.googleapis.com`），限流時自動改用 Microsoft 免費端點（`edge.microsoft.com`、`api-edge.cognitive.microsofttranslator.com`）；選用 Gemini／OpenAI（需自備金鑰）或本機 Ollama（資料不離開裝置）。API 金鑰與設定僅儲存於你瀏覽器的 `chrome.storage`，不會傳給開發者。
+本擴充不蒐集、不販售個人資料，無分析或追蹤。要翻譯的文字只在你觸發翻譯時，傳送至你所選擇的翻譯服務以取得譯文：預設 Google 免費端點（`translate.googleapis.com`），限流時自動改用 Microsoft 免費端點（`edge.microsoft.com`）；選用 Gemini／OpenAI（需自備金鑰）或本機 Ollama（資料不離開裝置）。API 金鑰與設定僅儲存於你瀏覽器的 `chrome.storage`，不會傳給開發者。

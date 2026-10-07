@@ -53,7 +53,7 @@ export const DEFAULT_MODELS: Record<ProviderId, string> = {
   google: '',
   microsoft: '',
   openai: 'gpt-4o-mini',
-  gemini: 'gemini-2.5-flash-lite',
+  gemini: 'gemini-3.5-flash-lite',
   ollama: 'qwen2.5:7b',
 };
 

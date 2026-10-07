@@ -38,6 +38,7 @@ const shared = {
 // Content scripts MUST be IIFE (no ESM in injected context).
 const iifeEntries = {
   'content': 'src/content/index.ts',
+  'alt-a-global': 'src/content/alt-a-global.ts',
   'yt-main': 'src/content/yt-main.ts',
   'universal-inject': 'src/content/universal-inject.ts',
   'popup': 'src/ui/popup/popup.ts',

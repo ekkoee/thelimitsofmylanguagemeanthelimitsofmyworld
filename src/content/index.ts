@@ -28,11 +28,27 @@ import { Settings } from '../core/types';
 
   // Alt+A (or the popup button) on these auto-sites cycles the 3-state display:
   // 原文 + 中文 → 只顯示原文 → 只顯示中文 → … (pure CSS, no re-translation).
+  let lastDirectToggle = 0;
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type === 'ibt-toggle-visibility') {
+      // If our own keydown handler just toggled (<1s ago), skip — the SW
+      // command and the keypress both fire for one Alt+A, don't double-toggle.
+      if (Date.now() - lastDirectToggle < 1000) return;
       flash(VIEW_LABEL[cycleView()]);
     }
   });
+
+  // Direct Alt+A keypress handling: works even when the chrome.commands binding
+  // is missing/broken (e.g. new extension ID after re-install). The SW command
+  // above is deduped via lastDirectToggle so a single press toggles once.
+  window.addEventListener('keydown', (e) => {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
+        (e.key === 'a' || e.key === 'A')) {
+      e.preventDefault();
+      lastDirectToggle = Date.now();
+      flash(VIEW_LABEL[cycleView()]);
+    }
+  }, true);
 
   if (site === 'youtube') {
     let live = settings;

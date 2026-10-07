@@ -2,6 +2,102 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.3.20] - 2026-10-07
+
+### 改善 Improved
+- **Gemini 翻譯大幅加速**：Gemini 3 預設 thinking 等級是 `high`（最高推理深度），翻譯任務根本不需要推理，白白吃掉大量等待時間（尤其 TTFT）。現在對 Gemini 3 系列模型送出 `thinkingConfig: { thinkingLevel: 'minimal' }`（官方定義：Flash 專用，實務上等於不思考），模型、key、設定都不用動，翻譯品質不變、速度明顯提升。非 3.x 的模型字串不送此參數；絕不與 `thinkingBudget` 混用（API 會 400）。
+
+## [1.3.19] - 2026-09-27
+
+### 修正 Fixed
+- **其他網站 Alt+A 真正修復**：根因是 `activeTab` 權限。原版靠 `chrome.commands` 觸發時 Chrome 自動授予 `activeTab`，SW 才能 `executeScript`。1.3.18 的 content-script→SW 訊息路徑**不會**授予 `activeTab`，導致 `executeScript` 被拒。1.3.19 改為 `alt-a-global.js` 直接在頁面內實例化 `UniversalTranslator`（跟 `universal-inject.js` 同一套邏輯），不經過 SW、不需要額外權限。
+
+## [1.3.18] - 2026-09-27
+
+### 修正 Fixed
+- **其他網站 Alt+A 修復**：新增 `alt-a-global.js`（520 bytes），在所有 http/https 網站注入，只監聽 Alt+A 並轉發給 SW。SW 用同一套 `handleAltA` 邏輯注入通用翻譯。不再依賴 `chrome.commands` 綁定（ID 變更就失效的問題）。X/Reddit/YouTube 由 content.js 直接處理，alt-a-global 自動排除避免重複。
+
+## [1.3.17] - 2026-09-27
+
+### 修正 Fixed
+- **恢復 Alt+A keydown 直接監聽**（1.3.14 誤刪）：content script 直接監聽 Alt+A 按鍵，不依賴 `chrome.commands` 綁定。SW 命令若也有觸發，用時間戳去重，確保單次按鍵只切換一次。這是 1.3.10–1.3.13 在 X 上能用的真正原因。
+
+## [1.3.16] - 2026-09-27
+
+### 修正 Fixed
+- **移除 1.3.15 的固定 key**：key 造成新 ID，反而讓問題更糟。回到與原版相同的路徑 ID 機制。
+- **真正的解法**：把 1.3.16 解壓後**覆蓋到原本能用的原版同一個資料夾**（路徑不變 → ID 不變 → Alt+A 綁定保留），然後在 `chrome://extensions` 按重新載入。Alt+A 程式碼與原版一字不差，ID 相同就一定能用。
+
+## [1.3.15] - 2026-09-27
+
+### 修正 Fixed
+- **固定擴充功能 ID**：manifest 新增穩定的 `"key"`，之後所有版本共用同一個 ID（`glbjnfimcajjenihimblfaponejbkoph`）。之前每次解壓到不同資料夾就會產生新 ID，導致 Alt+A 綁定失效——這是 1.3.14 按 Alt+A 沒反應的真正原因（程式碼與原版一字不差，問題在 ID 一直變）。現在綁一次 Alt+A，永久有效。
+- Key 保存在 `~/workspace/ext-work/.keys/extension-key.txt`，未來打包必須用同一個 key。
+
+## [1.3.14] - 2026-09-27
+
+### 修正 Fixed
+- **Alt+A 完整回歸 GitHub 原版**：`service-worker.ts` 的 `onCommand`、`universal-inject.ts`、`index.ts` 的 Alt+A 訊息處理、`popup.ts`、`popup.html` 已用 `diff` 驗證與原版一字不差（僅版本號不同）。1.3.10–1.3.13 期間加的 keydown 監聽、捲動保護、try/catch 錯誤條、快捷鍵檢測、`{ok}` 回傳值全部移除。
+- 今天的翻譯優化全部保留：st2t 繁簡校正、韓文 echo 偵測、Gemini pacing/batch、429 自動降級、parse error 降級、textContent 效能。
+
+## [1.3.13] - 2026-09-27
+
+### 修正 Fixed
+- **撤掉 1.3.12 的 `<all_urls>` 授權按鈕**：使用者指出原版不需要授權，應回歸原做法。經比對 GitHub 原檔，`manifest` 權限與 SW 注入路徑確實一模一樣——問題不在授權。
+- **Alt+A 快捷鍵綁定檢測**：X 上 Alt+A 能用是因為 content script 直接監聽按鍵（不經 `chrome.commands`）；一般網站必須走 `chrome.commands`，若快捷鍵在 `chrome://extensions/shortcuts` 被解除綁定或衝突，Alt+A 會靜默無效。popup 現在會用 `chrome.commands.getAll()` 檢查，若未綁定就顯示紅字警告，引導去手動綁定。
+- **Gemini 降級修復**（1.3.12 的實質修復保留）：`onBatchFallback` 明確從免費 Google 引擎開始（Google 塞車轉 Microsoft），不再用已耗盡的 gemini 重試；LLM 回傳無法解析也不再顯示手動重試，直接走免費引擎補完。
+
+## [1.3.12] - 2026-09-27
+
+### 修正 Fixed
+- **Alt+A 在非自動網站（BBC、日文站等）真正可用**：popup「翻譯這個網頁」按鈕一直可用，但 Alt+A 沒反應——原因是 popup 點擊會授予 `activeTab`，而鍵盤快捷鍵從 SW 發起的 `chrome.scripting` 注入拿不到執行權限，只能靜默失敗。現在 popup 新增「🔑 授權 Alt+A 在所有網站運作」按鈕（可選 `<all_urls>`，按一次即可）；授權後 Alt+A 在任何網站都能整頁翻譯。未授權時按 Alt+A 會在圖示顯示 `!` 提示去授權。
+- **Gemini 429／壞回應自動降級修復**：之前 `onQuotaError` 用 `settings.provider`（仍是 gemini）重試，根本沒降級，長串文下半部直接顯示「翻譯失敗」按鈕。現在明確從免費 Google 引擎開始（Google 塞車再轉 Microsoft）。另新增：LLM 回傳無法解析（`Could not parse translations`）也不再顯示手動重試，直接走免費引擎補完。
+
+## [1.3.11] - 2026-09-27
+
+### 修正 Fixed
+- **Alt+A 切換視圖不再亂跳捲動**：顯示／隱藏數百個翻譯區塊會干擾 Chrome 的捲動錨定（回報：切到「原文+中文」時頁面被甩到最下方）。現在切換前記住捲動位置，切換後兩個 animation frame 內若位置跑掉就還原。三條路徑都修：content script 按鍵監聽、SW 轉發訊息、SW stale-tab DOM fallback；通用注入（非自動網站）的第二次以後 Alt+A 也一樣。
+- **通用注入（BBC 等非自動網站）失敗不再靜默**：`universal-inject.ts` 全程 try/catch，任何地方拋錯都會在頁面內顯示紅色錯誤條（含訊息），並回傳 `{ok:false}` 給 SW 記錄；SW 會驗證注入結果，不再以為成功。
+- **通用掃描效能**：`collectUnits` 改用 `textContent` 取代 `innerText`（後者每次呼叫強制 reflow，在 BBC 這種重型頁面會讓首次掃描卡住數秒、使用者以為 Alt+A 沒反應）。可見性已由 `getComputedStyle`／`getClientRects` 把關，`textContent` 不會誤抓隱藏文字；`linkDensity` 與 universal fallback 同步改。
+- **立即回饋**：通用模式 `activate()` 先顯示「整頁雙語已開啟」toast 再跑掃描，避免重型頁面掃描期間零回應。
+
+## [1.3.3] - 2026-09-27
+
+### 新增 Added
+- **免費翻譯自然度優化**（三層）：
+  - 英文預改寫（`src/core/paraphrase.ts`）：免費引擎翻譯前，先把社群慣用 idiom 改寫成 plain English（`with zero proof`→`without any evidence`、`paycheck talking`→`business bias`、`fuck around and find out`→`try it yourself and find out`、`touch grass`→`go outside` 等）。只做英→英改寫（注入中文會破壞 Google 語言偵測）；顯示的原文與術語校正仍用未改寫的句子。
+  - 人名保留：常見英文名字（matt、john、sarah…約 70 個）＋科技圈人名（Chamath、Elon、Vitalik、Balaji）不再被音譯。
+  - 社群用語：`account` 在非金融上下文譯為「帳號」而非「帳戶」；補 Google zh-TW 偶發簡體詞（进行→進行，詞級修正）。
+
+## [1.3.2] - 2026-09-27
+
+### 修正 Fixed
+- **LLM 繁簡字形修正**：Gemini／OpenAI 翻譯偶爾會漏出簡體字（prompt 寫了 Traditional Chinese 仍會發生，免費引擎無此問題）。system prompt 新增硬性字形規則：繁體目標要求「全篇繁體、絕不輸出簡體字」，簡體目標亦有對稱規則。
+- LLM 快取命名空間加版本（`#prompt-v2`）：prompt 更新後，舊的快取譯文自動失效重翻，避免之前混入簡體的譯文一直被拿出來用。
+
+## [1.3.1] - 2026-09-27
+
+### 新增 Added
+- 術語表新增社群／幣圈流行詞：`Ai`→`AI`、`@Muse` 保留原文、`gm`→`GM`、`gn`→`GN`、HODL、frens、wagmi/ngmi、DYOR、NFA、degen、ATH、FOMO、FUD、rekt、`meme coins`→`迷因幣`、`airdrop`→`空投`、`stablecoin`→`穩定幣`、`bull/bear market`→`牛市`/`熊市`、`on-chain`→`鏈上`、vibe coding 保留原文。
+- 術語邊界改用 `(?<!\w)`／`(?!\w)`，讓 `@muse` 這類以非英數字開頭的詞也能正確命中。
+
+### 修正 Fixed
+- **Gemini／OpenAI 429 自動重試**：遇到限流（429）或 503 時自動重試最多 3 次（指數退避＋抖動，並尊重伺服器回傳的 Retry-After），社群頁面一次載入大量貼文時的短暫限流會自動恢復，不再直接顯示失敗。
+- 限流失敗的錯誤訊息改為友善中文提示，不再顯示原始 JSON。
+
+## [1.3.0] - 2026-09-27
+
+### 新增 Added
+- **免費翻譯術語校正**：內建 AI／科技術語表（模型、公司、專有名詞＋常見技術詞），Google／Microsoft 免費引擎翻譯完後自動校正術語（例如「開放重量機型」→「開放權重」、「知識萃取」→「知識蒸餾」、「專家混合」→「混合專家」）。雙擊查詞命中術語時直接回傳、不耗 API。第一次遇到的術語才會多一次查詢，之後都走快取。
+- 術語校正只對繁體中文目標啟用；一般文章、網址、Email 不受影響。
+
+### 變更 Changed
+- Microsoft 免費引擎改用 Edge 單步免金鑰端點（`edge.microsoft.com/translate/translatetext`），舊的兩步授權流程已失效；移除 `api-edge.cognitive.microsofttranslator.com` 權限。
+- Gemini 預設模型改為 `gemini-3.5-flash-lite`（高品質可選手動填 `gemini-3.8-flash`）。
+
+### 修正 Fixed
+- 免費引擎快取鍵加入術語表版本，舊的未校正譯文會自動重新翻譯校正。
+
 ## [1.2.0] - 2026-06-23
 
 ### 新增 Added

@@ -95,9 +95,16 @@ export function collectUnits(root: HTMLElement): Unit[] {
     return rects.length > 0 && rects[0].width >= 1 && rects[0].height >= 1;
   };
 
+  // innerText forces a layout per call — on heavy pages (BBC, news sites) that
+  // turns the first scan into seconds of silence while the user thinks Alt+A is
+  // broken. textContent is layout-free; visibility was already verified via
+  // getComputedStyle/getClientRects above, and <br> → space is fine for MT.
   const textOf = (el: Element): string => {
     let t = itext.get(el);
-    if (t === undefined) { t = ((el as HTMLElement).innerText || '').trim(); itext.set(el, t); }
+    if (t === undefined) {
+      t = ((el as HTMLElement).textContent || '').replace(/\s+/g, ' ').trim();
+      itext.set(el, t);
+    }
     return t;
   };
 
@@ -153,9 +160,9 @@ export function collectUnits(root: HTMLElement): Unit[] {
 
 // Fraction of an element's text that sits inside links.
 function linkDensity(el: HTMLElement): number {
-  const total = (el.innerText || '').trim().length || 1;
+  const total = (el.textContent || '').replace(/\s+/g, ' ').trim().length || 1;
   let linked = 0;
-  el.querySelectorAll('a').forEach((a) => { linked += ((a as HTMLElement).innerText || '').trim().length; });
+  el.querySelectorAll('a').forEach((a) => { linked += ((a as HTMLElement).textContent || '').replace(/\s+/g, ' ').trim().length; });
   return linked / total;
 }
 

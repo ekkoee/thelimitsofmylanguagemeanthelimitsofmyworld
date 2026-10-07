@@ -227,7 +227,7 @@ class TrackCaptions {
         this.cooldownUntil = Date.now() + (quota ? 60000 : 4000); // quota: wait a minute; other: brief
         if (!this.warned) {
           this.warned = true;
-          if (quota) console.warn('[IBT] 翻譯額度用盡（Gemini 429）。建議把模型改成 gemini-2.5-flash-lite（額度較高），或改用免費 Google；額度每天會重置。');
+          if (quota) console.warn('[IBT] 翻譯額度用盡（Gemini 429）。建議把模型改成 gemini-3.5-flash-lite（免費額度較高），或改用免費 Google；額度會定期重置，詳見 Google 官方額度說明。');
           else console.warn('[IBT] 翻譯失敗：', msg, '（稍後重試）');
         }
       })

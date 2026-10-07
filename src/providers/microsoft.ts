@@ -2,29 +2,31 @@ import { AlignedPair, Settings, WordLookup } from '../core/types';
 import { TranslationProvider } from './base';
 import { segment } from '../core/segmentation';
 
-// FREE translation via Microsoft's keyless "Edge browser" endpoint — the same flow
-// Edge's built-in page translator uses. Two steps, no API key:
-//   1) GET  https://edge.microsoft.com/translate/auth        → a short-lived JWT
-//   2) POST https://api-edge.cognitive.microsofttranslator.com/translate
-//          ?api-version=3.0&to=<lang>   body: [{ "Text": "…" }]   header Bearer <jwt>
+// FREE translation via Microsoft Edge's keyless endpoint — the same one Edge's
+// built-in translator uses. One step, no API key, no JWT:
+//   POST https://edge.microsoft.com/translate/translatetext
+//        ?from=<src>&to=<tgt>&isEnterpriseClient=false
+//        Content-Type: application/json   body: ["sentence one", "sentence two"]
+//
+// (The old two-step flow — GET edge.microsoft.com/translate/auth for a JWT, then
+// POST api-edge.cognitive.microsofttranslator.com/translate — died in 2026 when
+// the auth endpoint started returning HTTP 404.)
 //
 // We use this as the Tier-1 FREE fallback for Google's gtx endpoint: when Google
 // rate-limits (403/429), the service worker retries the same text here so "always
 // free, no key" keeps holding. It can also be picked directly in options.
 //
-// Unlike Google's gtx endpoint (which auto-segments and returns original/translation
-// chunks), this endpoint translates each array element as one unit. So we segment the
-// block ourselves and send one element per sentence — that reproduces the same
-// per-line bilingual alignment, in order, 1:1.
+// The endpoint translates each array element as one unit, so we segment the block
+// ourselves and send one element per sentence — reproducing per-line bilingual
+// alignment, in order, 1:1.
 //
 // NOTE: like the Google one this is an unofficial endpoint and can change/throttle.
-const AUTH_ENDPOINT = 'https://edge.microsoft.com/translate/auth';
-const API_ENDPOINT = 'https://api-edge.cognitive.microsofttranslator.com/translate';
+const ENDPOINT = 'https://edge.microsoft.com/translate/translatetext';
 
-// Keep each request modest: the endpoint accepts an array, but huge bodies are more
-// likely to be throttled. Batch sentences up to these soft limits per request.
+// Keep each request modest: huge bodies are more likely to be throttled.
 const MAX_ELEMENTS = 25;
 const MAX_CHARS = 5000;
+const TIMEOUT_MS = 30_000;
 
 export const microsoftProvider: TranslationProvider = {
   id: 'microsoft',
@@ -50,7 +52,7 @@ export const microsoftProvider: TranslationProvider = {
     const to = toMsTarget(settings.targetLangCode || 'zh-TW');
     const from = toMsSource(settings.sourceLang);
     const [item] = await translateRaw([text], from, to);
-    const translation = String(item?.translations?.[0]?.text ?? '').trim();
+    const translation = decodeEntities(String(item?.translations?.[0]?.text ?? '')).trim();
     const detected = String(item?.detectedLanguage?.language ?? '');
     const sourceLang = detected || from;
     return { translation, sourceLang };
@@ -62,69 +64,52 @@ export const microsoftProvider: TranslationProvider = {
 // POST an array of strings, return the translated strings in the SAME order.
 async function translateArray(texts: string[], from: string, to: string): Promise<string[]> {
   const data = await translateRaw(texts, from, to);
-  return texts.map((_, i) => String(data?.[i]?.translations?.[0]?.text ?? ''));
+  return texts.map((_, i) => decodeEntities(String(data?.[i]?.translations?.[0]?.text ?? '')));
 }
 
 // Raw call → the endpoint's array of { translations:[{text}], detectedLanguage? }.
-// Retries once on a stale/forbidden token (401/403) by forcing a fresh token, and
-// backs off once on 429 — the same gentle policy as the Google engine.
+// Backs off twice on 429 — the same gentle policy as the Google engine.
 async function translateRaw(texts: string[], from: string, to: string, attempt = 0): Promise<any[]> {
-  const token = await getAuthToken(attempt > 0); // force a fresh token on retry
-  const qs = new URLSearchParams({ 'api-version': '3.0', to });
-  if (from) qs.set('from', from);
-  const res = await fetch(`${API_ENDPOINT}?${qs.toString()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(texts.map((t) => ({ Text: t }))),
-  });
-  if ((res.status === 401 || res.status === 403) && attempt < 1) {
-    return translateRaw(texts, from, to, attempt + 1);
-  }
-  if (res.status === 429 && attempt < 2) {
-    await sleep(400 * (attempt + 1));
-    return translateRaw(texts, from, to, attempt + 1);
-  }
-  if (!res.ok) throw new Error(`Microsoft ${res.status}`);
-  const json = await res.json();
-  return Array.isArray(json) ? json : [];
-}
-
-// --- auth token (cached in memory, refreshed before expiry) ---
-
-let cachedToken = '';
-let tokenExp = 0;                       // epoch ms when the cached JWT expires
-let tokenInFlight: Promise<string> | null = null; // dedupe concurrent first fetches
-
-async function getAuthToken(forceRefresh = false): Promise<string> {
-  const now = Date.now();
-  // reuse while still valid, with a 30s safety margin
-  if (!forceRefresh && cachedToken && now < tokenExp - 30_000) return cachedToken;
-  if (!forceRefresh && tokenInFlight) return tokenInFlight;
-  tokenInFlight = (async () => {
-    const res = await fetch(AUTH_ENDPOINT);
-    if (!res.ok) throw new Error(`Microsoft auth ${res.status}`);
-    const token = (await res.text()).trim();
-    cachedToken = token;
-    tokenExp = jwtExpiryMs(token) || Date.now() + 8 * 60_000; // 8 min fallback if undecodable
-    return token;
-  })();
+  const qs = new URLSearchParams({ from, to, isEnterpriseClient: 'false' });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    return await tokenInFlight;
+    const res = await fetch(`${ENDPOINT}?${qs.toString()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // Escape HTML-significant chars: the endpoint's tag-aligner otherwise
+      // misparses stray < > & as markup. Decoded single-level on the way back.
+      body: JSON.stringify(texts.map(escapeHtml)),
+      signal: ctrl.signal,
+    });
+    if (res.status === 429 && attempt < 2) {
+      await sleep(400 * (attempt + 1));
+      return translateRaw(texts, from, to, attempt + 1);
+    }
+    if (!res.ok) throw new Error(`Microsoft ${res.status}`);
+    const json = await res.json();
+    return Array.isArray(json) ? json : [];
   } finally {
-    tokenInFlight = null;
+    clearTimeout(timer);
   }
 }
 
-// Decode a JWT's `exp` claim (seconds) → epoch ms. Returns 0 if it can't be parsed.
-function jwtExpiryMs(token: string): number {
-  try {
-    const payload = token.split('.')[1];
-    if (!payload) return 0;
-    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
-    return typeof json.exp === 'number' ? json.exp * 1000 : 0;
-  } catch {
-    return 0;
-  }
+// --- HTML entity handling ---
+
+// Escape before sending so the endpoint doesn't treat < > & as markup.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Decode exactly one level on the way back: original "&lt;" was sent as
+// "&amp;lt;" and must come back as "&lt;", not "<".
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&');
 }
 
 // --- language code mapping ---

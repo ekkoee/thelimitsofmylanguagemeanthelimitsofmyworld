@@ -11,6 +11,7 @@
 
 - **多語言來源**:自動偵測英文、日文、韓文…等任何來源語言並翻成中文。
 - **兩個免費引擎**:預設 Google 免費端點,偶爾被限流時自動切換到 Microsoft 免費端點,翻譯不中斷(皆免金鑰)。
+- **AI／科技術語校正**:免費引擎翻譯完後,自動把常見術語翻成業界標準說法(例如「開放重量機型」→「開放權重」),只對繁體中文目標啟用。
 - **X / Twitter、Reddit**:開啟後自動以雙語顯示,逐行對照。
 - **YouTube**:電影模式雙語字幕——攔截原字幕、合併成自然句子、跟著聲音一句一句出現,中文在上、英文在下(可調整)。
 - **任何網頁**:點工具列圖示 →「翻譯這個網頁」,或按 `Alt+A`,一鍵整頁雙語;再操作一次即關閉。通用版面偵測,連 Facebook 等以 div/span 排版的現代網站也能抓到內文。
@@ -80,7 +81,7 @@ npm run build      # 產生 dist/
 | `activeTab` + `scripting` | 按 `Alt+A`／按鈕時,**僅暫時**存取當前分頁以插入譯文。預設安裝不要求「所有網站」權限。 |
 | 選用 `<all_urls>`(預設關閉) | 僅當你開啟「雙擊單字浮窗」時於點擊當下請求,用於在任意網頁顯示浮窗;關閉功能即撤除。 |
 | 主機權限:`x.com` / `twitter.com` / `reddit.com` / `youtube.com` | 在這四個網站自動顯示雙語。 |
-| 主機權限:`translate.googleapis.com`(Google 免費)、`edge.microsoft.com` ＋ `api-edge.cognitive.microsofttranslator.com`(Microsoft 免費後備) | 預設免費引擎,傳送選取文字取得譯文。 |
+| 主機權限:`translate.googleapis.com`(Google 免費)、`edge.microsoft.com`(Microsoft 免費後備) | 預設免費引擎,傳送選取文字取得譯文。 |
 | 主機權限:`generativelanguage.googleapis.com`、`api.openai.com`、`localhost`／`127.0.0.1` | 選用引擎(Gemini／OpenAI 需自備金鑰;Ollama 為本機,資料不離開裝置)。 |
 
 ---

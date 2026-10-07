@@ -1,23 +1,38 @@
 import { Settings } from '../core/types';
-import { TranslateInput, TranslationProvider, buildSystemPrompt, coerceTranslations } from './base';
+import { TranslateInput, TranslationProvider, buildSystemPrompt, coerceTranslations, fetchWithRetry } from './base';
+
+/** Gemini 3 family model ids support thinkingLevel (v3 API shape). */
+function isGemini3(model: string): boolean {
+  return /gemini-3/i.test(model);
+}
 
 export const geminiProvider: TranslationProvider = {
   id: 'gemini',
   async translate(input: TranslateInput, settings: Settings): Promise<string[]> {
     const key = settings.apiKeys.gemini?.trim();
     if (!key) throw new Error('NO_API_KEY:gemini');
-    const model = settings.model || 'gemini-2.5-flash-lite';
+    const model = settings.model || 'gemini-3.5-flash-lite';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
 
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode }) }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify({ sentences: input.sentences }) }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: 'application/json',
+          // Gemini 3 defaults to `high` thinking: full reasoning depth before the
+          // first token, which is pure latency on a translation task (TTFT suffers
+          // most). `minimal` is Flash-only and documented as "matches no thinking
+          // for most queries": same translation quality, far less waiting.
+          // Only sent for Gemini 3 model ids — thinkingLevel is a v3 API shape,
+          // and it must never be combined with thinkingBudget (API 400s on that).
+          ...(isGemini3(model) ? { thinkingConfig: { thinkingLevel: 'minimal' } } : {}),
+        },
       }),
-    });
+    }, { label: 'gemini' });
     if (!res.ok) throw new Error(`Gemini ${res.status}: ${await safeBody(res)}`);
     const data = await res.json();
     const content: string = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '';

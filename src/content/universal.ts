@@ -54,7 +54,8 @@ export class UniversalTranslator {
   activate(): void {
     if (this.active) return;
     this.active = true;
-    this.scan(); // initial full pass (dirty empty → whole document.body)
+    toast('整頁雙語已開啟（再按 Alt+A 關閉）'); // immediate feedback — scan() can
+    this.scan(); // initial full pass (dirty empty → whole document.body)      // take a moment on heavy pages
     this.mo = new MutationObserver((records) => {
       let sawReal = false;
       for (const r of records) {
@@ -74,7 +75,6 @@ export class UniversalTranslator {
       if (sawReal) this.scheduleScan();
     });
     this.mo.observe(document.body, { childList: true, subtree: true });
-    toast('整頁雙語已開啟（再按 Alt+A 關閉）');
   }
 
   deactivate(): void {
@@ -199,15 +199,22 @@ export class UniversalTranslator {
     // whose text changed — no stale block left behind, no DOM leak).
     const old = this.blockBySource.get(node);
     if (old) { old.remove(); this.blocks.delete(old); }
-    const text = (node as any).__ibtText || (node.innerText || '').trim();
+    const text = (node as any).__ibtText || (node.textContent || '').replace(/\s+/g, ' ').trim();
     const sig = (node as any).__ibtSig || fingerprint(text);
     const block = renderTranslationAfter(node, text, { sig });
     if (block) {
       block.classList.add('ibt-uni');
       // Match the translation's size to the source element, so a big <h1> heading's
       // translation reads as a heading, not tiny body text (the block is a sibling, so
-      // it can't inherit the heading's font-size on its own).
-      block.style.setProperty('--ibt-src-fs', getComputedStyle(node).fontSize);
+      // it can't inherit the heading's font-size on its own). Only ever grow: never
+      // shrink below the default body size — a leaf block's computed font-size can be
+      // smaller than the visible text (e.g. X's last-paragraph wrapper), which made
+      // translations render tiny.
+      const srcFs = parseFloat(getComputedStyle(node).fontSize) || 0;
+      const bodyFs = parseFloat(getComputedStyle(document.body).fontSize) || 16;
+      if (srcFs > bodyFs * 1.05) {
+        block.style.setProperty('--ibt-src-fs', getComputedStyle(node).fontSize);
+      }
       this.blocks.add(block);
       this.blockBySource.set(node, block);
     }

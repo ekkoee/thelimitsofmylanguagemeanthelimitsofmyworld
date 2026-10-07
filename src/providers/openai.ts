@@ -1,5 +1,5 @@
 import { Settings } from '../core/types';
-import { TranslateInput, TranslationProvider, buildSystemPrompt, coerceTranslations } from './base';
+import { TranslateInput, TranslationProvider, buildSystemPrompt, coerceTranslations, fetchWithRetry } from './base';
 
 export const openaiProvider: TranslationProvider = {
   id: 'openai',
@@ -8,7 +8,7 @@ export const openaiProvider: TranslationProvider = {
     if (!key) throw new Error('NO_API_KEY:openai');
     const model = settings.model || 'gpt-4o-mini';
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({
@@ -20,7 +20,7 @@ export const openaiProvider: TranslationProvider = {
           { role: 'user', content: JSON.stringify({ sentences: input.sentences }) },
         ],
       }),
-    });
+    }, { label: 'openai' });
     if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await safeBody(res)}`);
     const data = await res.json();
     const content: string = data?.choices?.[0]?.message?.content ?? '';
