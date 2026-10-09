@@ -14,51 +14,27 @@
     <fieldset>
       <legend>翻譯引擎</legend>
       <div class="field">
-        <label for="provider">提供者</label>
+        <label for="provider">引擎</label>
         <select id="provider">
-          <option value="google">免費 · Google 翻譯（免 API key，預設）</option>
-          <option value="microsoft">免費 · Microsoft 翻譯（免 API key）</option>
-          <option value="openai">OpenAI（需自備 key）</option>
-          <option value="gemini">Gemini（有免費額度，需免費 key）</option>
-          <option value="ollama">Ollama（本地模型，免 key）</option>
+          <option value="google">Google 翻譯（免費，免設定）</option>
+          <option value="gemini">Gemini（譯文更自然，需自備 API key）</option>
         </select>
       </div>
-      <div class="field">
-        <label for="model">模型</label>
-        <input type="text" id="model" placeholder="例如 gemini-3.5-flash-lite" />
-        <small class="hint">影片字幕量大，建議用 <b>gemini-3.5-flash-lite</b>（免費額度較高，最不容易爆）。想要更高品質且用量不大時，可改 <b>gemini-3.8-flash</b>。留空用預設。實際額度以 <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener">Google 官方額度說明</a>為準（各專案登入 AI Studio 查看）。</small>
-      </div>
-      <div class="field">
-        <label for="sourceLang">來源語言</label>
-        <input type="text" id="sourceLang" placeholder="auto（自動偵測，建議）" />
-        <small class="hint">留空或填 <b>auto</b> 會自動偵測來源語言（韓文、日文、任何語言皆可）。也可指定 BCP-47 代碼，例如 <b>en</b>、<b>ja</b>、<b>ko</b>。</small>
-      </div>
-      <div class="field">
-        <label for="targetLang">目標語言（給 AI 引擎）</label>
-        <input type="text" id="targetLang" />
-      </div>
-      <div class="field">
-        <label for="targetLangCode">語言代碼（給免費引擎）</label>
-        <input type="text" id="targetLangCode" placeholder="zh-TW / zh-CN / ja ..." />
-      </div>
-    </fieldset>
+      <small class="hint">Google 翻譯開箱即用、速度快，但偏直譯。Gemini 用 AI 翻譯，語氣和專有名詞處理好很多，需要自己申請免費的 API key。</small>
 
-    <fieldset>
-      <legend>API Key（選填，只有用 OpenAI/Gemini 才需要；只存本機、不上傳）</legend>
-      <div class="field"><label for="key_openai">OpenAI</label>
-        <input type="password" id="key_openai" placeholder="sk-..." autocomplete="off" /></div>
-      <div class="field"><label for="key_gemini">Gemini</label>
-        <input type="password" id="key_gemini" placeholder="AIza..." autocomplete="off" />
-        <small class="hint">免費領取金鑰：<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>（免費額度，註冊即可用）</small></div>
-      <div class="field"><label for="ollamaEndpoint">Ollama 端點</label>
-        <input type="text" id="ollamaEndpoint" placeholder="http://localhost:11434" /></div>
-    </fieldset>
+      <div id="geminiBlock" hidden>
+        <div class="field">
+          <label for="key_gemini">Gemini API Key</label>
+          <input type="password" id="key_gemini" placeholder="AIza..." autocomplete="off" />
+        </div>
+        <small class="hint">到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> 免費申請（登入 Google 帳號即可）。金鑰只會傳送給 Google 的 Gemini API。它儲存在瀏覽器的 Chrome 設定中；如果你開啟了 Chrome 同步，會隨你的 Google 帳號同步到其他裝置。</small>
 
-    <fieldset>
-      <legend>站點</legend>
-      <label class="check"><input type="checkbox" data-site="x" /> X / Twitter</label>
-      <label class="check"><input type="checkbox" data-site="reddit" /> Reddit</label>
-      <label class="check"><input type="checkbox" data-site="youtube" /> YouTube</label>
+        <div class="field">
+          <label for="model">模型</label>
+          <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
+        </div>
+        <small class="hint">預設 <b>gemini-3.5-flash-lite</b>（速度快、免費額度較高），一般不用改，只有 Google 汰換模型時才需要換。實際額度以 <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener">Google 官方額度說明</a>為準。</small>
+      </div>
     </fieldset>
 
     <fieldset>
@@ -84,10 +60,10 @@
         <label for="transColor">譯文顏色</label>
         <input type="color" id="transColor" value="#6c7aff" />
         <button id="transColorReset" class="ghost">預設</button>
-        <small class="hint">選了顏色就套用到「中文譯文」。影片字幕預設白色、網頁譯文預設跟隨原文顏色，按「預設」即可恢復。</small>
+        <small class="hint">影片字幕預設白色、網頁譯文預設跟隨原文顏色；按「預設」恢復。</small>
       </div>
       <div class="field">
-        <label for="barStyle">譯文左側標記</label>
+        <label for="barStyle">左側標記</label>
         <select id="barStyle">
           <option value="bar">線條（預設）</option>
           <option value="thick">粗線條</option>
@@ -99,7 +75,6 @@
         <label for="barColor">標記顏色</label>
         <input type="color" id="barColor" value="#6c7aff" />
         <button id="barColorReset" class="ghost">預設</button>
-        <small class="hint">譯文左側那條直線的顏色；選「無」可完全隱藏這條線。</small>
       </div>
       <div class="field">
         <label>即時預覽</label>
@@ -110,27 +85,23 @@
               <div class="ibt-trans">知識本身就是力量。</div>
             </div>
           </div>
-          <small class="hint" style="margin-top:8px">在這裡邊選邊看。選「模糊（學習模式）」時，把滑鼠移到中文上會顯示。</small>
+          <small class="hint" style="margin-top:8px">選「模糊（學習模式）」時，把滑鼠移到中文上才會顯示。</small>
         </div>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>效能與成本</legend>
-      <label class="check"><input type="checkbox" id="translateOnVisible" /> 只翻譯捲到可見範圍的內容（建議，省 API）</label>
-      <label class="check"><input type="checkbox" id="cacheEnabled" /> 啟用持久化快取（chrome.storage.local）</label>
-      <div class="field">
-        <button id="clearCache" class="ghost">清除翻譯快取</button>
-        <span id="cacheMsg" class="muted"></span>
       </div>
     </fieldset>
 
     <fieldset>
       <legend>進階</legend>
       <label class="check">
-        <input type="checkbox" id="dblClickTranslate" /> 啟用雙擊單字翻譯（需授權在所有網站執行）
+        <input type="checkbox" id="dblClickTranslate" /> 雙擊單字翻譯（需授權在所有網站執行）
       </label>
-      <small class="hint">在任何網頁<b>雙擊單字</b>或<b>反白詞句</b>，會在選取處浮出小視窗：原文＋🔊朗讀、翻譯，單字還會顯示<b>字典卡</b>（詞性＋釋義）。開啟時會請求「在所有網站執行」的權限；關閉會一併撤除此權限（預設關閉，維持最小權限）。</small>
+      <small class="hint">在任何網頁<b>雙擊單字</b>或<b>反白詞句</b>，會在旁邊浮出小視窗：原文＋🔊朗讀、翻譯，單字還會顯示<b>字典卡</b>（詞性＋釋義）。開啟時會請求「在所有網站執行」的權限，關閉會一併撤除（預設關閉）。</small>
+
+      <div class="field" style="margin-top:14px">
+        <button id="clearCache" class="ghost">清除翻譯快取</button>
+        <span id="cacheMsg" class="muted"></span>
+      </div>
+      <small class="hint">翻譯結果會快取在瀏覽器裡，重複看到的內容不會再翻一次。如果譯文出現異常，可以清除快取後重新載入頁面。</small>
     </fieldset>
 
     <p id="status" class="status"></p>

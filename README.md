@@ -77,7 +77,7 @@ npm run build      # 產生 dist/
 
 | 權限 | 用途 |
 |---|---|
-| `storage` | 儲存設定、金鑰、翻譯快取於本機。 |
+| `storage` | 設定與金鑰存於 `chrome.storage.sync`(開啟 Chrome 同步時會隨 Google 帳號同步到其他裝置)；翻譯快存於 `chrome.storage.local`(僅本機)。 |
 | `activeTab` + `scripting` | 按 `Alt+A`／按鈕時,**僅暫時**存取當前分頁以插入譯文。預設安裝不要求「所有網站」權限。 |
 | 選用 `<all_urls>`(預設關閉) | 僅當你開啟「雙擊單字浮窗」時於點擊當下請求,用於在任意網頁顯示浮窗;關閉功能即撤除。 |
 | 主機權限:`x.com` / `twitter.com` / `reddit.com` / `youtube.com` | 在這四個網站自動顯示雙語。 |
@@ -89,7 +89,8 @@ npm run build      # 產生 dist/
 ## 🔒 隱私
 
 - 不追蹤、不投放廣告、不販售資料。
-- 設定與 API 金鑰只存在你的瀏覽器本機(`chrome.storage`)。
+- 設定與 API 金鑰存在 `chrome.storage.sync`：開啟 Chrome 同步的話，它們會隨你的 Google 帳號同步到其他裝置。翻譯快取只存本機，不同步。
+- 金鑰只會傳送給你選擇的服務(Gemini 金鑰只傳給 Google 的 Gemini API)，絕不經過其他伺服器。
 - 只有在你觸發翻譯時,才會把該段文字送到**你所選擇**的翻譯服務以取得譯文。
 - 所有外部 API 呼叫都在 background service worker,content script 不持有金鑰,也避開 CORS。
 

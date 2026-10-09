@@ -30,12 +30,16 @@ export interface TranslationProvider {
 export async function fetchWithRetry(
   url: string,
   init: RequestInit,
-  opts?: { label?: string; maxRetries?: number },
+  opts?: { label?: string; maxRetries?: number; noRetry429?: boolean },
 ): Promise<Response> {
   const maxRetries = opts?.maxRetries ?? 3;
   let last: Response | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, init);
+    // Gemini free-tier 429s take tens of seconds to clear — retrying within a
+    // few seconds is pointless and only delays the batch fallback to the free
+    // engine. Callers that prefer an immediate fallback set noRetry429.
+    if (res.status === 429 && opts?.noRetry429) return res;
     if (res.status !== 429 && res.status !== 503) return res;
     last = res;
     if (attempt === maxRetries) return res;

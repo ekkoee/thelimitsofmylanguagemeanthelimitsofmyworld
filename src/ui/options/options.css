@@ -39,3 +39,5 @@ input[type="color"] {
   width: 42px; height: 28px; padding: 0; border: 1px solid rgba(255,255,255,0.2);
   border-radius: 6px; background: transparent; cursor: pointer; vertical-align: middle;
 }
+
+[hidden] { display: none !important; }

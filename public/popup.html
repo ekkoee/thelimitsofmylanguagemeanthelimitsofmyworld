@@ -21,13 +21,6 @@
   </div>
 
   <section>
-    <div class="row group">
-      <span>站點</span>
-      <label><input type="checkbox" data-site="x" /> X</label>
-      <label><input type="checkbox" data-site="reddit" /> Reddit</label>
-      <label><input type="checkbox" data-site="youtube" /> YouTube</label>
-    </div>
-
     <div class="row">
       <label for="lang">翻譯成</label>
       <select id="lang">
@@ -46,10 +39,10 @@
     </div>
 
     <div class="row">
-      <label for="order">排列順序（影片字幕）</label>
+      <label for="order">字幕順序</label>
       <select id="order">
-        <option value="zhTop">中文上 / 英文下</option>
-        <option value="enTop">英文上 / 中文下</option>
+        <option value="zhTop">中文在上</option>
+        <option value="enTop">英文在上</option>
       </select>
     </div>
 
@@ -62,22 +55,15 @@
     <div class="row">
       <label for="provider">翻譯引擎</label>
       <select id="provider">
-        <option value="google">免費（Google）</option>
-        <option value="microsoft">免費（Microsoft）</option>
-        <option value="openai">OpenAI</option>
-        <option value="gemini">Gemini</option>
-        <option value="ollama">Ollama (本地)</option>
+        <option value="google">Google 翻譯（免費）</option>
+        <option value="gemini">Gemini（需 API key）</option>
       </select>
     </div>
-
-    <div class="row">
-      <label for="model">模型</label>
-      <input type="text" id="model" placeholder="model" />
-    </div>
+    <button id="keyHint" class="key-hint" hidden>尚未設定 Gemini API key，點此前往設定 →</button>
   </section>
 
   <footer>
-    <button id="openOptions">完整設定 / API key →</button>
+    <button id="openOptions">更多設定 →</button>
   </footer>
   <script src="popup.js"></script>
 </body>

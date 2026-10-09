@@ -138,6 +138,30 @@ function splitParagraphs(tt: HTMLElement): Line[] {
   return out;
 }
 
+// Viewport gating for X: observe the tweetText element (anchors can be Text/BR nodes,
+// which IntersectionObserver cannot observe) and run its translation jobs on first sight.
+type JobbedElement = HTMLElement & { __ibtJobs?: (() => void)[] };
+const xIO = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    xIO.unobserve(e.target);
+    const el = e.target as JobbedElement;
+    const jobs = el.__ibtJobs;
+    el.__ibtJobs = undefined;
+    if (jobs) for (const j of jobs) j();
+  }
+}, { rootMargin: '500px 0px 1000px 0px' });
+
+function deferX(tt: HTMLElement, s: Settings, job: () => void): void {
+  if (!s.translateOnVisible) {
+    job();
+    return;
+  }
+  const el = tt as JobbedElement;
+  (el.__ibtJobs ??= []).push(job);
+  xIO.observe(tt);
+}
+
 export function scanTwitter(s: Settings): void {
   if (!s.enabled || !s.sites.x) return;
 
@@ -150,16 +174,17 @@ export function scanTwitter(s: Settings): void {
     const sig = String(origText(tt).length);
     if (tt.getAttribute(SPLIT) === sig) continue;
     clearTweetBlocks(tt);
+    (tt as JobbedElement).__ibtJobs = [];
     tt.setAttribute(SPLIT, sig);
     try {
       const lines = splitParagraphs(tt);
       if (lines.length <= 1) {
         const text = tt.innerText?.trim() ?? '';
-        if (text && !isAlreadyTargetLang(text, s.targetLangCode)) renderTranslationAfter(tt, text);
+        if (text && !isAlreadyTargetLang(text, s.targetLangCode)) deferX(tt, s, () => renderTranslationAfter(tt, text));
       } else {
         for (const ln of lines) {
           if (isAlreadyTargetLang(ln.text, s.targetLangCode)) continue; // already Chinese → skip
-          renderTranslationAfter(ln.anchor, ln.text);
+          deferX(tt, s, () => renderTranslationAfter(ln.anchor, ln.text));
         }
       }
     } catch {

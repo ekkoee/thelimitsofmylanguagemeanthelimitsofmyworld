@@ -10,22 +10,33 @@ import { LlmBatcher } from '../core/llm-batcher';
 import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 
-const queue = new TaskQueue(3);
+const queue = new TaskQueue(4);
 
 // --- LLM request pacing ------------------------------------------------------
 // Free-tier LLM keys (Gemini/OpenAI) enforce strict per-minute request caps.
 // TaskQueue limits concurrency, but fast LLM responses still let a long X
 // thread burn through the per-minute budget → 429 halfway down the page (top
 // translates, bottom shows retry buttons). This gate spaces LLM request
-// *starts* by at least LLM_SPACING_MS so a burst becomes a steady trickle.
+// *starts* so a burst becomes a steady trickle.
 // Free Google/Microsoft endpoints are unmetered for our purposes and skip it.
-const LLM_SPACING_MS = 1200;
+// Adaptive: fast by default (250ms between request starts); after a
+// quota/unusable-response fallback, drop back to the conservative 1200ms
+// spacing for 60s so we do not hammer a rate-limited free tier.
+const LLM_SPACING_FAST_MS = 250;
+const LLM_SPACING_SLOW_MS = 1200;
+let llmSpacing = LLM_SPACING_FAST_MS;
+let llmCalmAt = 0;
+function penalizeLLM(): void {
+  llmSpacing = LLM_SPACING_SLOW_MS;
+  llmCalmAt = Date.now() + 60_000;
+}
 let lastLLMStart = 0;
 /** Space LLM request starts (free-tier RPM protection). Only waits when the
- *  previous request started less than LLM_SPACING_MS ago — the first batch
- *  after idle goes immediately instead of paying a gratuitous 1.2s. */
+ *  previous request started less than the current spacing ago — the first
+ *  batch after idle goes immediately instead of paying a gratuitous wait. */
 function paceLLM(): Promise<void> {
-  const wait = LLM_SPACING_MS - (Date.now() - lastLLMStart);
+  if (Date.now() > llmCalmAt) llmSpacing = LLM_SPACING_FAST_MS;
+  const wait = llmSpacing - (Date.now() - lastLLMStart);
   lastLLMStart = Date.now() + Math.max(0, wait);
   return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)) : Promise.resolve();
 }
@@ -55,7 +66,7 @@ const llmBatcher = new LlmBatcher({
   // NOTE: start from the FREE engine explicitly. req.settings.provider is the
   // LLM that just failed (e.g. gemini) — withFreeFallback would otherwise retry
   // the same exhausted LLM instead of falling back (it only Google→Microsoft).
-  onBatchFallback: (reqs) => Promise.all(reqs.map((req) => queue.run(async () => {
+  onBatchFallback: (reqs) => (penalizeLLM(), Promise.all(reqs.map((req) => queue.run(async () => {
     const freeSettings = { ...req.settings, provider: 'google' as const };
     const pairs = await withFreeFallback(freeSettings, async (p) => {
       const raw = await translateWith(p, paraphraseForMT(req.text), req.settings, {
@@ -64,8 +75,8 @@ const llmBatcher = new LlmBatcher({
       return correctTerminology(req.text, raw, req.settings, p, req.pageTitle);
     });
     return pairs;
-  }))),
-});
+  })))),
+}, { windowMs: 60, maxSentences: 10, maxChars: 1600 });
 
 chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); });
 chrome.runtime.onStartup.addListener(() => { reconcileDblClick(); });

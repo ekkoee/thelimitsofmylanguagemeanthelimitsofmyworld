@@ -1,5 +1,5 @@
 import { loadSettings, saveSettings } from '../../core/storage';
-import { Settings, SiteId } from '../../core/types';
+import { Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -9,15 +9,6 @@ async function init() {
   const enabled = $<HTMLInputElement>('enabled');
   enabled.checked = s.enabled;
   enabled.addEventListener('change', () => saveSettings({ enabled: enabled.checked }));
-
-  document.querySelectorAll<HTMLInputElement>('input[data-site]').forEach((cb) => {
-    const site = cb.dataset.site as SiteId;
-    cb.checked = s.sites[site];
-    cb.addEventListener('change', async () => {
-      const cur = await loadSettings();
-      await saveSettings({ sites: { ...cur.sites, [site]: cb.checked } });
-    });
-  });
 
   // 譯文呈現 — mirrors the page's CURRENT 3-state view and sets it on change.
   // Read/write <html data-ibt-view> on the active tab so the popup always shows
@@ -63,11 +54,19 @@ async function init() {
     // keep the Twitter/Reddit side-by-side order in sync with the same choice
     layout: (v === 'enTop' ? 'origTop' : 'transTop') as Settings['layout'],
   }));
-  bindSelect('provider', s.provider, (v) => ({ provider: v as Settings['provider'] }));
-
-  const model = $<HTMLInputElement>('model');
-  model.value = s.model;
-  model.addEventListener('change', () => saveSettings({ model: model.value.trim() }));
+  const provider = $<HTMLSelectElement>('provider');
+  const keyHint = $<HTMLButtonElement>('keyHint');
+  const refreshKeyHint = async (): Promise<void> => {
+    const cur = await loadSettings();
+    keyHint.hidden = !(cur.provider === 'gemini' && !(cur.apiKeys.gemini || '').trim());
+  };
+  provider.value = s.provider;
+  provider.addEventListener('change', async () => {
+    await saveSettings({ provider: provider.value as Settings['provider'] });
+    await refreshKeyHint();
+  });
+  keyHint.addEventListener('click', () => chrome.runtime.openOptionsPage());
+  await refreshKeyHint();
 
   const font = $<HTMLInputElement>('fontScale');
   const fontVal = $('fontScaleVal');

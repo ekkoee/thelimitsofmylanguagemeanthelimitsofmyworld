@@ -14,6 +14,7 @@ export const geminiProvider: TranslationProvider = {
     const model = settings.model || 'gemini-3.5-flash-lite';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
 
+    const t0 = performance.now();
     const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -32,9 +33,16 @@ export const geminiProvider: TranslationProvider = {
           ...(isGemini3(model) ? { thinkingConfig: { thinkingLevel: 'minimal' } } : {}),
         },
       }),
-    }, { label: 'gemini' });
+    }, { label: 'gemini', maxRetries: 1, noRetry429: true });
     if (!res.ok) throw new Error(`Gemini ${res.status}: ${await safeBody(res)}`);
     const data = await res.json();
+    // Timing log for diagnosing latency: ms/sent/tokens. If `ms` is large but
+    // `out` is small, time went to pacing/queue, not the model. `think` > 0
+    // would mean thinking is not actually disabled.
+    {
+      const u = (data as any)?.usageMetadata ?? {};
+      console.log(`[IBT] gemini ${Math.round(performance.now() - t0)}ms sent=${input.sentences.length} in=${u.promptTokenCount} out=${u.candidatesTokenCount} think=${u.thoughtsTokenCount ?? 0}`);
+    }
     const content: string = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ?? '';
     return coerceTranslations(content, input.sentences.length);
   },

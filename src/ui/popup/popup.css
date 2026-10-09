@@ -41,3 +41,11 @@ footer { margin-top: 12px; }
 #translatePage:active { transform: translateY(1px); }
 #translatePage:disabled { opacity: .6; cursor: default; }
 .cta-hint { margin-top: 6px; font-size: 11px; color: #999; text-align: center; line-height: 1.35; }
+
+[hidden] { display: none !important; }
+
+/* shown only when Gemini is selected but no API key has been entered yet */
+.key-hint { width: 100%; padding: 7px 9px; border-radius: 8px; cursor: pointer; text-align: left;
+  font: inherit; font-size: 12px; line-height: 1.4; color: #e5a73a;
+  border: 1px solid rgba(229, 167, 58, 0.45); background: rgba(229, 167, 58, 0.08); }
+.key-hint:hover { background: rgba(229, 167, 58, 0.16); }

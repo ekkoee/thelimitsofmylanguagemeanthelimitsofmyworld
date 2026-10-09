@@ -1,7 +1,7 @@
 import { loadSettings, saveSettings } from '../../core/storage';
 import { clearPersistentCache } from '../../core/cache';
 import { disableDblClick, registerDblClick, requestAllUrls } from '../../core/dblclick';
-import { DEFAULT_MODELS, ProviderId, Settings, SiteId } from '../../core/types';
+import { DEFAULT_MODELS, ProviderId, Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -17,44 +17,21 @@ async function init() {
 
   const provider = $<HTMLSelectElement>('provider');
   const model = $<HTMLInputElement>('model');
-  const sourceLang = $<HTMLInputElement>('sourceLang');
-  const targetLang = $<HTMLInputElement>('targetLang');
-  const targetLangCode = $<HTMLInputElement>('targetLangCode');
+  const geminiBlock = $('geminiBlock');
   provider.value = s.provider;
-  model.value = s.model;
-  sourceLang.value = s.sourceLang;
-  targetLang.value = s.targetLang;
-  targetLangCode.value = s.targetLangCode;
-
+  model.value = s.model || '';
+  const syncEngineUi = (): void => {
+    geminiBlock.hidden = provider.value !== 'gemini';
+  };
+  syncEngineUi();
   provider.addEventListener('change', async () => {
-    const id = provider.value as ProviderId;
-    // suggest the default model for the newly chosen provider
-    model.value = DEFAULT_MODELS[id];
-    await save({ provider: id, model: model.value });
+    syncEngineUi();
+    if (provider.value === 'gemini' && !/^gemini/i.test(model.value.trim())) model.value = DEFAULT_MODELS.gemini;
+    await save({ provider: provider.value as ProviderId, model: model.value.trim() });
   });
   model.addEventListener('change', () => save({ model: model.value.trim() }));
-  sourceLang.addEventListener('change', () => save({ sourceLang: sourceLang.value.trim() || 'auto' }));
-  targetLang.addEventListener('change', () => save({ targetLang: targetLang.value.trim() }));
-  targetLangCode.addEventListener('change', () => save({ targetLangCode: targetLangCode.value.trim() }));
 
-  bindKey('key_openai', s.apiKeys.openai, 'openai');
   bindKey('key_gemini', s.apiKeys.gemini, 'gemini');
-
-  const ollama = $<HTMLInputElement>('ollamaEndpoint');
-  ollama.value = s.ollamaEndpoint;
-  ollama.addEventListener('change', () => save({ ollamaEndpoint: ollama.value.trim() }));
-
-  document.querySelectorAll<HTMLInputElement>('input[data-site]').forEach((cb) => {
-    const site = cb.dataset.site as SiteId;
-    cb.checked = s.sites[site];
-    cb.addEventListener('change', async () => {
-      const cur = await loadSettings();
-      await save({ sites: { ...cur.sites, [site]: cb.checked } });
-    });
-  });
-
-  bindCheck('translateOnVisible', s.translateOnVisible, (v) => ({ translateOnVisible: v }));
-  bindCheck('cacheEnabled', s.cacheEnabled, (v) => ({ cacheEnabled: v }));
 
   // appearance: translated-text style + custom color + left marker bar, live preview
   const transStyle = $<HTMLSelectElement>('transStyle');
@@ -68,7 +45,7 @@ async function init() {
     const r = document.documentElement;
     r.setAttribute('data-ibt-style', transStyle.value || 'plain');
     r.setAttribute('data-ibt-bar', barStyle.value || 'bar');
-    const code = (targetLangCode.value || '').trim();
+    const code = (s.targetLangCode || '').trim();
     r.setAttribute('data-ibt-lang', code === 'zh-CN' ? 'zh-CN' : 'zh-TW');
     if (appliedColor) r.style.setProperty('--ibt-trans-color', appliedColor);
     else r.style.removeProperty('--ibt-trans-color');
@@ -90,8 +67,6 @@ async function init() {
   barColor.addEventListener('change', () => { appliedBarColor = barColor.value; save({ barColor: appliedBarColor }); syncPreview(); });
   $('barColorReset').addEventListener('click', () => { appliedBarColor = ''; save({ barColor: '' }); syncPreview(); });
 
-  // keep the preview font in sync if the language code is edited
-  targetLangCode.addEventListener('input', syncPreview);
   syncPreview();
 
   $('clearCache').addEventListener('click', async () => {
@@ -129,12 +104,6 @@ function bindKey(id: string, value: string, provider: ProviderId) {
     const cur = await loadSettings();
     await save({ apiKeys: { ...cur.apiKeys, [provider]: input.value.trim() } });
   });
-}
-
-function bindCheck(id: string, value: boolean, patch: (v: boolean) => Partial<Settings>) {
-  const cb = $<HTMLInputElement>(id);
-  cb.checked = value;
-  cb.addEventListener('change', () => save(patch(cb.checked)));
 }
 
 async function save(patch: Partial<Settings>) {
