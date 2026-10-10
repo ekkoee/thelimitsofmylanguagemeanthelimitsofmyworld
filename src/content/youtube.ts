@@ -8,7 +8,10 @@ const ROOT_FLAG = 'data-ibt-yt';
 const SETTLE_MS = 180;
 const POLL_MS = 100;
 const EMPTY_GRACE_MS = 400;
-const LOOKAHEAD = 16;           // translate this many upcoming cues ahead (batched in one request)
+const LOOKAHEAD = 64;           // translate this many upcoming cues ahead (batched in one request)
+// Note: keep this large. Gemini free tier allows ~15 req/min; a 9-hour video
+// has ~1500 cues. At 16/batch that's 91 requests → guaranteed 429. At 64/batch
+// it's 23 requests, which fits within quota when paced.
 const AHEAD_THROTTLE_MS = 400;
 
 interface Cue { start: number; end: number; text: string }

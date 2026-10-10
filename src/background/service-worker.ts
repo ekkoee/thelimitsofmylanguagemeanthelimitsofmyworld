@@ -491,10 +491,19 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
     // subtitle register, no page-title context.
     const sentences = need.map((i) => texts[i].trim());
     if (isMetered(provider)) await paceLLM();
-    const translations = await queue.run(() => provider.translate!(
-      { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
-      settings,
-    ));
+    let translations: string[];
+    try {
+      translations = await queue.run(() => provider.translate!(
+        { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
+        settings,
+      ));
+    } catch (err) {
+      // YouTube batches don't go through LlmBatcher, so a 429 here wouldn't
+      // trigger the adaptive pacing. Penalize explicitly so the next batch
+      // waits instead of hammering the quota again.
+      if (/\b429\b/.test(String((err as Error)?.message ?? err))) penalizeLLM();
+      throw err;
+    }
     need.forEach((idx, k) => {
       const t = translations[k] ?? '';
       out[idx] = t;
