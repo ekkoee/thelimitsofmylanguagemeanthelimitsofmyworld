@@ -251,7 +251,10 @@ async function handleLookup(text: string): Promise<WordLookup> {
 // working. The user's chosen engine is unchanged — this only kicks in for google, only
 // on a rate-limit/forbidden, and only once. Other engines (LLMs) surface their error.
 function isRateLimited(err: unknown): boolean {
-  return /\b(403|429)\b/.test(String((err as { message?: unknown })?.message ?? err));
+  // 429/403 = explicit rate limit. The unofficial Google gtx endpoint also
+  // throttles aggressive clients with 5xx (usually 500, not 429) — treat those
+  // as rate limits too so we fall back to Microsoft instead of showing "Google 500".
+  return /\b(403|429|500|502|503|504)\b/.test(String((err as { message?: unknown })?.message ?? err));
 }
 
 async function withFreeFallback<T>(
@@ -263,7 +266,7 @@ async function withFreeFallback<T>(
   } catch (err) {
     const echo = err instanceof Error && err.message === 'IBT_ECHO';
     if (settings.provider === 'google' && (isRateLimited(err) || echo)) {
-      console.warn('[IBT] Google free endpoint throttled/echo → falling back to Microsoft');
+      console.warn(`[IBT] Google free endpoint failed (${String((err as Error)?.message ?? err).slice(0, 80)}) → falling back to Microsoft`);
       return run(getProvider('microsoft'));
     }
     throw err;
