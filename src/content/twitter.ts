@@ -119,6 +119,13 @@ function splitParagraphs(tt: HTMLElement): Line[] {
   // LAST non-empty line's anchor → its translation lands after the paragraph's
   // last line of text, before the blank line. Consecutive blanks collapse into
   // one boundary (an empty pbuf flush is a no-op), so no empty paragraphs.
+  //
+  // List items are the exception: a physical line that starts a numbered /
+  // bulleted item ("1. ", "2) ", "- ", "• "…) becomes its OWN unit with its own
+  // anchor, so its translation is inserted right after the item instead of
+  // being crammed together with the whole list below. Items are short and
+  // self-contained, so this costs no extra LLM calls (the batcher merges them).
+  const LIST_ITEM_RE = /^(?:\d{1,3}(?:[.)]\s+|、)|[-•*·]\s+)/;
   const out: Line[] = [];
   let pbuf: string[] = [];
   let panchor: Node | null = null;
@@ -131,7 +138,14 @@ function splitParagraphs(tt: HTMLElement): Line[] {
     panchor = null;
   };
   for (const p of phys) {
-    if (p.text) { pbuf.push(p.text); panchor = p.anchor; }
+    if (p.text) {
+      if (LIST_ITEM_RE.test(p.text)) {
+        flushPara();
+        out.push({ anchor: p.anchor, text: p.text });
+      } else {
+        pbuf.push(p.text); panchor = p.anchor;
+      }
+    }
     else flushPara();
   }
   flushPara();

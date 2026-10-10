@@ -2,6 +2,10 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [Unreleased]
+### 修正 Fixed
+- X 推文的條列（`1.` `2)` `-` `•` 等）現在逐項獨立翻譯、譯文緊貼在該項下方，不再全擠成一坨；孤立的編號（如 `1.`）會黏回內容一起翻譯，不會出現單獨一行的 `1.`。
+
 ## [1.3.21] - 2026-10-10
 
 ### 改善 Improved

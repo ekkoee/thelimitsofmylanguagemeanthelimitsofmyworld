@@ -38,10 +38,29 @@ export function segment(input: string, locale?: string): string[] {
         if (s) out.push(s);
       }
     }
-    return out.length ? out : blocks;
+    return mergeListMarkers(out.length ? out : blocks);
   }
 
-  return legacySegment(blocks);
+  return mergeListMarkers(legacySegment(blocks));
+}
+
+// A segment that's ONLY a list marker ("1.", "2)", "-") is useless alone —
+// Intl.Segmenter often splits it off ("1. Physical." → ["1.", "Physical."]).
+// Glue it to the following segment so the item translates (and renders) as
+// one line instead of stranding a bare "1.".
+const LONE_MARKER_RE = /^(?:\d{1,3}[.)、]|[-•*·])$/;
+function mergeListMarkers(segs: string[]): string[] {
+  const merged: string[] = [];
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    if (LONE_MARKER_RE.test(s) && i + 1 < segs.length && !LONE_MARKER_RE.test(segs[i + 1])) {
+      merged.push(`${s} ${segs[i + 1]}`);
+      i++;
+    } else {
+      merged.push(s);
+    }
+  }
+  return merged;
 }
 
 // Conservative English-first heuristic. Only used when Intl.Segmenter is absent.
