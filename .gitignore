@@ -18,4 +18,5 @@ yarn-debug.log*
 
 # 環境變數 / 密鑰（保險起見，別讓金鑰進版控）
 .env
+.keys/
 .env.*
