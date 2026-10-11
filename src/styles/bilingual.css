@@ -92,7 +92,14 @@
   line-height: 1.32;
   white-space: pre-wrap;
 }
-.ibt-yt-overlay .ibt-yt-zh { font-weight: 500; color: var(--ibt-trans-color, #7188f5); }
+/* YouTube subtitles use YouTube's own caption typeface so the Chinese line looks like the native
+   captions. content.js copies the live native font into --ibt-yt-font; the stack below is only the
+   fallback until a native caption has been on screen. (The page-translation CJK font rules further
+   down deliberately do not apply here.) Weight 400 = the native caption weight. */
+.ibt-yt-overlay {
+  font-family: var(--ibt-yt-font, "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", sans-serif);
+}
+.ibt-yt-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-trans-color, #7188f5); }
 
 .ibt-yt-line {
   display: block;
@@ -111,7 +118,7 @@
   background: rgba(8, 8, 8, 0.75);
   color: #fff;
   line-height: 1.3;
-  font-weight: 500;
+  font-weight: 400;
   white-space: pre-wrap;
 }
 
@@ -176,15 +183,11 @@
    Consistent CJK font per target language (fixes mixed bold/thin
    glyphs when the page's own font doesn't fully cover the script).
    One complete font → every character renders the same weight. */
-:root[data-ibt-lang="zh-CN"] .ibt-trans,
-:root[data-ibt-lang="zh-CN"] .ibt-yt-zh,
-:root[data-ibt-lang="zh-CN"] .ibt-yt-line > span {
+:root[data-ibt-lang="zh-CN"] .ibt-trans {
   font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
     "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", sans-serif;
 }
-:root[data-ibt-lang="zh-TW"] .ibt-trans,
-:root[data-ibt-lang="zh-TW"] .ibt-yt-zh,
-:root[data-ibt-lang="zh-TW"] .ibt-yt-line > span {
+:root[data-ibt-lang="zh-TW"] .ibt-trans {
   font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC",
     "Source Han Sans TC", "Segoe UI", sans-serif;
 }

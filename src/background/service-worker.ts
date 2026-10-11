@@ -6,7 +6,7 @@ import { getProvider, TranslationProvider } from '../providers/index';
 import { segment } from '../core/segmentation';
 import { findTermMatches, lookupGlossary, TermMatch } from '../core/glossary';
 import { toTraditional } from '../core/st2t';
-import { LlmBatcher } from '../core/llm-batcher';
+import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
 import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 
@@ -209,7 +209,11 @@ async function handleTranslate(
 async function handleLookup(text: string): Promise<WordLookup> {
   const clean = text.trim();
   if (!clean) return { translation: '', sourceLang: '' };
-  const settings = await loadSettings();
+  // Double-click lookups always use the free Google endpoint, whatever engine is selected for page
+  // translation: it returns the dictionary card (part of speech + meanings) and the detected
+  // language for TTS, which an LLM cannot, and it costs no Gemini quota. (Sent through Gemini, a
+  // single word came back as an echo / unparseable response and the popup showed "translation failed".)
+  const settings = { ...await loadSettings(), provider: 'google' as const, model: '' };
 
   // Glossary short-circuit: a whole-selection term hit answers instantly,
   // no API call, no quota burned.
@@ -491,42 +495,59 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
     // subtitle register, no page-title context.
     const sentences = need.map((i) => texts[i].trim());
     if (isMetered(provider)) await paceLLM();
-    let translations: string[];
-    try {
-      translations = await queue.run(() => provider.translate!(
-        { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
-        settings,
-      ));
-    } catch (err) {
-      // YouTube batches don't go through LlmBatcher, so a 429 here wouldn't
-      // trigger the adaptive pacing. Penalize explicitly so the next batch
-      // waits instead of hammering the quota again.
-      if (/\b429\b/.test(String((err as Error)?.message ?? err))) penalizeLLM();
-      throw err;
-    }
+    const translations = await queue.run(() => provider.translate!(
+      { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
+      settings,
+    )).catch(async (err) => {
+      // LLM quota (429) or an unusable response: don't leave the video without subtitles.
+      // Finish this batch on the free engine, cached under the free engine's own keys so its
+      // lower-quality text is never served later as if it were the LLM's.
+      if (!isQuotaError(err) && !isUnusableResponse(err)) throw err;
+      penalizeLLM();
+      console.warn('[IBT] subtitle batch fell back to the free engine:', String((err as Error)?.message ?? err).slice(0, 80));
+      const freeSettings = { ...settings, provider: 'google' as const, model: '' };
+      const freeTarget = cacheTarget(freeSettings);
+      const freeKeys = texts.map((t) => cacheKey('google', '', freeTarget, t.trim()));
+      await translateSubtitlesFree(texts, need, out, freeSettings, freeKeys, writeBack);
+      return need.map((idx) => out[idx]);
+    });
     need.forEach((idx, k) => {
       const t = translations[k] ?? '';
       out[idx] = t;
       if (settings.cacheEnabled && t) writeBack.set(keys[idx], JSON.stringify([{ o: texts[idx].trim(), t }] satisfies AlignedPair[]));
     });
   } else {
-    // block engines (Google/Microsoft): translate each missing line, but in parallel via
-    // the queue. withFreeFallback retries a throttled Google line on Microsoft.
-    await Promise.all(need.map((idx) => queue.run(async () => {
-      const text = texts[idx].trim();
-      const pairs = await withFreeFallback(settings, async (p) => {
-        const raw = await translateWith(p, text, settings);
-        if (p.id === 'google' || p.id === 'microsoft') {
-          return correctTerminology(text, raw, settings, p);
-        }
-        return raw;
-      });
-      const t = pairs.map((p) => p.t).join(' ').trim();
-      out[idx] = t;
-      if (settings.cacheEnabled && t) writeBack.set(keys[idx], JSON.stringify(pairs));
-    })));
+    await translateSubtitlesFree(texts, need, out, settings, keys, writeBack);
   }
 
   if (writeBack.size) await putCached(writeBack, true);
   return out;
+}
+
+async function translateSubtitlesFree(
+  texts: string[],
+  need: number[],
+  out: string[],
+  settings: Settings,
+  keys: string[],
+  writeBack: Map<string, string>,
+): Promise<void> {
+  // One request per sentence on the free engines. A single failed sentence must not throw away the
+  // ones that succeeded (a 429 on one request used to reject the whole batch, so everything was
+  // retried from scratch and never made progress). Failed sentences stay "" and are retried by the
+  // caller later; only when EVERY sentence failed do we surface the error so the caller backs off.
+  const results = await Promise.allSettled(need.map((idx) => queue.run(async () => {
+    const text = texts[idx].trim();
+    const pairs = await withFreeFallback(settings, async (p) => {
+      const raw = await translateWith(p, text, settings);
+      if (p.id === 'google' || p.id === 'microsoft') {
+        return correctTerminology(text, raw, settings, p);
+      }
+      return raw;
+    });
+    const t = pairs.map((p) => p.t).join(' ').trim();
+    out[idx] = t;
+    if (settings.cacheEnabled && t) writeBack.set(keys[idx], JSON.stringify(pairs));
+  })));
+  if (results.length && results.every((r) => r.status === 'rejected')) throw (results[0] as PromiseRejectedResult).reason;
 }

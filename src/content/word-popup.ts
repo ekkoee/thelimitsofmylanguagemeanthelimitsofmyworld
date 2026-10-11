@@ -135,15 +135,11 @@ function show(text: string, rect: DOMRect): void {
     .catch((err) => {
       if (id !== reqId) return;
       transEl!.className = 'trans err';
-      if (isContextGoneError(err)) {
-        transEl!.textContent = '擴充功能已更新，請重新整理此頁。';
-      } else {
-        // Show the actual reason (e.g. "Gemini 429") instead of a generic
-        // message — much easier to diagnose. Keep it short.
-        const msg = String((err as Error)?.message ?? err).replace(/\{[\s\S]*$/, '').trim();
-        const short = msg.length > 60 ? msg.slice(0, 60) + '…' : msg;
-        transEl!.textContent = `翻譯失敗：${short}`;
-      }
+      // Lookups always go through the free Google endpoint now, so a generic
+      // message is fine; the specific engine error is in the service worker log.
+      transEl!.textContent = isContextGoneError(err)
+        ? '擴充功能已更新，請重新整理此頁。'
+        : '翻譯失敗，請再試一次。';
       position();
     });
 }

@@ -8,10 +8,10 @@ const ROOT_FLAG = 'data-ibt-yt';
 const SETTLE_MS = 180;
 const POLL_MS = 100;
 const EMPTY_GRACE_MS = 400;
-const LOOKAHEAD = 64;           // translate this many upcoming cues ahead (batched in one request)
-// Note: keep this large. Gemini free tier allows ~15 req/min; a 9-hour video
-// has ~1500 cues. At 16/batch that's 91 requests → guaranteed 429. At 64/batch
-// it's 23 requests, which fits within quota when paced.
+const LOOKAHEAD = 64;           // max window to look ahead (not the batch size)
+const CHUNK = 16;               // normal refill: at most this many cues per request
+const URGENT_CHUNK = 4;         // the cue on screen right now: tiny request so it shows fast
+const REFILL_BELOW = 12;        // only ask for more once the translated runway drops below this
 const AHEAD_THROTTLE_MS = 400;
 
 interface Cue { start: number; end: number; text: string }
@@ -130,6 +130,7 @@ class TrackCaptions {
   private overlay?: HTMLDivElement;
   private enEl?: HTMLDivElement;
   private zhEl?: HTMLDivElement;
+  private nativeFont?: string;
   private raf = 0;
   private lastIdx = -2;
   private everShown = false;
@@ -209,10 +210,20 @@ class TrackCaptions {
     this.lastAhead = now;
 
     const base = Math.max(0, idx >= 0 ? idx : this.nextIdx(ms));
+    const end = Math.min(this.cues.length - 1, base + LOOKAHEAD);
+    const covered = (i: number) => this.trans.has(i) || this.inflight.has(i);
+    // Refill with hysteresis: count the run of cues from the playhead that are already translated
+    // or in flight, and only ask for more once that runway gets short. Sliding the window one cue
+    // at a time meant one tiny request per cue, and a 64-sentence burst at start or after a seek,
+    // which got the free engines and Gemini rate-limited (and then nothing showed at all).
+    let runway = 0;
+    for (let i = base; i <= end && covered(i); i++) runway++;
+    if (runway >= REFILL_BELOW) return;
+    const urgent = idx >= 0 && !covered(idx);
+    const limit = urgent ? URGENT_CHUNK : CHUNK;
     const batch: number[] = [];
-    for (let i = base; i <= base + LOOKAHEAD && i < this.cues.length; i++) {
-      if (this.trans.has(i) || this.inflight.has(i)) continue;
-      batch.push(i);
+    for (let i = base; i <= end && batch.length < limit; i++) {
+      if (!covered(i)) batch.push(i);
     }
     if (!batch.length) return;
 
@@ -221,7 +232,13 @@ class TrackCaptions {
     translateBatch(texts)
       .then((arr) => {
         this.warned = false;
-        batch.forEach((i, k) => { const t = (arr[k] || '').trim(); if (t) this.trans.set(i, t); });
+        let missing = 0;
+        batch.forEach((i, k) => {
+          const t = (arr[k] || '').trim();
+          if (t) this.trans.set(i, t);
+          else missing++;
+        });
+        if (missing) this.cooldownUntil = Date.now() + 3000;
       })
       .catch((err) => {
         if (isContextGoneError(err)) return; // extension reloaded → loop will stop itself
@@ -230,7 +247,7 @@ class TrackCaptions {
         this.cooldownUntil = Date.now() + (quota ? 60000 : 4000); // quota: wait a minute; other: brief
         if (!this.warned) {
           this.warned = true;
-          if (quota) console.warn('[IBT] 翻譯額度用盡（Gemini 429）。建議把模型改成 gemini-3.5-flash-lite（免費額度較高），或改用免費 Google；額度會定期重置，詳見 Google 官方額度說明。');
+          if (quota) console.warn('[IBT] 翻譯被限流（429），稍後自動重試。若使用 Gemini，請檢查 API key 的額度，或改用免費 Google 翻譯。');
           else console.warn('[IBT] 翻譯失敗：', msg, '（稍後重試）');
         }
       })
@@ -241,6 +258,7 @@ class TrackCaptions {
     if (this.overlay && this.overlay.isConnected) return;
     if (getComputedStyle(this.player).position === 'static') this.player.style.position = 'relative';
     this.overlay = el('div', 'ibt-yt-overlay');
+    this.nativeFont = undefined;
     this.zhEl = el('div', 'ibt-yt-zh');
     this.enEl = el('div', 'ibt-yt-en');
     this.overlay.append(this.zhEl, this.enEl); // Chinese on top
@@ -252,7 +270,26 @@ class TrackCaptions {
     const base = Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
     const size = Math.round(base * this.settings.fontScale);
     if (this.enEl) this.enEl.style.fontSize = `${size}px`;
-    if (this.zhEl) this.zhEl.style.fontSize = `${size}px`;
+    if (this.zhEl) {
+      this.zhEl.style.fontSize = `${size}px`;
+      this.zhEl.lang = this.settings.targetLangCode || 'zh-TW';
+    }
+    this.syncNativeFont();
+  }
+
+  private syncNativeFont(): void {
+    // Use YouTube's own caption typeface (including any font the viewer picked in YouTube's caption
+    // settings) by reading it from a live native caption segment. The native caption is hidden
+    // while our overlay is up, but its computed style is still readable. Until one has been seen,
+    // bilingual.css falls back to YouTube's default caption font stack.
+    if (!this.overlay) return;
+    const seg = this.player.querySelector('.ytp-caption-segment');
+    if (!seg) return;
+    const ff = getComputedStyle(seg).fontFamily;
+    if (ff && ff !== this.nativeFont) {
+      this.nativeFont = ff;
+      this.overlay.style.setProperty('--ibt-yt-font', ff);
+    }
   }
 
   private applyOrder(): void {
