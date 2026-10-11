@@ -495,10 +495,17 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
     // subtitle register, no page-title context.
     const sentences = need.map((i) => texts[i].trim());
     if (isMetered(provider)) await paceLLM();
-    const translations = await queue.run(() => provider.translate!(
-      { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
-      settings,
-    )).catch(async (err) => {
+    try {
+      const translations = await queue.run(() => provider.translate!(
+        { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
+        settings,
+      ));
+      need.forEach((idx, k) => {
+        const t = translations[k] ?? '';
+        out[idx] = t;
+        if (settings.cacheEnabled && t) writeBack.set(keys[idx], JSON.stringify([{ o: texts[idx].trim(), t }] satisfies AlignedPair[]));
+      });
+    } catch (err) {
       // LLM quota (429) or an unusable response: don't leave the video without subtitles.
       // Finish this batch on the free engine, cached under the free engine's own keys so its
       // lower-quality text is never served later as if it were the LLM's.
@@ -509,13 +516,7 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
       const freeTarget = cacheTarget(freeSettings);
       const freeKeys = texts.map((t) => cacheKey('google', '', freeTarget, t.trim()));
       await translateSubtitlesFree(texts, need, out, freeSettings, freeKeys, writeBack);
-      return need.map((idx) => out[idx]);
-    });
-    need.forEach((idx, k) => {
-      const t = translations[k] ?? '';
-      out[idx] = t;
-      if (settings.cacheEnabled && t) writeBack.set(keys[idx], JSON.stringify([{ o: texts[idx].trim(), t }] satisfies AlignedPair[]));
-    });
+    }
   } else {
     await translateSubtitlesFree(texts, need, out, settings, keys, writeBack);
   }
