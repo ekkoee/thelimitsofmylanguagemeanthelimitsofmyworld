@@ -66,6 +66,40 @@ function clearTweetBlocks(tt: HTMLElement): void {
   tt.querySelectorAll('.ibt-orig-src').forEach((e) => e.classList.remove('ibt-orig-src'));
 }
 
+// We split X's own text nodes at line breaks so a translation can sit under each line. X is a React
+// app and keeps a reference to the ORIGINAL text node. When it later rewrites that node (a long post
+// growing from its truncated preview to the full text, an edit, ...) React writes the whole new text
+// into the first fragment and the fragments we split off are left behind after it, so the tail of the
+// tweet shows up twice, joined by a single line break. Remember the fragments we created and drop them
+// as soon as the page touches the node they were split from.
+interface SplitRec { tt: HTMLElement; node: Text; created: Text[]; value: string }
+type SplitHost = HTMLElement & { __ibtSplits?: SplitRec[] };
+type SplitText = Text & { __ibtRec?: SplitRec };
+
+function healSplits(tt: HTMLElement): void {
+  const host = tt as SplitHost;
+  const recs = host.__ibtSplits;
+  if (!recs || !recs.length) return;
+  host.__ibtSplits = recs.filter((r) => {
+    if (r.node.isConnected && r.node.nodeValue === r.value) return true;
+    for (const n of r.created) n.remove();
+    (r.node as SplitText).__ibtRec = undefined;
+    return false;
+  });
+}
+
+let splitWatcher: MutationObserver | null = null;
+function ensureSplitWatcher(): void {
+  if (splitWatcher || !document.body) return;
+  splitWatcher = new MutationObserver((muts) => {
+    for (const m of muts) {
+      const rec = (m.target as SplitText).__ibtRec;
+      if (rec && rec.node === m.target && m.target.nodeValue !== rec.value) healSplits(rec.tt);
+    }
+  });
+  splitWatcher.observe(document.body, { characterData: true, subtree: true });
+}
+
 // Split a tweet into PARAGRAPHS (not single lines), so each block keeps its
 // context when sent to translate. A single break (one <br> or one '\n') is a
 // SOFT wrap → same paragraph; a blank line (<br><br>, '\n\n', or a mix of
@@ -99,18 +133,32 @@ function splitParagraphs(tt: HTMLElement): Line[] {
   let c: Node | null;
   while ((c = tw.nextNode())) items.push(c);
 
+  const recs = ((tt as SplitHost).__ibtSplits ??= []);
   for (const node of items) {
     if (node.nodeName === 'BR') { pushLine(node); continue; }
     let tn = node as Text;
     let val = tn.nodeValue || '';
     let nl = val.indexOf('\n');
+    let rec: SplitRec | null = null;
     while (nl !== -1) {
       buf += val.slice(0, nl);
+      if (nl + 1 >= val.length) {          // '\n' is the last char → no split needed
+        pushLine(tn);
+        val = '';
+        break;
+      }
       const rest = tn.splitText(nl + 1);   // tn now ends with the '\n'
+      if (!rec) {
+        rec = { tt, node: tn, created: [], value: '' };
+        recs.push(rec);
+        (tn as SplitText).__ibtRec = rec;
+      }
+      rec.created.push(rest);
       pushLine(tn);
       tn = rest; val = rest.nodeValue || ''; nl = val.indexOf('\n');
     }
     buf += val;
+    if (rec) rec.value = (node as Text).nodeValue || '';
   }
   pushLine(tt); // trailing physical line → maps to after the whole tweet text
 
@@ -178,10 +226,12 @@ function deferX(tt: HTMLElement, s: Settings, job: () => void): void {
 
 export function scanTwitter(s: Settings): void {
   if (!s.enabled || !s.sites.x) return;
+  ensureSplitWatcher();
 
   // 1) Tweets / replies / quotes — interleave a translation after each line.
   for (const node of queryFirst(SELECTORS.x.text)) {
     const tt = node as HTMLElement;
+    healSplits(tt);
     // Signature = length of the tweet's ORIGINAL text. When a long tweet is
     // expanded via "Show more", X re-renders it with more text → signature
     // changes → we drop the stale blocks and re-translate the now-full tweet.
