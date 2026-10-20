@@ -14,7 +14,14 @@ const URGENT_CHUNK = 4;         // the cue on screen right now: tiny request so 
 const REFILL_BELOW = 12;        // only ask for more once the translated runway drops below this
 const AHEAD_THROTTLE_MS = 400;
 
-interface Cue { start: number; end: number; text: string }
+interface Word { t: number; w: string }
+interface Cue {
+  start: number; end: number; text: string;
+  speechEnd?: number;          // ASR only: when the speech in this cue actually ends
+  words?: Word[];              // ASR only: per-word start times
+  rawEnd?: number;             // set by cleanCues: the cue's original end before the speech cut
+  brk?: boolean;               // set by cleanCues: an annotation-only cue preceded this one
+}
 
 let controller: Controller | null = null;
 
@@ -67,7 +74,7 @@ class Controller {
     if (token === this.loadedToken && this.track) return; // already showing this track
     this.loadedToken = token;
 
-    const merged = mergeCues(d.cues as Cue[]);
+    const merged = mergeCues(cleanCues(d.cues as Cue[]), d.kind);
     console.log('[IBT] 字幕軌載入成功 →「電影模式」，', d.lang, '/', d.kind, '— 原始', d.cues.length, '句，合併為', merged.length, '句');
     this.dom?.destroy(); this.dom = undefined;            // hand off from fallback
     this.track?.destroy();
@@ -95,30 +102,174 @@ function currentVideoId(): string | null {
   try { return new URL(location.href).searchParams.get('v'); } catch { return null; }
 }
 
-// Auto-caption tracks are split into tiny fragments (often mid-sentence), which
-// gives the translator no context and reads poorly. Merge consecutive fragments
-// back into sentence-sized cues: flush on sentence-ending punctuation, a clear
-// pause, or once a line gets long enough to stand on its own.
-function mergeCues(raw: Cue[]): Cue[] {
-  const MAX_CHARS = 90;
-  const GAP_MS = 800;
+// Keep the subtitle on what is being SAID: drop environment-sound annotations such as [Music], [Applause],
+// (thunder rumbling), （呼嘯聲）, 【音楽】 and bare music-note marks. A cue that is nothing but annotation
+// disappears; a cue like "[Music] Hello there" keeps "Hello there".
+function stripSoundTags(t: string): string {
+  let s = t.replace(/\[[^\]]*\]|［[^\］]*］|【[^】]*】/g, ' ').replace(/\([^()]{0,40}\)|（[^（）]{0,40}）/g, ' ').replace(/[♪♫♬]+/g, ' ').replace(/\s+/g, ' ').trim();
+  s = s.replace(/^[\s\-–—:;,]+/, '').replace(/[\s\-–—]+$/, '');
+  return /[\p{L}\p{N}]/u.test(s) ? s : '';
+}
+
+function cleanCues(raw: Cue[]): Cue[] {
   const out: Cue[] = [];
-  let cur: Cue | null = null;
+  let brk = false;
   for (const c of raw) {
-    if (!cur) { cur = { start: c.start, end: c.end, text: c.text }; continue; }
-    const gap = c.start - cur.end;
-    const endsSentence = /[.!?。！？]['")\]]?$/.test(cur.text);
-    const combined = (cur.text + ' ' + c.text).replace(/\s+/g, ' ').trim();
-    if (endsSentence || gap > GAP_MS || combined.length > MAX_CHARS) {
-      out.push(cur);
-      cur = { start: c.start, end: c.end, text: c.text };
-    } else {
-      cur.text = combined;
-      cur.end = c.end;
+    const text = stripSoundTags(c.text);
+    if (!text) {
+      brk = true;
+      continue;
+    }
+    // cut the cue where the speech ends (auto-generated tracks only; never earlier than 0.9 s after the start)
+    const end = c.speechEnd ? Math.min(c.end, Math.max(c.speechEnd, c.start + 900)) : c.end;
+    out.push({ start: c.start, end, rawEnd: c.end, text, words: text === c.text ? c.words : undefined, brk });
+    brk = false;
+  }
+  return out;
+}
+
+// ONE unit = ONE complete sentence. It is the translation unit (the whole sentence is translated at once,
+// so the Chinese reads naturally), the display unit (the whole Chinese sentence and the whole English
+// sentence appear together) and the time window (from the first word of the sentence to its last word, so
+// nothing from the previous sentence lingers and nothing shows in the pauses between sentences).
+//
+// Sentences are found on a word timeline: auto-generated tracks carry the start time of every word; for
+// human-made tracks the words of a cue are spread evenly over the cue. A sentence may therefore start or
+// end in the middle of a cue ("...two men. In the speech...") and still gets accurate boundaries.
+const SENTENCE_END = /[.!?。！？]["'”’)\]]*$/;
+const ELLIPSIS_END = /(?:\.\.\.|…)[\"'"”’)\]]*$/;
+const ABBREVIATION = /^(?:(?:[A-Za-z]\.){1,4}|(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|mt)\.)$/i;
+const FUNCTION_WORD = /^(?:a|an|the|and|or|but|so|to|of|in|on|at|for|with|that|which|who|as|if|than|because|from|by|is|are|was|were)$/i;
+
+function isSentenceEnd(w: string): boolean {
+  return SENTENCE_END.test(w) && !ELLIPSIS_END.test(w) && !ABBREVIATION.test(w);
+}
+
+interface Token { w: string; t: number; e: number; cue: number; brk?: boolean }
+
+function cueTokens(c: Cue, cueNo: number): Token[] {
+  let toks: { w: string; t: number }[];
+  if (c.words && c.words.length) {
+    toks = [];
+    for (const x of c.words) for (const w of String(x.w).split(/\s+/)) if (w) toks.push({ w, t: x.t });
+  } else {
+    const words = c.text.split(/\s+/).filter(Boolean);
+    const total = words.reduce((n, w) => n + w.length + 1, 0) || 1;
+    const span = Math.max(1, c.end - c.start);
+    let acc = 0;
+    toks = words.map((w) => {
+      const t = c.start + span * (acc / total);
+      acc += w.length + 1;
+      return { w, t };
+    });
+  }
+  const out = toks as Token[];
+  if (out.length && c.brk) out[0].brk = true;
+  out.forEach((tk, i) => {
+    tk.cue = cueNo;
+    tk.e = i + 1 < out.length ? out[i + 1].t : c.end;
+    if (tk.e < tk.t) tk.e = tk.t;
+  });
+  return out;
+}
+
+interface SegParams { pause: number; maxChars: number; maxSpan: number; terminators: boolean }
+
+function segmentTokens(tokens: Token[], p: SegParams): Cue[] {
+  const units: Cue[] = [];
+  let cur: Token[] = [];
+  const textOf = (ts: Token[]) => ts.map((x) => x.w).join(' ');
+  const flush = (ts: Token[]) => {
+    if (ts.length) units.push({ start: ts[0].t, end: ts[ts.length - 1].e, text: textOf(ts) });
+  };
+  for (let i = 0; i < tokens.length; i++) {
+    const tk = tokens[i];
+    if (cur.length) {
+      const gap = tk.t - cur[cur.length - 1].e;
+      const len = textOf(cur).length + 1 + tk.w.length;
+      const span = tk.e - cur[0].t;
+      // subtitle convention: do not strand the last one to three words of a sentence as a unit of their own;
+      // when the sentence ends within three words, let the unit run up to 25% over the limit instead
+      let tail = 0;
+      if (p.terminators) {
+        for (let j = i; j < tokens.length && j < i + 3; j++) {
+          if (isSentenceEnd(tokens[j].w)) {
+            tail = j - i + 1;
+            break;
+          }
+        }
+      }
+      const nearEnd = tail > 0 && len <= p.maxChars * 1.25 && span <= p.maxSpan * 1.25;
+      if (gap > p.pause || tk.brk) {
+        flush(cur);
+        cur = [];
+      } else if ((len > p.maxChars || span > p.maxSpan) && !nearEnd) {
+        // too long for one box: cut at the last clause boundary (, ; : dash) past a third of the text,
+        // otherwise right here
+        let cut = -1;
+        const need = textOf(cur).length * 0.35;
+        for (let j = cur.length - 1; j > 0; j--) {
+          if (/[,;:–—]$/.test(cur[j].w) && textOf(cur.slice(0, j + 1)).length >= need) {
+            cut = j + 1;
+            break;
+          }
+        }
+        if (cut > 0) {
+          flush(cur.slice(0, cut));
+          cur = cur.slice(cut);
+        } else {
+          // subtitle convention: never leave a line ending on "the", "and", "to"...; carry up to two such
+          // words over to the next unit
+          let k = cur.length;
+          while (k > 2 && cur.length - k < 2 && FUNCTION_WORD.test(cur[k - 1].w)) k--;
+          flush(cur.slice(0, k));
+          cur = cur.slice(k);
+        }
+      }
+    }
+    cur.push(tk);
+    if (p.terminators && isSentenceEnd(tk.w)) {
+      flush(cur);
+      cur = [];
     }
   }
-  if (cur) out.push(cur);
-  return out;
+  flush(cur);
+  return units;
+}
+
+function mergeCues(cues: Cue[], kind: string): Cue[] {
+  const asr = kind === 'asr';
+  let tokens: Token[] = [];
+  cues.forEach((c, i) => {
+    tokens = tokens.concat(cueTokens(c, i));
+  });
+  if (!tokens.length) return [];
+  const ends = tokens.filter((t) => isSentenceEnd(t.w)).length;
+  const punctuated = ends / tokens.length >= 0.015;
+  let units: Cue[];
+  if (punctuated) {
+    units = segmentTokens(tokens, asr ? { pause: 2000, maxChars: 84, maxSpan: 7000, terminators: true } : { pause: 2500, maxChars: 100, maxSpan: 9000, terminators: true });
+  } else if (!asr) {
+    // human-made track with hardly any sentence punctuation (lyrics, short one-line captions): the author's
+    // own cuts are the best unit there is
+    units = cues.map((c) => ({ start: c.start, end: c.end, text: c.text }));
+  } else {
+    // auto-generated track WITHOUT punctuation: sentence ends cannot be known, so cut where the speaker
+    // pauses or at about one and a half subtitle lines
+    units = segmentTokens(tokens, { pause: 600, maxChars: 70, maxSpan: 6000, terminators: false });
+  }
+  units.sort((x, y) => x.start - y.start);
+  const MIN_ON_SCREEN_MS = 1100;
+  for (let i = 0; i < units.length; i++) {
+    const nx = units[i + 1];
+    if (units[i].end - units[i].start < MIN_ON_SCREEN_MS) {
+      const want = units[i].start + MIN_ON_SCREEN_MS;
+      units[i].end = nx ? Math.min(want, nx.start) : want;
+    }
+    if (nx && units[i].end > nx.start) units[i].end = nx.start;
+    if (units[i].end <= units[i].start) units[i].end = units[i].start + 1;
+  }
+  return units;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +506,7 @@ class DomCaptions {
     const container = queryFirst(SELECTORS.youtube.captionWindow, p)[0] as HTMLElement | undefined;
     const segs = container ? queryFirst(SELECTORS.youtube.captionSegment, container) : [];
     let text = segs.map((n) => (n as HTMLElement).innerText).join(' ').replace(/\s+/g, ' ').trim();
-    text = stripCaptionHint(text);
+    text = stripSoundTags(stripCaptionHint(text));
 
     const now = Date.now();
     if (!text || !container) {

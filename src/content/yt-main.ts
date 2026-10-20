@@ -40,7 +40,18 @@
       const text = ev.segs.map((s: any) => s.utf8 || '').join('').replace(/\s+/g, ' ').trim();
       if (!text) continue;
       const start = ev.tStartMs || 0;
-      cues.push({ start, end: start + (ev.dDurationMs || 0), text });
+      const cue: any = { start, end: start + (ev.dDurationMs || 0), text };
+      // Auto-generated tracks carry a per-word offset. An event's declared duration includes the time the
+      // line merely stays on screen after it was spoken, so keep the moment the last word starts: the
+      // content script uses it to cut the subtitle when the speech ends instead of when YouTube's
+      // line finally scrolls away.
+      if (ev.segs.some((s: any) => s.tOffsetMs != null)) {
+        const lastOff = Math.max(...ev.segs.map((s: any) => s.tOffsetMs || 0));
+        cue.speechEnd = start + lastOff + 700;
+        // per-word start times, so the content script can cut sentences at the exact word
+        cue.words = ev.segs.map((s: any) => ({ t: start + (s.tOffsetMs || 0), w: s.utf8 || '' })).filter((x: any) => x.w.trim());
+      }
+      cues.push(cue);
     }
     return dedupe(cues);
   }
