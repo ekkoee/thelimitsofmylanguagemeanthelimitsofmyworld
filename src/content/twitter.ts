@@ -1,7 +1,7 @@
 import { renderTranslationAfter } from './engine';
 import { SELECTORS, queryFirst } from './selectors';
 import { isProcessed, markProcessed } from '../utils/dom';
-import { isAlreadyTargetLang } from '../core/segmentation';
+import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
 import { Settings } from '../core/types';
 
 // X / Twitter. A tweet's text lives in one [data-testid="tweetText"], but the
@@ -232,6 +232,10 @@ export function scanTwitter(s: Settings): void {
   for (const node of queryFirst(SELECTORS.x.text)) {
     const tt = node as HTMLElement;
     healSplits(tt);
+    // A Chinese tweet is left COMPLETELY alone — judged as a whole tweet, not per
+    // paragraph, so its FTX.com / kyc / @mentions are never "translated", and its
+    // text nodes are never even split. (Simplified tweets aren't converted either.)
+    if (isAlreadyTargetLang(origText(tt), s.targetLangCode)) continue;
     // Signature = length of the tweet's ORIGINAL text. When a long tweet is
     // expanded via "Show more", X re-renders it with more text → signature
     // changes → we drop the stale blocks and re-translate the now-full tweet.
@@ -244,10 +248,10 @@ export function scanTwitter(s: Settings): void {
       const lines = splitParagraphs(tt);
       if (lines.length <= 1) {
         const text = tt.innerText?.trim() ?? '';
-        if (text && !isAlreadyTargetLang(text, s.targetLangCode)) deferX(tt, s, () => renderTranslationAfter(tt, text));
+        if (text && hasTranslatableText(text) && !isAlreadyTargetLang(text, s.targetLangCode)) deferX(tt, s, () => renderTranslationAfter(tt, text));
       } else {
         for (const ln of lines) {
-          if (isAlreadyTargetLang(ln.text, s.targetLangCode)) continue; // already Chinese → skip
+          if (!hasTranslatableText(ln.text) || isAlreadyTargetLang(ln.text, s.targetLangCode)) continue; // nothing to translate / already Chinese → skip
           deferX(tt, s, () => renderTranslationAfter(ln.anchor, ln.text));
         }
       }

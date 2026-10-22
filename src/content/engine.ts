@@ -72,7 +72,7 @@ function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
   // text (rich: links/mentions/media intact); the 3-state view shows/hides that
   // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
   for (const p of pairs) {
-    if (isPureUrl(p.o)) continue;   // a pair that's just a URL → no useful translation
+    if (isPureUrl(p.o) || !hasTranslatableText(p.o)) continue;   // just a URL / @mention → no useful translation
     block.appendChild(el('div', 'ibt-trans', p.t));
   }
 }

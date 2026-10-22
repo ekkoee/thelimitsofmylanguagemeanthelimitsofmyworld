@@ -1,5 +1,5 @@
 import { Settings } from '../core/types';
-import { isAlreadyTargetLang } from '../core/segmentation';
+import { chineseShare, isAlreadyTargetLang, stripNoise } from '../core/segmentation';
 import { renderTranslationAfter } from './engine';
 import { collectUnits } from './blocks';
 import { matchSiteRule } from './selectors';
@@ -12,6 +12,24 @@ const UNI_ATTR = 'data-ibt-uni'; // cheap hint we've handled a source (teardown 
 function fingerprint(text: string): string {
   const s = text.trim();
   return `${s.length}|${s.slice(0, 24)}|${s.slice(-12)}`;
+}
+
+// Is this passage part of a Chinese article / post / page? English words, names and headings inside Chinese
+// writing are left alone. Decided per article (a feed post is a [role="article"]), so an English post in a
+// mostly Chinese feed is still translated.
+const ARTICLE_SELECTOR = 'article, [role="article"], main, [role="main"]';
+const contextCache = new WeakMap<Element, { at: number; cn: boolean }>();
+function inChineseContext(node: Element, targetLangCode: string): boolean {
+  if (!(targetLangCode || '').toLowerCase().startsWith('zh')) return false;
+  const box = node.closest(ARTICLE_SELECTOR) || document.body;
+  const now = Date.now();
+  const hit = contextCache.get(box);
+  if (hit && now - hit.at < 3000) return hit.cn;
+  const text = ((box as HTMLElement).innerText || box.textContent || '').slice(0, 8000);
+  const han = (stripNoise(text).match(/\p{Script=Han}/gu) || []).length;
+  const cn = han >= 12 && chineseShare(text) >= 0.5;
+  contextCache.set(box, { at: now, cn });
+  return cn;
 }
 
 // Is this one of OUR inserted nodes? Keeps the MutationObserver from reacting to its
@@ -129,8 +147,9 @@ export class UniversalTranslator {
         if (this.excludeSel && node.closest(this.excludeSel)) continue; // per-site chrome
         const sig = fingerprint(unit.text);
 
-        // Skip text already in the target language (e.g. Chinese on a zh page).
-        if (isAlreadyTargetLang(unit.text, this.settings.targetLangCode)) { skippedTarget++; continue; }
+        // Skip text already in the target language (e.g. Chinese on a zh page),
+        // and anything inside a Chinese article/post (English headings/names there stay as-is).
+        if (isAlreadyTargetLang(unit.text, this.settings.targetLangCode) || inChineseContext(node, this.settings.targetLangCode)) { skippedTarget++; continue; }
 
         // Locate any block we already placed for this source — by identity first,
         // then by a short forward sibling scan (survives React swapping the node).
