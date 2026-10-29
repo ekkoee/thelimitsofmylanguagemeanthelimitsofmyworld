@@ -70,26 +70,33 @@
    FALLBACK MODE: a single Chinese line (.ibt-yt-line) injected beside YouTube's
    own on-screen caption (native NOT hidden). */
 .ibt-yt-overlay {
+  /* ONE translucent box holding both lines (Chinese + English), like YouTube's own caption window.
+     Brought over from the installed 1.4.4 build, which was not in git. */
   position: absolute;
   left: 0; right: 0;
+  margin-left: auto; margin-right: auto;
+  width: fit-content;
+  max-width: 92%;
   bottom: 8%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 0 6%;
+  gap: 1px;
+  box-sizing: border-box;
+  padding: 3px 14px;
+  border-radius: 6px;
+  background: rgba(8, 8, 8, 0.75);
   text-align: center;
   pointer-events: none;
   z-index: 60;
 }
 .ibt-yt-overlay > div {
-  display: inline-block;
-  max-width: 94%;
-  padding: 1px 8px;
-  border-radius: 3px;
-  background: rgba(8, 8, 8, 0.8);
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  background: none;
   color: #fff;
-  line-height: 1.32;
+  line-height: 1.35;
   white-space: pre-wrap;
 }
 /* YouTube subtitles use YouTube's own caption typeface so the Chinese line looks like the native
@@ -99,7 +106,43 @@
 .ibt-yt-overlay {
   font-family: var(--ibt-yt-font, "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", sans-serif);
 }
-.ibt-yt-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-trans-color, #7188f5); }
+.ibt-yt-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-trans-color, #fff); }
+
+/* X video bilingual captions. Same single box as YouTube. Position is set from
+   the <video> box each frame (inline, expanded, fullscreen). */
+.ibt-x-overlay {
+  position: absolute;
+  left: 50%;
+  width: fit-content;
+  max-width: 92%;
+  transform: translateX(-50%);
+  bottom: 12%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 3px 14px;
+  border-radius: 6px;
+  background: rgba(8, 8, 8, 0.75);
+  text-align: center;
+  pointer-events: none;
+  z-index: 5;
+  font-family: "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, "Microsoft JhengHei", sans-serif;
+}
+.ibt-x-overlay > div {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  background: none;
+  color: #fff;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  font-weight: 400;
+}
+.ibt-x-overlay .ibt-yt-zh { color: var(--ibt-trans-color, #fff); }
+.ibt-x-native-cap { visibility: hidden !important; }
 
 .ibt-yt-line {
   display: block;
@@ -132,6 +175,7 @@
 /* orig: hide every translation we added → only the page's own original text */
 :root[data-ibt-view="orig"] .ibt-block,
 :root[data-ibt-view="orig"] .ibt-yt-overlay,
+:root[data-ibt-view="orig"] .ibt-x-overlay,
 :root[data-ibt-view="orig"] .ibt-yt-line { display: none !important; }
 
 /* zh: hide the original. `.ibt-orig-src` is the source element our block sits
@@ -155,6 +199,7 @@
 :root[data-ibt-yt="on"]:not([data-ibt-view="orig"]) .ytp-caption-window-container { visibility: hidden !important; }
 
 :root[data-ibt-enabled="false"] .ibt-yt-overlay,
+:root[data-ibt-enabled="false"] .ibt-x-overlay,
 :root[data-ibt-enabled="false"] .ibt-yt-line { display: none !important; }
 
 /* Alt+A universal-mode toast */

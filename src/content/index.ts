@@ -6,6 +6,7 @@ import { Engine } from './engine';
 import { scanTwitter } from './twitter';
 import { redditAdapter } from './reddit';
 import { startYouTube, updateYouTubeSettings } from './youtube';
+import { startXVideo, updateXVideoSettings } from './x-video';
 import { startWordPopup, stopWordPopup } from './word-popup';
 import { Settings } from '../core/types';
 
@@ -58,11 +59,13 @@ import { Settings } from '../core/types';
   }
 
   if (site === 'x') {
-    const scan = () => scanTwitter(settings);
+    let live = settings;
+    startXVideo(() => live);
+    const scan = () => scanTwitter(live);
     scan();
     observeMutations(document.body, scan, 300);
     onUrlChange(() => setTimeout(scan, 400));
-    onSettingsChanged((s) => { settings = s; applyRoot(s); scan(); });
+    onSettingsChanged((s) => { live = s; settings = s; applyRoot(s); scan(); updateXVideoSettings(s); });
     return;
   }
 

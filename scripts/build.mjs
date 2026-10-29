@@ -40,6 +40,7 @@ const iifeEntries = {
   'content': 'src/content/index.ts',
   'alt-a-global': 'src/content/alt-a-global.ts',
   'yt-main': 'src/content/yt-main.ts',
+  'x-main': 'src/content/x-main.ts',
   'universal-inject': 'src/content/universal-inject.ts',
   'popup': 'src/ui/popup/popup.ts',
   'options': 'src/ui/options/options.ts',
