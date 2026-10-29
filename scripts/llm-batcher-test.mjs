@@ -6,7 +6,7 @@ execSync(
   'npx esbuild src/core/llm-batcher.ts --bundle --platform=node --format=esm --outfile=/tmp/llm-batcher.test.mjs --log-level=error',
   { cwd: new URL('..', import.meta.url).pathname, stdio: 'inherit' },
 );
-const { LlmBatcher, isQuotaError } = await import('/tmp/llm-batcher.test.mjs');
+const { LlmBatcher, isQuotaError, isTimeoutError } = await import('/tmp/llm-batcher.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -21,6 +21,9 @@ check('RESOURCE_EXHAUSTED detected', isQuotaError(new Error('RESOURCE_EXHAUSTED'
 check('rate limit text detected', isQuotaError(new Error('Rate limit reached')));
 check('bad key NOT quota', !isQuotaError(new Error('NO_API_KEY: set your Gemini key')));
 check('generic error NOT quota', !isQuotaError(new Error('network timeout')));
+check('Gemini timeout is not a quota error', !isQuotaError(new Error('Gemini timeout')));
+check('Gemini timeout detected', isTimeoutError(new Error('Gemini timeout')));
+check('network timeout is not our deadline', !isTimeoutError(new Error('network timeout')));
 
 function makeSettings() {
   return {
@@ -51,8 +54,9 @@ function makeProvider(log) {
   const texts = ['Hello world.', 'Second tweet here.', 'Third one.', 'Fourth.', 'Fifth tweet.'];
   const results = await Promise.all(texts.map((t) =>
     batcher.submit({ text: t, settings, provider, mode: 'prose', pageTitle: 'Test' })));
-  check('burst coalesced into 1 request', log.length === 1);
-  check('all sentences in one call', log[0]?.length === 5);
+  check('burst splits into a tiny first call and a follow-up', log.length === 2);
+  check('first call is the on-screen slice', log[0]?.length === 2);
+  check('the rest follows in the next call', log[1]?.length === 3);
   check('fan-out aligned', results.every((pairs, i) => pairs[0]?.t === `ZH:${texts[i]}`));
   check('originals preserved', results.every((pairs, i) => pairs[0]?.o === texts[i]));
 }
@@ -127,6 +131,79 @@ function makeProvider(log) {
   const badProvider = { id: 'gemini', translate: async () => { throw new Error('Could not parse translations from provider response'); } };
   const results = await batcher.submit({ text: 'Hello.', settings, provider: badProvider, mode: 'prose' });
   check('parse error → fallback invoked', results[0].t === 'FREE:Hello.');
+}
+
+// --- Gemini deadline → fallback, and the reason is timeout (no quota penalty) ---
+{
+  let reason = '';
+  const batcher = new LlmBatcher(
+    {
+      pace: async () => {},
+      run: (fn) => fn(),
+      onBatchFallback: async (reqs, _sentences, why) => {
+        reason = why;
+        return reqs.map((r) => [{ o: r.text, t: 'FREE:' + r.text }]);
+      },
+    },
+    { windowMs: 30 },
+  );
+  const settings = makeSettings();
+  const badProvider = { id: 'gemini', translate: async () => { throw new Error('Gemini timeout'); } };
+  const results = await batcher.submit({ text: 'Hello.', settings, provider: badProvider, mode: 'subtitle' });
+  check('timeout → fallback', results[0].t === 'FREE:Hello.');
+  check('timeout reason is timeout', reason === 'timeout');
+}
+
+// --- on-screen items leave before below-the-fold ones ---
+{
+  const log = [];
+  const batcher = new LlmBatcher(
+    { pace: async () => {}, run: (fn) => fn(), onBatchFallback: async () => { throw new Error('no fallback'); } },
+    { windowMs: 20, firstSentences: 2, firstChars: 400 },
+  );
+  const settings = makeSettings();
+  const provider = makeProvider(log);
+  await Promise.all([
+    batcher.submit({ text: 'Visible tweet one.', settings, provider, mode: 'prose', priority: 'visible' }),
+    batcher.submit({ text: 'Visible tweet two.', settings, provider, mode: 'prose', priority: 'visible' }),
+    batcher.submit({ text: 'Below the fold.', settings, provider, mode: 'prose', priority: 'near' }),
+  ]);
+  check('first batch is only the visible tweets', log[0]?.length === 2 && !log[0].some((s) => s.startsWith('Below')));
+  check('near tweet is the follow-up', log[1]?.some((s) => s.startsWith('Below')));
+}
+
+// A slow model: the first (small) call resolves without waiting for the second.
+{
+  const order = [];
+  const batcher = new LlmBatcher(
+    {
+      pace: async () => {},
+      run: (fn) => fn(),
+      onBatchFallback: async () => { throw new Error('no fallback'); },
+    },
+    { windowMs: 15, firstSentences: 1, firstChars: 80 },
+  );
+  const settings = makeSettings();
+  const provider = {
+    id: 'gemini',
+    translate: async (input) => {
+      const n = input.sentences.length;
+      order.push('start:' + n);
+      await new Promise((r) => setTimeout(r, n === 1 ? 40 : 200));
+      order.push('end:' + n);
+      return input.sentences.map((s) => `ZH:${s}`);
+    },
+  };
+  const t0 = Date.now();
+  let firstAt = 0;
+  const pending = ['On screen now.', 'Second visible.', 'Third visible.'].map((text, i) =>
+    batcher.submit({ text, settings, provider, mode: 'prose', priority: 'visible' }).then(() => {
+      if (!firstAt) firstAt = Date.now() - t0;
+      return i;
+    }));
+  await Promise.all(pending);
+  check('first result lands before the slower follow-up finishes', order[0] === 'start:1' && order.indexOf('end:1') < order.indexOf('end:2'));
+  check('first result is well under the follow-up latency', firstAt < 150);
 }
 
 // --- empty text resolves immediately, no provider call ---

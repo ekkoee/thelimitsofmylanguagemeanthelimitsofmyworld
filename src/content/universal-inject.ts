@@ -5,9 +5,11 @@
 import { loadSettings, onSettingsChanged } from '../core/storage';
 import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
+import { ensureIbtCss } from './page-css';
 import { Settings } from '../core/types';
 
 (async function () {
+  ensureIbtCss();
   const w = window as unknown as { __ibtUniversal?: UniversalTranslator };
 
   // Already translated this page → each subsequent Alt+A cycles the 3-state

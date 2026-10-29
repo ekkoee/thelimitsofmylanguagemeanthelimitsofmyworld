@@ -18,6 +18,9 @@ function normalizeSettings(s: Settings): Settings {
     translateOnVisible: true,
     cacheEnabled: true,
     sites: { x: true, reddit: true, youtube: true },
+    hedgeEnabled: s.hedgeEnabled !== false,
+    hedgeModel: (s.hedgeModel || 'gemini-2.5-flash-lite').trim() || 'gemini-2.5-flash-lite',
+    hedgeDelayMs: Number.isFinite(s.hedgeDelayMs) && s.hedgeDelayMs >= 0 ? s.hedgeDelayMs : 1500,
   };
 }
 

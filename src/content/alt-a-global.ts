@@ -11,6 +11,7 @@
 import { loadSettings, onSettingsChanged } from '../core/storage';
 import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
+import { ensureIbtCss } from './page-css';
 import { Settings } from '../core/types';
 
 const AUTO_SITE_RE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
@@ -28,6 +29,7 @@ if (AUTO_SITE_RE.test(location.href)) {
   }
 
   async function onAltA(): Promise<void> {
+    ensureIbtCss();
     // Already translated → cycle the 3-state display (pure CSS).
     if (w.__ibtUniversal) { toast(VIEW_LABEL[cycleView()]); return; }
 

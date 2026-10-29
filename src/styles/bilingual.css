@@ -13,15 +13,26 @@
   white-space: pre-wrap;
 }
 
-/* "Translate any page" (Alt+A) blocks only. The source may live inside the host's
-   flex/grid container (Facebook); force our translation onto its own full-width line
-   so it never becomes a stray flex/grid track, and contain reflow on long feeds. */
+/* "Translate any page" (Alt+A) blocks only. Inline !important locks in place.ts
+   are what actually beat host `div` rules; these are the fallback for the first
+   paint and for the heading font-size variable. flex-basis:100% is intentionally
+   NOT used — in a column flex container that basis is a height, which stretched
+   the translation to the full column. */
 .ibt-block.ibt-uni {
-  display: block;
-  width: 100%;
-  flex-basis: 100%;
-  grid-column: 1 / -1;
-  box-sizing: border-box;
+  display: block !important;
+  position: static !important;
+  float: none !important;
+  clear: both !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  box-sizing: border-box !important;
+  flex: 0 0 auto !important;
+  grid-column: 1 / -1 !important;
+  transform: none !important;
+  inset: auto !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
   contain: layout;
   /* match the source element's size (set per-block in universal.ts) so a heading's
      translation reads as a heading; falls back to the default body size. */
@@ -70,26 +81,37 @@
    FALLBACK MODE: a single Chinese line (.ibt-yt-line) injected beside YouTube's
    own on-screen caption (native NOT hidden). */
 .ibt-yt-overlay {
+  /* ONE translucent box holding both lines (Chinese + English), like YouTube's own caption window.
+     Left / bottom / max-width are rewritten every frame from the <video> box (see youtube.ts)
+     so letterboxing, the control bar, resize, and fullscreen can't leave the line crooked.
+     The numbers here are only the first-paint fallback. */
   position: absolute;
-  left: 0; right: 0;
+  left: 50%;
+  right: auto;
+  width: fit-content;
+  max-width: 92%;
+  transform: translateX(-50%);
   bottom: 8%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 0 6%;
+  gap: 1px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 3px 14px;
+  border-radius: 6px;
+  background: rgba(8, 8, 8, 0.75);
   text-align: center;
   pointer-events: none;
   z-index: 60;
 }
 .ibt-yt-overlay > div {
-  display: inline-block;
-  max-width: 94%;
-  padding: 1px 8px;
-  border-radius: 3px;
-  background: rgba(8, 8, 8, 0.8);
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  background: none;
   color: #fff;
-  line-height: 1.32;
+  line-height: 1.35;
   white-space: pre-wrap;
 }
 /* YouTube subtitles use YouTube's own caption typeface so the Chinese line looks like the native
@@ -99,7 +121,7 @@
 .ibt-yt-overlay {
   font-family: var(--ibt-yt-font, "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", sans-serif);
 }
-.ibt-yt-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-trans-color, #7188f5); }
+.ibt-yt-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-trans-color, #fff); }
 
 .ibt-yt-line {
   display: block;

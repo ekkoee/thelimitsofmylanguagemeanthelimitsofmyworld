@@ -200,23 +200,54 @@ function splitParagraphs(tt: HTMLElement): Line[] {
   return out;
 }
 
-// Viewport gating for X: observe the tweetText element (anchors can be Text/BR nodes,
-// which IntersectionObserver cannot observe) and run its translation jobs on first sight.
-type JobbedElement = HTMLElement & { __ibtJobs?: (() => void)[] };
+// Viewport gating for X. On-screen tweets translate immediately (a tiny first
+// Gemini batch). Tweets just below the fold wait a beat so they don't join
+// that first request, then go out in the larger follow-up batches.
+type XPriority = 'visible' | 'near';
+type XJob = (priority: XPriority) => void;
+type JobbedElement = HTMLElement & { __ibtJobs?: XJob[]; __ibtNear?: number };
+const NEAR_MARGIN = '0px 0px 700px 0px';
+
+function onScreen(el: HTMLElement): boolean {
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.bottom > 0 && r.top < window.innerHeight + 40;
+}
+
+function runXJobs(el: HTMLElement, priority: XPriority): void {
+  const host = el as JobbedElement;
+  const jobs = host.__ibtJobs;
+  host.__ibtJobs = undefined;
+  if (host.__ibtNear) { clearTimeout(host.__ibtNear); host.__ibtNear = undefined; }
+  if (!jobs?.length) return;
+  const w = window as unknown as { __ibtXView?: number };
+  if (priority === 'visible' && !w.__ibtXView) w.__ibtXView = performance.now();
+  for (const j of jobs) j(priority);
+}
+
 const xIO = new IntersectionObserver((entries) => {
   for (const e of entries) {
     if (!e.isIntersecting) continue;
-    xIO.unobserve(e.target);
     const el = e.target as JobbedElement;
-    const jobs = el.__ibtJobs;
-    el.__ibtJobs = undefined;
-    if (jobs) for (const j of jobs) j();
+    if (onScreen(el)) {
+      xIO.unobserve(el);
+      runXJobs(el, 'visible');
+      continue;
+    }
+    // Prefetch band under the viewport. One delayed start, still observed
+    // so a scroll onto the screen upgrades it to 'visible' first.
+    if (el.__ibtNear) continue;
+    el.__ibtNear = setTimeout(() => {
+      el.__ibtNear = undefined;
+      if (!el.isConnected) return;
+      xIO.unobserve(el);
+      runXJobs(el, onScreen(el) ? 'visible' : 'near');
+    }, 350) as unknown as number;
   }
-}, { rootMargin: '500px 0px 1000px 0px' });
+}, { rootMargin: NEAR_MARGIN });
 
-function deferX(tt: HTMLElement, s: Settings, job: () => void): void {
+function deferX(tt: HTMLElement, s: Settings, job: XJob): void {
   if (!s.translateOnVisible) {
-    job();
+    job('visible');
     return;
   }
   const el = tt as JobbedElement;
@@ -248,11 +279,11 @@ export function scanTwitter(s: Settings): void {
       const lines = splitParagraphs(tt);
       if (lines.length <= 1) {
         const text = tt.innerText?.trim() ?? '';
-        if (text && hasTranslatableText(text) && !isAlreadyTargetLang(text, s.targetLangCode)) deferX(tt, s, () => renderTranslationAfter(tt, text));
+        if (text && hasTranslatableText(text) && !isAlreadyTargetLang(text, s.targetLangCode)) deferX(tt, s, (priority) => renderTranslationAfter(tt, text, { priority }));
       } else {
         for (const ln of lines) {
           if (!hasTranslatableText(ln.text) || isAlreadyTargetLang(ln.text, s.targetLangCode)) continue; // nothing to translate / already Chinese → skip
-          deferX(tt, s, () => renderTranslationAfter(ln.anchor, ln.text));
+          deferX(tt, s, (priority) => renderTranslationAfter(ln.anchor, ln.text, { priority }));
         }
       }
     } catch {
