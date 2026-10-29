@@ -34,6 +34,10 @@
 
 ## [Unreleased]
 
+## [1.4.7] — 2026-10-29
+### 改進 Changed
+- **Gemini 對打**：你選的模型先送。超過設定的時間（預設 1.5 秒）還沒回來，就同時問 `gemini-2.5-flash-lite`（不送 thinkingConfig）。誰先到先顯示；你選的模型稍後回來會把譯文換上，快取只留它的結果。兩個都失敗才改走免費引擎。主模型若回 400／404，這一輪之後改只問較快的模型，並只記一次 log。service worker：`[IBT] race primary=… hedge=… shown=… upgraded`。
+
 ## [1.4.6] — 2026-10-29
 ### 改進 Changed
 - **X 上的 Gemini 先出畫面**：同一波推文不再合成一個大請求。畫面上的先用約兩句的小請求送出，下面的稍後再以較大批次平行送。service worker 會印 `[IBT] llm batch first`、`[IBT] llm batch done`、`[IBT] gemini …ms`，頁面主控台會印 `[IBT] first translation …ms`。

@@ -24,10 +24,13 @@ export function resolveGeminiModel(model: string | undefined): string {
  */
 export function geminiThinking(model: string): { thinkingLevel: string; includeThoughts: boolean } | { thinkingBudget: number; includeThoughts: boolean } | undefined {
   const m = model.toLowerCase();
-  if (/gemini-4(?:[.\-]|$)/.test(m) || /gemini-3\.8(?:[.\-]|$)/.test(m)) {
+  // 3.7 and 3.8 reject thinkingLevel "minimal" with HTTP 400. Gemini 4 has no minimal.
+  if (/gemini-4(?:[.\-]|$)/.test(m) || /gemini-3\.(?:7|8)(?:[.\-]|$)/.test(m)) {
     return { thinkingLevel: 'low', includeThoughts: false };
   }
   if (/gemini-3/.test(m)) return { thinkingLevel: 'minimal', includeThoughts: false };
+  // 2.5 Flash-Lite 400s if thinkingLevel is sent, and does not need a budget.
+  if (/gemini-2\.5-flash-lite(?:[.\-]|$)/.test(m)) return undefined;
   if (/gemini-2\.5/.test(m)) return { thinkingBudget: 0, includeThoughts: false };
   return undefined;
 }

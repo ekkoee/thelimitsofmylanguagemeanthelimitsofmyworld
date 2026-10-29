@@ -33,6 +33,13 @@ export function startYouTube(getSettings: () => Settings): void {
 }
 export function updateYouTubeSettings(s: Settings): void { controller?.setSettings(s); }
 
+try {
+  chrome.runtime?.onMessage.addListener((msg) => {
+    if (msg?.type !== 'ibt-upgrade-subs' || !Array.isArray(msg.sources) || !Array.isArray(msg.translations)) return;
+    controller?.upgradeSubtitles(msg.sources as string[], msg.translations as string[]);
+  });
+} catch { /* not in an extension page */ }
+
 // ---------------------------------------------------------------------------
 // Controller: starts in the safe "DOM mode" (inject Chinese beside YouTube's own
 // caption) and UPGRADES to "movie mode" the instant the page bridge intercepts
@@ -96,6 +103,11 @@ class Controller {
     window.removeEventListener('message', this.onCues);
     this.track?.destroy(); this.dom?.destroy();
     this.track = undefined; this.dom = undefined;
+  }
+
+  /** Primary model arrived after a faster hedge line was already on screen. */
+  upgradeSubtitles(sources: string[], translations: string[]): void {
+    this.track?.upgradeLines(sources, translations);
   }
 }
 
@@ -298,6 +310,19 @@ class TrackCaptions {
   }
   setSettings(s: Settings) { this.settings = s; }
   start(): void { this.ensureOverlay(); this.loop(); }
+
+  /** Swap a hedge subtitle for the primary model's line, in place. */
+  upgradeLines(sources: string[], translations: string[]): void {
+    sources.forEach((text, k) => {
+      const t = (translations[k] || '').trim();
+      if (!t) return;
+      for (let i = 0; i < this.cues.length; i++) {
+        if (this.cues[i].text !== text) continue;
+        this.trans.set(i, t);
+        if (i === this.lastIdx) this.setZh(t);
+      }
+    });
+  }
 
   private video(): HTMLVideoElement | null { return this.player.querySelector('video'); }
 

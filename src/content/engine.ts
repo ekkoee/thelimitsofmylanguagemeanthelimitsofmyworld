@@ -54,12 +54,33 @@ function isPureUrl(s: string): boolean {
 
 let firstSendAt = 0;
 let loggedFirstPaint = false;
-async function translateBlock(text: string, priority?: 'visible' | 'near'): Promise<AlignedPair[]> {
+let reqSeq = 0;
+
+/** Replace hedge lines with the primary model's text. Same nodes, so layout stays. */
+function installUpgradeListener(): void {
+  const rt = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
+  if (!rt?.onMessage) return;
+  rt.onMessage.addListener((msg) => {
+    if (msg?.type !== 'ibt-upgrade' || !msg.reqId) return;
+    const block = document.querySelector(`[data-ibt-req="${msg.reqId}"]`);
+    const root = block?.shadowRoot;
+    if (!root) return;
+    const lines = root.querySelectorAll('.ibt-trans');
+    const pairs = (msg.pairs || []) as { t?: string }[];
+    for (let i = 0; i < lines.length && i < pairs.length; i++) {
+      const t = pairs[i].t || '';
+      if (t && lines[i].textContent !== t) lines[i].textContent = t;
+    }
+  });
+}
+installUpgradeListener();
+
+async function translateBlock(text: string, priority?: 'visible' | 'near', reqId?: string): Promise<AlignedPair[]> {
   // Reddit / X / universal are prose; carry the page title as background context.
   const t0 = performance.now();
   if (!firstSendAt) firstSendAt = t0;
   const resp = await sendMessage<TranslateResponse>({
-    type: 'translate', text, title: document.title, mode: 'prose', priority,
+    type: 'translate', text, title: document.title, mode: 'prose', priority, reqId,
   });
   const ms = Math.round(performance.now() - t0);
   console.log(`[IBT] block ${ms}ms chars=${text.length} priority=${priority ?? 'visible'}`);
@@ -131,8 +152,10 @@ export function renderTranslationAfter(
   anchor: Node, text: string, opts?: { sig?: string; adaptive?: boolean; priority?: 'visible' | 'near' },
 ): HTMLElement | null {
   if (!hasTranslatableText(text)) return null;
+  const reqId = `r${(++reqSeq).toString(36)}`;
   const block = el('div', 'ibt-block ibt-loading');
   block.dataset.ibtOut = '1';
+  block.dataset.ibtReq = reqId;
   if (opts?.sig) block.dataset.ibtSig = opts.sig;
   if (opts?.adaptive) block.classList.add('ibt-uni');
   // Tag the original element so "Chinese-only" view can hide it via CSS — but
@@ -163,7 +186,7 @@ export function renderTranslationAfter(
     body.textContent = '';
     body.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
     try {
-      const pairs = await translateBlock(text, opts?.priority);
+      const pairs = await translateBlock(text, opts?.priority, reqId);
       fillPairs(block, pairs);
     } catch (err: any) {
       // Extension was reloaded/updated → quiet "refresh" hint, no retry spam.

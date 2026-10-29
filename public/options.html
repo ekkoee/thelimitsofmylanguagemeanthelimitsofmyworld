@@ -33,7 +33,22 @@
           <label for="model">模型</label>
           <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
         </div>
-        <small class="hint">預設 <b>gemini-3.5-flash-lite</b>（速度快、免費額度較高），一般不用改，只有 Google 汰換模型時才需要換。你填的模型 id 會原樣送出，思考深度設成該模型允許的最低（3.5 Flash／Flash-Lite 是 minimal）。單次請求超過 45 秒才改走免費引擎。實際額度以 <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener">Google 官方額度說明</a>為準。</small>
+        <small class="hint">預設 <b>gemini-3.5-flash-lite</b>。你填的模型 id 會原樣送出（思考深度設成該模型允許的最低）。<b>gemini-3.5-flash</b> 語氣較自然，但 Google 端有時會排隊數秒到數十秒。</small>
+
+        <div class="field">
+          <label for="hedgeEnabled">先顯示較快的模型</label>
+          <input type="checkbox" id="hedgeEnabled" />
+        </div>
+        <small class="hint">你選的模型先送。超過下面的時間還沒回來，就同時再問較快的模型，誰先到就先顯示。你選的模型稍後回來時，會把畫面上的譯文換成它的結果（排版不變）。快取只保留你選的模型的譯文。</small>
+        <div class="field">
+          <label for="hedgeModel">較快模型</label>
+          <input type="text" id="hedgeModel" placeholder="gemini-2.5-flash-lite" />
+        </div>
+        <div class="field">
+          <label for="hedgeDelayMs">等待多久再問（毫秒）</label>
+          <input type="number" id="hedgeDelayMs" min="0" max="10000" step="100" />
+        </div>
+        <small class="hint">預設 1500。兩個 Gemini 都失敗才改走免費引擎；你選的模型本身最多等 45 秒。</small>
       </div>
     </fieldset>
 

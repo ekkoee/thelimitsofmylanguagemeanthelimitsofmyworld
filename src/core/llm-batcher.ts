@@ -12,6 +12,7 @@
 import { segment } from './segmentation';
 import { AlignedPair, Settings } from './types';
 import { TranslateInput, TranslationProvider } from '../providers/base';
+import { isBothFailed } from '../providers/gemini-race';
 
 export interface BatchRequest {
   text: string;
@@ -21,6 +22,9 @@ export interface BatchRequest {
   pageTitle?: string;
   /** On-screen text ships in a tiny first request. Below-the-fold waits for that. */
   priority?: 'visible' | 'near';
+  /** Content-script block id, so a later primary answer can replace the hedge text. */
+  reqId?: string;
+  tabId?: number;
 }
 
 interface Item {
@@ -37,9 +41,16 @@ export interface BatcherDeps {
   pace: () => Promise<void>;
   /** Run the provider call through the concurrency queue. */
   run: <T>(fn: () => Promise<T>) => Promise<T>;
-  /** Quota, unusable output, or timeout: translate the batch another way, or rethrow.
-   *  `timeout` should not tighten the pacing penalty — the model was slow, not rate-limited. */
-  onBatchFallback: (items: BatchRequest[], sentences: string[][], reason: 'quota' | 'unusable' | 'timeout') => Promise<AlignedPair[][]>;
+  /** Quota, unusable output, timeout, or both Gemini calls failed. */
+  onBatchFallback: (items: BatchRequest[], sentences: string[][], reason: 'quota' | 'unusable' | 'timeout' | 'both') => Promise<AlignedPair[][]>;
+  /** When set, used instead of provider.translate. May return a provisional hedge. */
+  finish?: (input: TranslateInput, req: BatchRequest) => Promise<{
+    texts: string[];
+    cache: boolean;
+    upgrade?: Promise<string[] | null>;
+  }>;
+  /** Persist a primary result, and on `upgrade` push it to the page. */
+  onReady?: (entries: { req: BatchRequest; pairs: AlignedPair[] }[], reason: 'final' | 'upgrade') => void | Promise<void>;
 }
 
 export function isQuotaError(err: unknown): boolean {
@@ -215,21 +226,36 @@ export class LlmBatcher {
       // thread under the free-tier per-minute limit. The queue still runs
       // several of these at once; pacing only spaces the starts.
       await this.deps.pace();
-      const translations = await this.deps.run(() =>
-        first.req.provider.translate!(input, first.req.settings));
+      const outcome = await this.deps.run(async () => {
+        if (this.deps.finish) return this.deps.finish(input, first.req);
+        const texts = await first.req.provider.translate!(input, first.req.settings);
+        return { texts, cache: true as boolean, upgrade: undefined as Promise<string[] | null> | undefined };
+      });
+      const translations = outcome.texts;
       const dt = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0);
       console.log(`[IBT] llm batch done ${dt}ms sentences=${all.length}`);
-      items.forEach((it, i) => {
-        const slice = translations.slice(offsets[i], offsets[i] + it.sentences.length);
-        it.resolve(it.sentences.map((o, k) => ({ o, t: slice[k] ?? '' })));
-      });
+      const entries = items.map((it, i) => ({
+        req: it.req,
+        pairs: it.sentences.map((o, k) => ({ o, t: translations[offsets[i] + k] ?? '' })),
+      }));
+      if (outcome.cache && this.deps.onReady) await this.deps.onReady(entries, 'final');
+      items.forEach((it, i) => it.resolve(entries[i].pairs));
+      if (outcome.upgrade) {
+        outcome.upgrade.then(async (better) => {
+          if (!better?.length) return;
+          const upgraded = items.map((it, i) => ({
+            req: it.req,
+            pairs: it.sentences.map((o, k) => ({ o, t: better[offsets[i] + k] ?? '' })),
+          }));
+          if (this.deps.onReady) await this.deps.onReady(upgraded, 'upgrade');
+        }).catch(() => {});
+      }
     } catch (err) {
-      if (isQuotaError(err) || isUnusableResponse(err) || isTimeoutError(err)) {
+      if (isQuotaError(err) || isUnusableResponse(err) || isTimeoutError(err) || isBothFailed(err)) {
         // Free-tier minute quota exhausted mid-thread, the LLM returned an
-        // unusable response, or Gemini blew its deadline: don't leave the rest
-        // of the page on manual retry buttons — let the host finish the batch
-        // another way (free engine).
-        const reason = isTimeoutError(err) ? 'timeout' : isQuotaError(err) ? 'quota' : 'unusable';
+        // unusable response, both Gemini calls failed, or the primary blew
+        // its deadline with nothing else to show.
+        const reason = isBothFailed(err) ? 'both' : isTimeoutError(err) ? 'timeout' : isQuotaError(err) ? 'quota' : 'unusable';
         try {
           const results = await this.deps.onBatchFallback(
             items.map((it) => it.req), items.map((it) => it.sentences), reason);
