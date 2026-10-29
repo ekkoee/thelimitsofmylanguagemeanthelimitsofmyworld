@@ -9,17 +9,12 @@ function isGemini3Plus(model: string): boolean {
   return /gemini-(?:[3-9]|[1-9]\d)/i.test(model);
 }
 
-/** Official replacement when Google aliases a retired id onto a slower default. */
+/** The id in the request URL. Blank becomes the default; a saved id is not rewritten.
+ *  Google may still route a retired id such as gemini-3.5-flash server-side, but
+ *  that is their alias — we send the model the user chose, same as 1.4.4. */
 export function resolveGeminiModel(model: string | undefined): string {
   const raw = (model || '').trim();
-  const m = raw || 'gemini-3.5-flash-lite';
-  // Oct 2026: gemini-3.5-flash is deprecated and silently routed to gemini-3.6-flash,
-  // whose default thinking level is `medium`. Calling the retired id lets that
-  // redirect drop or ignore the caller's thinkingConfig. Hit 3.6 directly and
-  // pin the level ourselves. 3.7-flash is the same story → 3.8-flash.
-  if (/^gemini-3\.5-flash$/i.test(m)) return 'gemini-3.6-flash';
-  if (/^gemini-3\.7-flash$/i.test(m)) return 'gemini-3.8-flash';
-  return m;
+  return raw || 'gemini-3.5-flash-lite';
 }
 
 /**
@@ -37,15 +32,12 @@ export function geminiThinking(model: string): { thinkingLevel: string; includeT
   return undefined;
 }
 
-/** Cap output (thinking tokens count toward it on current Gemini models) so a
- *  translation can't sit in a 64k default budget before the first answer token. */
-export function geminiOutputCap(sentences: string[]): number {
-  const chars = sentences.reduce((n, s) => n + s.length, 0);
-  return Math.min(4096, Math.max(384, chars * 3 + 128));
-}
+/** Hang net only. A reply that is merely ~10s slower must still be Gemini's
+ *  text — falling back to the free engine any sooner would change the wording. */
+export const GEMINI_TIMEOUT_MS = 45_000;
 
-export function geminiTimeoutMs(sentenceCount: number): number {
-  return Math.min(18_000, 5_000 + Math.max(1, sentenceCount) * 600);
+export function geminiTimeoutMs(_sentenceCount: number): number {
+  return GEMINI_TIMEOUT_MS;
 }
 
 /** Answer text only. Thought parts (`thought: true`) are not the translation;
@@ -62,31 +54,21 @@ export function asGeminiError(err: unknown, aborted: boolean): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
 
-const RESPONSE_SCHEMA = {
-  type: 'object',
-  properties: { t: { type: 'array', items: { type: 'string' } } },
-  required: ['t'],
-};
-
 export const geminiProvider: TranslationProvider = {
   id: 'gemini',
   async translate(input: TranslateInput, settings: Settings): Promise<string[]> {
     const key = settings.apiKeys.gemini?.trim();
     if (!key) throw new Error('NO_API_KEY:gemini');
-    const requested = (settings.model || '').trim();
-    const model = resolveGeminiModel(requested);
-    if (model !== (requested || 'gemini-3.5-flash-lite')) {
-      console.log(`[IBT] gemini model ${requested || '(default)'} → ${model}`);
-    }
+    const model = resolveGeminiModel(settings.model);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
     const thinking = geminiThinking(model);
-    const cap = geminiOutputCap(input.sentences);
     const timeoutMs = geminiTimeoutMs(input.sentences.length);
 
+    // No maxOutputTokens: thinking tokens count against that cap, and a tight
+    // cap cuts off the translation of a long batch. 1.4.4 didn't send one.
+    // No responseSchema: that switches the model into a different JSON mode.
     const generationConfig: Record<string, unknown> = {
-      maxOutputTokens: cap,
       responseMimeType: 'application/json',
-      responseSchema: RESPONSE_SCHEMA,
     };
     // temperature/topP/topK are ignored since Gemini 3.6 / 3.5 Flash-Lite and
     // upcoming models reject them with 400. Keeping 0.2 only for older ids,
@@ -130,6 +112,9 @@ export const geminiProvider: TranslationProvider = {
         }
       }
     } catch (err) {
+      if (ctrl.signal.aborted) {
+        console.warn(`[IBT] gemini timeout ${timeoutMs}ms model=${model} sent=${input.sentences.length} → free engine`);
+      }
       throw asGeminiError(err, ctrl.signal.aborted);
     } finally {
       clearTimeout(timer);
@@ -142,7 +127,7 @@ export const geminiProvider: TranslationProvider = {
     {
       const u = (data as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } })?.usageMetadata ?? {};
       const think = u.thoughtsTokenCount ?? 0;
-      console.log(`[IBT] gemini ${Math.round(performance.now() - t0)}ms model=${model} sent=${input.sentences.length} in=${u.promptTokenCount} out=${u.candidatesTokenCount} think=${think} cap=${cap}`);
+      console.log(`[IBT] gemini ${Math.round(performance.now() - t0)}ms model=${model} sent=${input.sentences.length} in=${u.promptTokenCount} out=${u.candidatesTokenCount} think=${think}`);
       if (think > 0) console.warn(`[IBT] gemini spent ${think} thinking tokens (level was ${thinking && 'thinkingLevel' in thinking ? thinking.thinkingLevel : 'budget'})`);
     }
     const content = geminiAnswerText(data);

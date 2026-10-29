@@ -22,7 +22,7 @@ globalThis.fetch = async (url, init) => {
   };
 };
 
-const { geminiProvider, geminiAnswerText, resolveGeminiModel, geminiThinking, geminiOutputCap } = await import('/tmp/gemini-thinking.test.mjs');
+const { geminiProvider, geminiAnswerText, resolveGeminiModel, geminiThinking, geminiTimeoutMs } = await import('/tmp/gemini-thinking.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -51,8 +51,11 @@ check('default model sends thinkingLevel minimal',
   body.generationConfig?.thinkingConfig?.thinkingLevel === 'minimal');
 check('default model does not send temperature', body.generationConfig?.temperature === undefined);
 check('store opt-out', body.store === false);
-check('output cap set', typeof body.generationConfig?.maxOutputTokens === 'number');
+check('no maxOutputTokens (must not truncate)', body.generationConfig?.maxOutputTokens === undefined);
+check('no responseSchema', body.generationConfig?.responseSchema === undefined);
 check('includeThoughts false', body.generationConfig?.thinkingConfig?.includeThoughts === false);
+check('saved gemini-3.5-flash is not rewritten', resolveGeminiModel('gemini-3.5-flash') === 'gemini-3.5-flash');
+check('hang timeout is 45s', geminiTimeoutMs(10) === 45000);
 
 // Flash-Lite and 3.6 accept minimal. 3.8 and Gemini 4 reject it — send low.
 for (const m of ['gemini-3.5-flash-lite', 'gemini-3.6-flash']) {
@@ -67,12 +70,13 @@ for (const m of ['gemini-3.8-flash', 'gemini-4-argon']) {
   check(`${m} has no thinkingBudget`, body.generationConfig?.thinkingConfig?.thinkingBudget === undefined);
 }
 
-// Retired alias is called as 3.6 directly, still at minimal (not the medium default).
+// The id the user saved is the id in the URL, still at minimal. Google may
+// alias gemini-3.5-flash server-side; we do not rewrite it.
 body = await lastBodyFor('gemini-3.5-flash');
-check('retired 3.5-flash URL is 3.6', /models\/gemini-3\.6-flash:/.test(bodies[bodies.length - 1].url));
-check('retired 3.5-flash still minimal', body.generationConfig?.thinkingConfig?.thinkingLevel === 'minimal');
-check('resolveGeminiModel', resolveGeminiModel('gemini-3.5-flash') === 'gemini-3.6-flash');
-check('resolve 3.7 → 3.8', resolveGeminiModel('gemini-3.7-flash') === 'gemini-3.8-flash');
+check('gemini-3.5-flash URL is unchanged', /models\/gemini-3\.5-flash:/.test(bodies[bodies.length - 1].url));
+check('gemini-3.5-flash still minimal', body.generationConfig?.thinkingConfig?.thinkingLevel === 'minimal');
+check('gemini-3.5-flash omits temperature', body.generationConfig?.temperature === undefined);
+check('gemini-3.5-flash omits maxOutputTokens', body.generationConfig?.maxOutputTokens === undefined);
 check('lite is not remapped', resolveGeminiModel('gemini-3.5-flash-lite') === 'gemini-3.5-flash-lite');
 
 // 2.5 can disable thinking with a budget. 2.0 has no thinking API.
@@ -89,8 +93,8 @@ body = await lastBodyFor('gemini-3.5-flash-lite');
 check('no thinkingBudget alongside thinkingLevel',
   body.generationConfig?.thinkingConfig?.thinkingBudget === undefined);
 check('responseMimeType preserved', body.generationConfig?.responseMimeType === 'application/json');
-check('output cap grows with input but stays bounded', geminiOutputCap(['a'.repeat(5000)]) === 4096);
 check('thinking helper', geminiThinking('gemini-3.5-flash-lite')?.thinkingLevel === 'minimal');
+check('3.5-flash helper is minimal', geminiThinking('gemini-3.5-flash')?.thinkingLevel === 'minimal');
 
 // Thought parts must not be parsed as the translation.
 check('thought parts dropped', geminiAnswerText({
