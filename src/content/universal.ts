@@ -3,6 +3,8 @@ import { chineseShare, isAlreadyTargetLang, stripNoise } from '../core/segmentat
 import { renderTranslationAfter } from './engine';
 import { collectUnits } from './blocks';
 import { matchSiteRule } from './selectors';
+import { findPlacedBlock, unanchor } from './place';
+import { ensureIbtCss } from './page-css';
 
 const UNI_ATTR = 'data-ibt-uni'; // cheap hint we've handled a source (teardown aid)
 
@@ -72,6 +74,7 @@ export class UniversalTranslator {
   activate(): void {
     if (this.active) return;
     this.active = true;
+    ensureIbtCss();
     toast('整頁雙語已開啟（再按 Alt+A 關閉）'); // immediate feedback — scan() can
     this.scan(); // initial full pass (dirty empty → whole document.body)      // take a moment on heavy pages
     this.mo = new MutationObserver((records) => {
@@ -102,7 +105,7 @@ export class UniversalTranslator {
     this.io?.disconnect(); this.io = undefined;
     if (this.rescan) { clearTimeout(this.rescan); this.rescan = undefined; }
     this.dirty.clear();
-    this.blocks.forEach((b) => b.remove());
+    this.blocks.forEach((b) => { unanchor(b); b.remove(); });
     this.blocks.clear();
     this.sources.forEach((s) => s.removeAttribute(UNI_ATTR));
     this.sources.clear();
@@ -154,8 +157,8 @@ export class UniversalTranslator {
         // Locate any block we already placed for this source — by identity first,
         // then by a short forward sibling scan (survives React swapping the node).
         let existing = this.blockBySource.get(node) ?? null;
-        if (existing && !existing.isConnected) { this.blocks.delete(existing); existing = null; }
-        if (!existing) existing = this.findAdjacentBlock(node);
+        if (existing && !existing.isConnected) { unanchor(existing); this.blocks.delete(existing); existing = null; }
+        if (!existing) existing = findPlacedBlock(node);
 
         if (existing) {
           if (existing.dataset.ibtSig === sig) {        // already translated, unchanged
@@ -163,6 +166,7 @@ export class UniversalTranslator {
             this.processed.add(node); this.fp.set(node, sig);
             continue;
           }
+          unanchor(existing);
           existing.remove();                            // text changed → drop the stale block
           this.blocks.delete(existing);
           this.blockBySource.delete(node);
@@ -189,17 +193,6 @@ export class UniversalTranslator {
     }
   }
 
-  // First .ibt-block sitting just after `node`, tolerating a few framework-injected
-  // siblings (engagement bars, spacers) between the source and our block.
-  private findAdjacentBlock(node: HTMLElement): HTMLElement | null {
-    let sib = node.nextElementSibling as HTMLElement | null;
-    for (let hops = 0; sib && hops < 4; hops++) {
-      if (sib.classList.contains('ibt-block') && sib.dataset.ibtOut === '1') return sib;
-      sib = sib.nextElementSibling as HTMLElement | null;
-    }
-    return null;
-  }
-
   private ensureIO(): IntersectionObserver {
     if (this.io) return this.io;
     this.io = new IntersectionObserver((entries) => {
@@ -217,10 +210,10 @@ export class UniversalTranslator {
     // Drop any prior block for this source before inserting (handles a re-render
     // whose text changed — no stale block left behind, no DOM leak).
     const old = this.blockBySource.get(node);
-    if (old) { old.remove(); this.blocks.delete(old); }
+    if (old) { unanchor(old); old.remove(); this.blocks.delete(old); }
     const text = (node as any).__ibtText || (node.textContent || '').replace(/\s+/g, ' ').trim();
     const sig = (node as any).__ibtSig || fingerprint(text);
-    const block = renderTranslationAfter(node, text, { sig });
+    const block = renderTranslationAfter(node, text, { sig, adaptive: true });
     if (block) {
       block.classList.add('ibt-uni');
       // Match the translation's size to the source element, so a big <h1> heading's
@@ -228,12 +221,15 @@ export class UniversalTranslator {
       // it can't inherit the heading's font-size on its own). Only ever grow: never
       // shrink below the default body size — a leaf block's computed font-size can be
       // smaller than the visible text (e.g. X's last-paragraph wrapper), which made
-      // translations render tiny.
+      // translations render tiny. Inline !important so a host `div { font-size:0 }`
+      // can't squash the line.
       const srcFs = parseFloat(getComputedStyle(node).fontSize) || 0;
       const bodyFs = parseFloat(getComputedStyle(document.body).fontSize) || 16;
-      if (srcFs > bodyFs * 1.05) {
-        block.style.setProperty('--ibt-src-fs', getComputedStyle(node).fontSize);
-      }
+      const size = srcFs > bodyFs * 1.05
+        ? `calc(${getComputedStyle(node).fontSize} * var(--ibt-font-scale, 1))`
+        : 'calc(0.98rem * var(--ibt-font-scale, 1))';
+      if (srcFs > bodyFs * 1.05) block.style.setProperty('--ibt-src-fs', getComputedStyle(node).fontSize);
+      block.style.setProperty('font-size', size, 'important');
       this.blocks.add(block);
       this.blockBySource.set(node, block);
     }

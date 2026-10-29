@@ -35,8 +35,9 @@ export interface BatcherDeps {
   pace: () => Promise<void>;
   /** Run the provider call through the concurrency queue. */
   run: <T>(fn: () => Promise<T>) => Promise<T>;
-  /** Quota/rate-limit failure: translate the batch another way, or rethrow. */
-  onBatchFallback: (items: BatchRequest[], sentences: string[][]) => Promise<AlignedPair[][]>;
+  /** Quota, unusable output, or timeout: translate the batch another way, or rethrow.
+   *  `timeout` should not tighten the pacing penalty — the model was slow, not rate-limited. */
+  onBatchFallback: (items: BatchRequest[], sentences: string[][], reason: 'quota' | 'unusable' | 'timeout') => Promise<AlignedPair[][]>;
 }
 
 export function isQuotaError(err: unknown): boolean {
@@ -50,6 +51,13 @@ export function isQuotaError(err: unknown): boolean {
 export function isUnusableResponse(err: unknown): boolean {
   const msg = String((err as { message?: unknown })?.message ?? err);
   return /could not parse translations|empty response|no translations returned/i.test(msg);
+}
+
+/** Our own abort (Gemini timeout). A generic "network timeout" is NOT this —
+ *  only the explicit error the Gemini provider throws when its deadline fires. */
+export function isTimeoutError(err: unknown): boolean {
+  const msg = String((err as { message?: unknown })?.message ?? err);
+  return /^Gemini timeout\b/.test(msg);
 }
 
 export class LlmBatcher {
@@ -135,13 +143,15 @@ export class LlmBatcher {
         it.resolve(it.sentences.map((o, k) => ({ o, t: slice[k] ?? '' })));
       });
     } catch (err) {
-      if (isQuotaError(err) || isUnusableResponse(err)) {
-        // Free-tier minute quota exhausted mid-thread, or the LLM returned an
-        // unusable response: don't leave the rest of the page on manual retry
-        // buttons — let the host finish the batch another way (free engine).
+      if (isQuotaError(err) || isUnusableResponse(err) || isTimeoutError(err)) {
+        // Free-tier minute quota exhausted mid-thread, the LLM returned an
+        // unusable response, or Gemini blew its deadline: don't leave the rest
+        // of the page on manual retry buttons — let the host finish the batch
+        // another way (free engine).
+        const reason = isTimeoutError(err) ? 'timeout' : isQuotaError(err) ? 'quota' : 'unusable';
         try {
           const results = await this.deps.onBatchFallback(
-            items.map((it) => it.req), items.map((it) => it.sentences));
+            items.map((it) => it.req), items.map((it) => it.sentences), reason);
           items.forEach((it, i) => it.resolve(results[i] ?? []));
         } catch (fallbackErr) {
           for (const it of items) it.reject(fallbackErr);

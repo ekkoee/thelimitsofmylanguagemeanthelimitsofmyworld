@@ -34,6 +34,16 @@
 
 ## [Unreleased]
 
+## [1.4.5] — 2026-10-29
+### 修正 Fixed
+- **其他網頁譯文跑位**：Alt+A 在非 X／Reddit／YouTube 的頁面從來沒有把 `bilingual.css` 注入進去，譯文 `div` 直接吃宿主的 flex／grid／absolute 規則。另外譯文一回來就把 `className` 設回 `ibt-block`，`ibt-uni`（強制整行寬）在「翻譯中…」之後就沒了。現在樣式一定會注入；排版用 inline `!important` 鎖住；譯文放進 shadow root，宿主的 `div div { float; width }` 改不到內文。橫向不換行的 flex、grid 父層改插在原文裡面；絕對定位的字幕／播放器疊層改跟著作文框走（捲動、縮放、全螢幕都重算），不再掉到文件流的別處。
+- **YouTube 字幕歪掉**：電影模式以前用播放器的 `bottom: 8%`，影片有黑邊、控制列展開、劇院模式或全螢幕時，字幕對的是播放器而不是畫面。現在每一幀對齊 `<video>` 的實際範圍，並避開控制列。已安裝的 1.4.4（原始碼庫沒有這版）把中英兩行收成同一個底框，這版一併帶回。
+- **Gemini 變慢**：`gemini-3.5-flash` 已在 2026-10-08 淘汰，請求會被轉去 `gemini-3.6-flash`（預設思考 `medium`）。`temperature` 從 3.5 Flash-Lite／3.6 起被忽略，之後的模型帶這個欄位會 400。思考 token 又算進預設最高 6 萬的輸出額度，翻譯會先想很久。現在淘汰的 id 改打仍支援 `minimal` 的模型並明確送出最低思考等級（3.8／Gemini 4 不接受 `minimal`，改 `low`）；拿掉已淘汰的 temperature；限制輸出 token；`store: false`；略過 thought 片段。超過時限就改走免費 Google（再不行換 Microsoft），並在 service worker 印 `[IBT] gemini … think=` 方便確認。
+
+## [1.4.4] —（已安裝的打包檔，未進 git）
+### 改進 Changed
+- YouTube 電影模式字幕改成單一底框（中英同一塊），中文預設白色。此變更只存在於使用者安裝的 1.4.4 建置，1.4.5 起回到原始碼。
+
 ## [1.3.21] - 2026-10-10
 
 ### 改善 Improved

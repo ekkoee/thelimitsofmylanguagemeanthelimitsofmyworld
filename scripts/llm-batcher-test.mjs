@@ -6,7 +6,7 @@ execSync(
   'npx esbuild src/core/llm-batcher.ts --bundle --platform=node --format=esm --outfile=/tmp/llm-batcher.test.mjs --log-level=error',
   { cwd: new URL('..', import.meta.url).pathname, stdio: 'inherit' },
 );
-const { LlmBatcher, isQuotaError } = await import('/tmp/llm-batcher.test.mjs');
+const { LlmBatcher, isQuotaError, isTimeoutError } = await import('/tmp/llm-batcher.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -21,6 +21,9 @@ check('RESOURCE_EXHAUSTED detected', isQuotaError(new Error('RESOURCE_EXHAUSTED'
 check('rate limit text detected', isQuotaError(new Error('Rate limit reached')));
 check('bad key NOT quota', !isQuotaError(new Error('NO_API_KEY: set your Gemini key')));
 check('generic error NOT quota', !isQuotaError(new Error('network timeout')));
+check('Gemini timeout is not a quota error', !isQuotaError(new Error('Gemini timeout')));
+check('Gemini timeout detected', isTimeoutError(new Error('Gemini timeout')));
+check('network timeout is not our deadline', !isTimeoutError(new Error('network timeout')));
 
 function makeSettings() {
   return {
@@ -127,6 +130,27 @@ function makeProvider(log) {
   const badProvider = { id: 'gemini', translate: async () => { throw new Error('Could not parse translations from provider response'); } };
   const results = await batcher.submit({ text: 'Hello.', settings, provider: badProvider, mode: 'prose' });
   check('parse error → fallback invoked', results[0].t === 'FREE:Hello.');
+}
+
+// --- Gemini deadline → fallback, and the reason is timeout (no quota penalty) ---
+{
+  let reason = '';
+  const batcher = new LlmBatcher(
+    {
+      pace: async () => {},
+      run: (fn) => fn(),
+      onBatchFallback: async (reqs, _sentences, why) => {
+        reason = why;
+        return reqs.map((r) => [{ o: r.text, t: 'FREE:' + r.text }]);
+      },
+    },
+    { windowMs: 30 },
+  );
+  const settings = makeSettings();
+  const badProvider = { id: 'gemini', translate: async () => { throw new Error('Gemini timeout'); } };
+  const results = await batcher.submit({ text: 'Hello.', settings, provider: badProvider, mode: 'subtitle' });
+  check('timeout → fallback', results[0].t === 'FREE:Hello.');
+  check('timeout reason is timeout', reason === 'timeout');
 }
 
 // --- empty text resolves immediately, no provider call ---

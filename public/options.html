@@ -33,7 +33,7 @@
           <label for="model">模型</label>
           <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
         </div>
-        <small class="hint">預設 <b>gemini-3.5-flash-lite</b>（速度快、免費額度較高），一般不用改，只有 Google 汰換模型時才需要換。實際額度以 <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener">Google 官方額度說明</a>為準。</small>
+        <small class="hint">預設 <b>gemini-3.5-flash-lite</b>（速度快、免費額度較高），一般不用改，只有 Google 汰換模型時才需要換。翻譯會把思考深度壓到模型允許的最低（Flash-Lite 是 minimal），避免先推理再吐譯文。已淘汰的 <b>gemini-3.5-flash</b> 會自動改送 gemini-3.6-flash 並同樣壓低思考。太久沒回應會改走免費引擎。實際額度以 <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener">Google 官方額度說明</a>為準。</small>
       </div>
     </fieldset>
 

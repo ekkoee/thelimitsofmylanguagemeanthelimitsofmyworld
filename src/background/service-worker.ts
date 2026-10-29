@@ -6,7 +6,7 @@ import { getProvider, TranslationProvider } from '../providers/index';
 import { segment } from '../core/segmentation';
 import { findTermMatches, lookupGlossary, TermMatch } from '../core/glossary';
 import { toTraditional } from '../core/st2t';
-import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
+import { LlmBatcher, isQuotaError, isTimeoutError, isUnusableResponse } from '../core/llm-batcher';
 import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 
@@ -66,7 +66,7 @@ const llmBatcher = new LlmBatcher({
   // NOTE: start from the FREE engine explicitly. req.settings.provider is the
   // LLM that just failed (e.g. gemini) — withFreeFallback would otherwise retry
   // the same exhausted LLM instead of falling back (it only Google→Microsoft).
-  onBatchFallback: (reqs) => (penalizeLLM(), Promise.all(reqs.map((req) => queue.run(async () => {
+  onBatchFallback: (reqs, _sentences, reason) => (reason === 'timeout' ? console.warn('[IBT] gemini timeout → free engine') : penalizeLLM(), Promise.all(reqs.map((req) => queue.run(async () => {
     const freeSettings = { ...req.settings, provider: 'google' as const };
     const pairs = await withFreeFallback(freeSettings, async (p) => {
       const raw = await translateWith(p, paraphraseForMT(req.text), req.settings, {
@@ -509,8 +509,8 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
       // LLM quota (429) or an unusable response: don't leave the video without subtitles.
       // Finish this batch on the free engine, cached under the free engine's own keys so its
       // lower-quality text is never served later as if it were the LLM's.
-      if (!isQuotaError(err) && !isUnusableResponse(err)) throw err;
-      penalizeLLM();
+      if (!isQuotaError(err) && !isUnusableResponse(err) && !isTimeoutError(err)) throw err;
+      if (!isTimeoutError(err)) penalizeLLM();
       console.warn('[IBT] subtitle batch fell back to the free engine:', String((err as Error)?.message ?? err).slice(0, 80));
       const freeSettings = { ...settings, provider: 'google' as const, model: '' };
       const freeTarget = cacheTarget(freeSettings);

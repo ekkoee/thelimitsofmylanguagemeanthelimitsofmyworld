@@ -3,6 +3,7 @@ import { SELECTORS, queryFirst } from './selectors';
 import { onUrlChange } from '../utils/observer';
 import { el } from '../utils/dom';
 import { extensionAlive, isContextGoneError, sendMessage } from '../utils/runtime';
+import { Rect, youtubeCaptionOffset } from './layout';
 
 const ROOT_FLAG = 'data-ibt-yt';
 const SETTLE_MS = 180;
@@ -290,6 +291,7 @@ class TrackCaptions {
   private lastAhead = 0;
   private cooldownUntil = 0;
   private warned = false;
+  private placed = '';
 
   constructor(getSettings: () => Settings, private player: HTMLElement, private cues: Cue[]) {
     this.settings = getSettings();
@@ -313,6 +315,8 @@ class TrackCaptions {
 
     const v = this.video();
     if (!v) return;
+    if (!this.overlay?.isConnected) this.ensureOverlay();
+    this.placeOverlay();
     const ms = v.currentTime * 1000;
     const idx = this.findCue(ms);
     this.ensureAhead(idx, ms);
@@ -407,14 +411,62 @@ class TrackCaptions {
 
   private ensureOverlay(): void {
     if (this.overlay && this.overlay.isConnected) return;
-    if (getComputedStyle(this.player).position === 'static') this.player.style.position = 'relative';
+    if (getComputedStyle(this.player).position === 'static') {
+      this.player.style.setProperty('position', 'relative', 'important');
+    }
     this.overlay = el('div', 'ibt-yt-overlay');
     this.nativeFont = undefined;
+    this.placed = '';
     this.zhEl = el('div', 'ibt-yt-zh');
     this.enEl = el('div', 'ibt-yt-en');
     this.overlay.append(this.zhEl, this.enEl); // Chinese on top
     this.overlay.style.display = 'none';
     this.player.appendChild(this.overlay);
+    this.placeOverlay();
+  }
+
+  // Glue the caption to the video picture, not the player box. A fixed `bottom: 8%`
+  // sits in the letterbox (or under the control bar) whenever the video doesn't
+  // fill the player — fullscreen, theater mode, vertical video, window resize.
+  private placeOverlay(): void {
+    const overlay = this.overlay;
+    if (!overlay) return;
+    const video = this.video();
+    const set = (k: string, v: string) => overlay.style.setProperty(k, v, 'important');
+    const blur = document.documentElement.getAttribute('data-ibt-style') === 'blur';
+    if (!video) return;
+    const vr = video.getBoundingClientRect();
+    const pr = this.player.getBoundingClientRect();
+    if (vr.width < 2 || vr.height < 2 || pr.width < 2) return;
+    const controls = this.player.querySelector('.ytp-chrome-bottom') as HTMLElement | null;
+    let controlsBox: { top: number; height: number; opacity: number } | null = null;
+    if (controls) {
+      const cr = controls.getBoundingClientRect();
+      controlsBox = {
+        top: cr.top,
+        height: cr.height,
+        opacity: parseFloat(getComputedStyle(controls).opacity || '1') || 0,
+      };
+    }
+    const toRect = (r: DOMRect): Rect => ({
+      left: r.left, top: r.top, width: r.width, height: r.height, bottom: r.bottom, right: r.right,
+    });
+    const box = youtubeCaptionOffset(toRect(vr), toRect(pr), controlsBox);
+    const sig = `${box.center}|${box.bottom}|${box.maxWidth}|${blur ? 1 : 0}`;
+    if (sig === this.placed) return;
+    this.placed = sig;
+    set('position', 'absolute');
+    set('margin', '0');
+    set('right', 'auto');
+    set('top', 'auto');
+    set('box-sizing', 'border-box');
+    set('z-index', '60');
+    set('pointer-events', blur ? 'auto' : 'none');
+    set('left', `${box.center}px`);
+    set('bottom', `${box.bottom}px`);
+    set('width', 'fit-content');
+    set('max-width', `${box.maxWidth}px`);
+    set('transform', 'translateX(-50%)');
   }
 
   private applyFont(): void {
@@ -539,7 +591,27 @@ class DomCaptions {
     return (tb?.parentElement as HTMLElement) || win;
   }
   private ensureLine(win: HTMLElement): void {
-    if (!this.lineEl) { this.lineEl = el('div', 'ibt-yt-line'); this.spanEl = el('span'); this.lineEl.appendChild(this.spanEl); }
+    if (!this.lineEl) {
+      this.lineEl = el('div', 'ibt-yt-line');
+      this.spanEl = el('span');
+      this.lineEl.appendChild(this.spanEl);
+      // YouTube sizes the caption window to the English line and absolutely
+      // positions it. A host rule or our own width:100%+margins used to shift
+      // the Chinese line off that window. Lock it to the window's box.
+      const set = (k: string, v: string) => this.lineEl!.style.setProperty(k, v, 'important');
+      set('display', 'block');
+      set('position', 'static');
+      set('width', 'auto');
+      set('max-width', '100%');
+      set('margin', '2px 0 0');
+      set('float', 'none');
+      set('clear', 'both');
+      set('left', 'auto');
+      set('right', 'auto');
+      set('top', 'auto');
+      set('transform', 'none');
+      set('text-align', 'center');
+    }
     const host = this.host(win);
     if (this.lineEl.isConnected && this.lineEl.parentElement === host) return;
     const tb = win.querySelector('.captions-text') as HTMLElement | null;

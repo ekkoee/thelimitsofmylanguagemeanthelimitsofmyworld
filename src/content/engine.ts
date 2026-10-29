@@ -2,6 +2,7 @@ import { AlignedPair, Settings, TranslateResponse } from '../core/types';
 import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
 import { el, isProcessed, markProcessed } from '../utils/dom';
 import { sendMessage, isContextGoneError } from '../utils/runtime';
+import { findPlacedBlock, placeBlock, shadowBody, unanchor } from './place';
 
 export interface TextUnit { source: HTMLElement; text: string; }
 export interface SiteAdapter { id: string; collect(): TextUnit[]; }
@@ -15,16 +16,9 @@ function sigOf(text: string): string {
   return `${s.length}|${s.slice(0, 24)}|${s.slice(-12)}`;
 }
 
-// First .ibt-block sitting just after `anchor` (one of OUR insertions),
-// tolerating a few framework-injected siblings in between (copied from
-// universal.ts findAdjacentBlock).
+// Inside the source, just after it, or a fixed overlay glued to it.
 function findAdjacentBlock(anchor: HTMLElement): HTMLElement | null {
-  let sib = anchor.nextElementSibling as HTMLElement | null;
-  for (let hops = 0; sib && hops < 4; hops++) {
-    if (sib.classList.contains('ibt-block') && sib.dataset.ibtOut === '1') return sib;
-    sib = sib.nextElementSibling as HTMLElement | null;
-  }
-  return null;
+  return findPlacedBlock(anchor);
 }
 
 // POST-scan cleanup. Reddit (shreddit) re-renders asynchronously: when a second
@@ -65,29 +59,40 @@ async function translateBlock(text: string): Promise<AlignedPair[]> {
   return resp.pairs || [];
 }
 
+// Never assign `className` — that wiped `ibt-uni` the moment a translation
+// arrived, so the full-width / anti-flex rules only applied during "翻譯中…".
+function setPhase(block: HTMLElement, phase: 'loading' | 'ready' | 'error'): void {
+  block.classList.add('ibt-block');
+  block.classList.toggle('ibt-loading', phase === 'loading');
+  block.classList.toggle('ibt-error', phase === 'error');
+}
+
 function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
-  block.className = 'ibt-block';
-  block.textContent = '';
+  setPhase(block, 'ready');
+  const body = shadowBody(block);
+  body.textContent = '';
   // Our block holds ONLY the translation. The original stays as the page's own
   // text (rich: links/mentions/media intact); the 3-state view shows/hides that
   // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
   for (const p of pairs) {
     if (isPureUrl(p.o) || !hasTranslatableText(p.o)) continue;   // just a URL / @mention → no useful translation
-    block.appendChild(el('div', 'ibt-trans', p.t));
+    body.appendChild(el('div', 'ibt-trans', p.t));
   }
 }
 
 // Shown when the extension context is gone (reload/update): a refresh reloads
 // the fresh content script and translation resumes.
 function showReloadHint(block: HTMLElement): void {
-  block.className = 'ibt-block';
-  block.textContent = '';
-  block.appendChild(el('span', 'ibt-error-msg', '擴充功能已更新，請重新整理此頁面以繼續翻譯。'));
+  setPhase(block, 'ready');
+  const body = shadowBody(block);
+  body.textContent = '';
+  body.appendChild(el('span', 'ibt-error-msg', '擴充功能已更新，請重新整理此頁面以繼續翻譯。'));
 }
 
 function showError(block: HTMLElement, message: string, retry: () => void): void {
-  block.className = 'ibt-block ibt-error';
-  block.textContent = '';
+  setPhase(block, 'error');
+  const body = shadowBody(block);
+  body.textContent = '';
   // 429 = rate/quota limit: retries with backoff already happened inside the
   // provider, so this only shows when the quota is genuinely exhausted.
   const isQuota = /(^|\W)429(\W|$)|quota|rate.?limit/i.test(message);
@@ -96,10 +101,10 @@ function showError(block: HTMLElement, message: string, retry: () => void): void
     : isQuota
       ? '翻譯額度暫時用盡（請求太頻繁或配額已滿），已自動重試多次。請稍後按「重試」，或到選項頁切換免費引擎。'
       : `翻譯失敗：${message.replace(/\{[\s\S]*$/, '').trim().slice(0, 120) || message.slice(0, 120)}`;
-  block.appendChild(el('span', 'ibt-error-msg', friendly));
+  body.appendChild(el('span', 'ibt-error-msg', friendly));
   const btn = el('button', 'ibt-retry', '重試');
   btn.addEventListener('click', retry);
-  block.appendChild(btn);
+  body.appendChild(btn);
 }
 
 /** Insert a translation block right AFTER `anchor` (element or text node).
@@ -108,19 +113,20 @@ function showError(block: HTMLElement, message: string, retry: () => void): void
  *  swaps the source node — see universal.ts. Every block is also tagged
  *  data-ibt-out so the universal MutationObserver ignores its own insertions. */
 export function renderTranslationAfter(
-  anchor: Node, text: string, opts?: { sig?: string },
+  anchor: Node, text: string, opts?: { sig?: string; adaptive?: boolean },
 ): HTMLElement | null {
   if (!hasTranslatableText(text)) return null;
   const block = el('div', 'ibt-block ibt-loading');
   block.dataset.ibtOut = '1';
   if (opts?.sig) block.dataset.ibtSig = opts.sig;
-  block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
-  if (anchor.parentNode) anchor.parentNode.insertBefore(block, anchor.nextSibling);
+  if (opts?.adaptive) block.classList.add('ibt-uni');
   // Tag the original element so "Chinese-only" view can hide it via CSS — but
   // ONLY when our block is a true sibling of a self-contained original
   // (Reddit / universal / single-line tweets & bios). Never tag a <br>, nor any
   // container that already holds our blocks (e.g. a multi-line tweet's text box,
   // whose interleaved originals are text nodes that CSS can't hide anyway).
+  // Tag BEFORE insertion: appending inside the source would make the
+  // ".ibt-block" check see ourselves and skip the tag.
   if (anchor.nodeType === 1) {
     const elAnchor = anchor as HTMLElement;
     // Reddit's <shreddit-post> projects light-DOM children into shadow <slot>s.
@@ -130,15 +136,17 @@ export function renderTranslationAfter(
     // original is (e.g. directly under the title).
     const slot = elAnchor.getAttribute('slot');
     if (slot) block.setAttribute('slot', slot);
-    if (elAnchor.tagName !== 'BR' && !elAnchor.querySelector('.ibt-block')) {
+    if (elAnchor.tagName !== 'BR' && !elAnchor.querySelector(':scope > .ibt-block')) {
       elAnchor.classList.add('ibt-orig-src');
     }
   }
+  placeBlock(anchor, block, !!opts?.adaptive);
 
   const run = async () => {
-    block.className = 'ibt-block ibt-loading';
-    block.textContent = '';
-    block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
+    setPhase(block, 'loading');
+    const body = shadowBody(block);
+    body.textContent = '';
+    body.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
     try {
       const pairs = await translateBlock(text);
       fillPairs(block, pairs);
@@ -190,6 +198,7 @@ export class Engine {
         let b: Element | null = existing;   // text changed → remove this block + any consecutive ones
         while (b && b.classList.contains('ibt-block')) {
           const next: Element | null = b.nextElementSibling;
+          unanchor(b as HTMLElement);
           b.remove();
           b = next;
         }

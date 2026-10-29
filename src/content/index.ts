@@ -7,6 +7,7 @@ import { scanTwitter } from './twitter';
 import { redditAdapter } from './reddit';
 import { startYouTube, updateYouTubeSettings } from './youtube';
 import { startWordPopup, stopWordPopup } from './word-popup';
+import { ensureIbtCss } from './page-css';
 import { Settings } from '../core/types';
 
 // This script auto-runs on X / Reddit / YouTube (declared in the manifest). When the
@@ -24,6 +25,7 @@ import { Settings } from '../core/types';
   const site = detectSite();
   if (!site) return; // non-auto page: nothing below runs, only the word popup above
 
+  ensureIbtCss();
   applyRoot(settings);
 
   // Alt+A (or the popup button) on these auto-sites cycles the 3-state display:
