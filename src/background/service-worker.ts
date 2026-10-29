@@ -52,6 +52,16 @@ function isMetered(p: { id: string }): boolean {
 // → manual retry buttons). LlmBatcher (src/core/llm-batcher.ts) gathers
 // messages arriving within a short window and serves them with as few
 // provider.translate calls as possible, then fans results back to each caller.
+// Warm DNS/TLS to Gemini as the worker boots, in parallel with the first
+// real request. No API key on this URL.
+let geminiWarmed = false;
+function warmGemini(): void {
+  if (geminiWarmed) return;
+  geminiWarmed = true;
+  fetch('https://generativelanguage.googleapis.com/v1beta/models', { method: 'GET' }).catch(() => {});
+}
+warmGemini();
+
 const llmBatcher = new LlmBatcher({
   pace: paceLLM,
   run: (fn) => queue.run(fn),
@@ -76,7 +86,11 @@ const llmBatcher = new LlmBatcher({
     });
     return pairs;
   })))),
-}, { windowMs: 60, maxSentences: 10, maxChars: 1600 });
+// First request of a burst is tiny (about two sentences) so the on-screen
+// tweet can paint in one short Gemini call. The rest follow immediately,
+// in parallel, at the normal batch size. windowMs only coalesces tweets
+// that arrive in the same frame.
+}, { windowMs: 30, maxSentences: 8, maxChars: 1400, firstSentences: 2, firstChars: 380 });
 
 chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); });
 chrome.runtime.onStartup.addListener(() => { reconcileDblClick(); });
@@ -129,7 +143,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
   if (msg?.type === 'translate') {
-    handleTranslate(msg.text, { title: msg.title, mode: msg.mode })
+    handleTranslate(msg.text, { title: msg.title, mode: msg.mode, priority: msg.priority })
       .then((pairs) => sendResponse({ ok: true, pairs } satisfies TranslateResponse))
       .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateResponse));
     return true; // async response
@@ -151,7 +165,7 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
 
 async function handleTranslate(
   text: string,
-  opts?: { title?: string; mode?: 'prose' | 'subtitle' },
+  opts?: { title?: string; mode?: 'prose' | 'subtitle'; priority?: 'visible' | 'near' },
 ): Promise<AlignedPair[]> {
   const clean = text.trim();
   if (!clean) return [];
@@ -176,6 +190,7 @@ async function handleTranslate(
     // provider calls — far fewer requests, no per-tweet pacing delay.
     pairs = await llmBatcher.submit({
       text: clean, settings, provider, mode: llmOpts.mode, pageTitle: llmOpts.pageTitle,
+      priority: opts?.priority,
     });
   } else {
     pairs = await queue.run(() => withFreeFallback(settings, async (p) => {

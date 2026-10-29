@@ -34,6 +34,12 @@
 
 ## [Unreleased]
 
+## [1.4.6] — 2026-10-29
+### 改進 Changed
+- **X 上的 Gemini 先出畫面**：同一波推文不再合成一個大請求。畫面上的先用約兩句的小請求送出，下面的稍後再以較大批次平行送。service worker 會印 `[IBT] llm batch first`、`[IBT] llm batch done`、`[IBT] gemini …ms`，頁面主控台會印 `[IBT] first translation …ms`。
+### 修正 Fixed
+- **整頁翻譯不再翻按鈕和無障礙隱藏文字**：Watch／Fork／Star、導覽、工具提示、`.sr-only` 這類短標籤不再各插一塊帶左邊線的譯文。只翻真正的段落（文章、README、新聞內文）；短標籤直接略過，不改父層的 flex／grid。
+
 ## [1.4.5] — 2026-10-29
 ### 修正 Fixed
 - **其他網頁譯文跑位**：Alt+A 在非 X／Reddit／YouTube 的頁面從來沒有把 `bilingual.css` 注入進去，譯文 `div` 直接吃宿主的 flex／grid／absolute 規則。另外譯文一回來就把 `className` 設回 `ibt-block`，`ibt-uni`（強制整行寬）在「翻譯中…」之後就沒了。現在樣式一定會注入；排版用 inline `!important` 鎖住；譯文放進 shadow root，宿主的 `div div { float; width }` 改不到內文。橫向不換行的 flex、grid 父層改插在原文裡面；絕對定位的字幕／播放器疊層改跟著作文框走（捲動、縮放、全螢幕都重算），不再掉到文件流的別處。

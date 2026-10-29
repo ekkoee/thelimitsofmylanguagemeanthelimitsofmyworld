@@ -65,6 +65,8 @@ export interface TranslateMessage {
   text: string;
   title?: string;                // page title, sent by the content script as LLM context (prose path)
   mode?: 'prose' | 'subtitle';   // translation register; service worker treats a missing mode as 'subtitle'
+  /** visible = on screen now (tiny first batch). near = just below the fold, after that. */
+  priority?: 'visible' | 'near';
 }
 
 export interface TranslateResponse {

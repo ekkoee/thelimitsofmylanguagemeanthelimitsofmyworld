@@ -52,9 +52,24 @@ function isPureUrl(s: string): boolean {
   return /^(https?:\/\/|www\.)\S+$/i.test(t) || /^[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(t);
 }
 
-async function translateBlock(text: string): Promise<AlignedPair[]> {
+let firstSendAt = 0;
+let loggedFirstPaint = false;
+async function translateBlock(text: string, priority?: 'visible' | 'near'): Promise<AlignedPair[]> {
   // Reddit / X / universal are prose; carry the page title as background context.
-  const resp = await sendMessage<TranslateResponse>({ type: 'translate', text, title: document.title, mode: 'prose' });
+  const t0 = performance.now();
+  if (!firstSendAt) firstSendAt = t0;
+  const resp = await sendMessage<TranslateResponse>({
+    type: 'translate', text, title: document.title, mode: 'prose', priority,
+  });
+  const ms = Math.round(performance.now() - t0);
+  console.log(`[IBT] block ${ms}ms chars=${text.length} priority=${priority ?? 'visible'}`);
+  if (!loggedFirstPaint && resp?.ok) {
+    loggedFirstPaint = true;
+    const view = (window as unknown as { __ibtXView?: number }).__ibtXView;
+    const sinceSend = Math.round(performance.now() - firstSendAt);
+    const sinceView = view ? Math.round(performance.now() - view) : sinceSend;
+    console.log(`[IBT] first translation ${sinceView}ms (request ${sinceSend}ms)`);
+  }
   if (!resp?.ok) throw new Error(resp?.error || 'translate failed');
   return resp.pairs || [];
 }
@@ -113,7 +128,7 @@ function showError(block: HTMLElement, message: string, retry: () => void): void
  *  swaps the source node — see universal.ts. Every block is also tagged
  *  data-ibt-out so the universal MutationObserver ignores its own insertions. */
 export function renderTranslationAfter(
-  anchor: Node, text: string, opts?: { sig?: string; adaptive?: boolean },
+  anchor: Node, text: string, opts?: { sig?: string; adaptive?: boolean; priority?: 'visible' | 'near' },
 ): HTMLElement | null {
   if (!hasTranslatableText(text)) return null;
   const block = el('div', 'ibt-block ibt-loading');
@@ -148,7 +163,7 @@ export function renderTranslationAfter(
     body.textContent = '';
     body.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
     try {
-      const pairs = await translateBlock(text);
+      const pairs = await translateBlock(text, opts?.priority);
       fillPairs(block, pairs);
     } catch (err: any) {
       // Extension was reloaded/updated → quiet "refresh" hint, no retry spam.
