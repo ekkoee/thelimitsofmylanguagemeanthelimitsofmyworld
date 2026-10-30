@@ -75,9 +75,45 @@ export function subtitleUris(playlist: string, baseUrl: string): string[] {
   return out;
 }
 
+/** Fixed gap between our Chinese line and X's native English caption, in px. */
+export const X_CAPTION_GAP = 6;
+
+/**
+ * Font size from the rendered video box. A portrait clip is tall and narrow,
+ * so the width drives the size; height only caps it. 310px-wide timeline
+ * players stay near X's own caption size instead of covering the face.
+ */
+export function xCaptionFontPx(width: number, height: number, fontScale = 1): number {
+  const basis = Math.min(Math.max(0, width), Math.max(0, height));
+  const px = Math.min(32, Math.max(12, basis * 0.046));
+  return Math.round(px * (fontScale || 1));
+}
+
+/**
+ * Border-box width for the caption. Hugs the unwrapped line, but never exceeds
+ * `maxWidth` (about 90% of the player) so a narrow column cannot collapse to
+ * the longest token. The extra pixel avoids a rounding wrap on a line that fits.
+ */
+export function overlayUsedWidth(textWidth: number, paddingX: number, maxWidth: number): number {
+  const cap = Math.round(Math.max(0, maxWidth));
+  if (cap <= 0) return 0;
+  const natural = Math.ceil(Math.max(0, textWidth) + Math.max(0, paddingX) + 1);
+  return Math.min(natural, cap);
+}
+
+/**
+ * CSS `bottom` for an overlay whose bottom edge sits `gap` px above `captionTop`,
+ * inside a parent whose viewport bottom is `parentBottom`.
+ * A taller native caption moves `captionTop` up, and this follows, so the gap stays put.
+ */
+export function overlayBottomAbove(parentBottom: number, captionTop: number, gap = X_CAPTION_GAP): number {
+  return parentBottom - captionTop + gap;
+}
+
 /**
  * Caption box in the player's coordinate space, centered on the video picture
  * and lifted above the control bar and any bottom letterbox.
+ * Used only when X is not showing its own caption element.
  */
 export function xCaptionBox(video: Rect, player: Rect, controlsOverlap: number): { center: number; bottom: number; maxWidth: number } {
   const letterbox = Math.max(0, player.bottom - video.bottom);

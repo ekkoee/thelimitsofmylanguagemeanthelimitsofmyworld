@@ -5,7 +5,7 @@ execSync(
   'npx esbuild src/content/x-vtt.ts --bundle --platform=node --format=esm --outfile=/tmp/x-vtt.test.mjs --log-level=error',
   { cwd: new URL('..', import.meta.url).pathname, stdio: 'inherit' },
 );
-const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox } = await import('/tmp/x-vtt.test.mjs');
+const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth } = await import('/tmp/x-vtt.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -46,6 +46,24 @@ const box = xCaptionBox(video, player, 36);
 check('centered on the picture', box.center === (100 - 80) + 320);
 check('clears letterbox and controls', box.bottom === (480 - 440) + Math.round(Math.max(8, 360 * 0.06)) + 36);
 check('width follows the video', box.maxWidth === Math.round(640 * 0.92));
+
+// 310×560 timeline player: width drives the size, not the tall portrait height.
+check('small portrait font', xCaptionFontPx(310, 560) === 14);
+check('font ignores the tall side', xCaptionFontPx(310, 560) === xCaptionFontPx(310, 2000));
+check('fullscreen font caps', xCaptionFontPx(1280, 720) === 32);
+check('tiny player floor', xCaptionFontPx(180, 320) === 12);
+check('font scale after clamp', xCaptionFontPx(310, 560, 1.5) === 21);
+
+// Chinese line sits a fixed gap above the native caption. A taller English
+// line moves captionTop up, and the CSS bottom grows by the same amount.
+check('gap above one line', overlayBottomAbove(800, 700) === 106);
+check('gap above two lines', overlayBottomAbove(800, 660) === 146);
+check('gap stays 6px', (700 - (800 - overlayBottomAbove(800, 700))) === 6);
+check('gap stays 6px when taller', (660 - (800 - overlayBottomAbove(800, 660))) === 6);
+
+const maxW = Math.round(310 * 0.9);
+check('short line hugs the text', overlayUsedWidth(180, 20, maxW) === 201);
+check('long line caps at 90%', overlayUsedWidth(400, 20, maxW) === maxW);
 
 if (failures) {
   console.error(`\n${failures} failed`);

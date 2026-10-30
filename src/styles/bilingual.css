@@ -113,18 +113,21 @@
 .ibt-x-overlay {
   position: absolute;
   left: 50%;
-  width: fit-content;
-  max-width: 92%;
+  /* Width is a definite pixel length set from the video box (see place()).
+     fit-content / max-content here shrinks to the longest token once left is
+     offset, which wraps "USDC、 USDT、" one word per line on a narrow player. */
+  width: auto;
+  max-width: 90%;
   transform: translateX(-50%);
   bottom: 12%;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 1px;
   box-sizing: border-box;
   margin: 0;
-  padding: 3px 14px;
-  border-radius: 6px;
+  padding: 2px 10px;
+  border-radius: 4px;
   background: rgba(8, 8, 8, 0.75);
   text-align: center;
   pointer-events: none;
@@ -133,13 +136,17 @@
 }
 .ibt-x-overlay > div {
   display: block;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   padding: 0;
   background: none;
   color: #fff;
-  line-height: 1.35;
+  line-height: 1.3;
   white-space: pre-wrap;
+  overflow-wrap: break-word;
   font-weight: 400;
+  box-sizing: border-box;
 }
 .ibt-x-overlay .ibt-yt-zh { color: var(--ibt-trans-color, #fff); }
 .ibt-x-native-cap { visibility: hidden !important; }

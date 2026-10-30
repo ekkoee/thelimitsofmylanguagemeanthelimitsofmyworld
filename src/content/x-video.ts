@@ -12,7 +12,7 @@
 import { Settings, TranslateBatchResponse, TranslateResponse } from '../core/types';
 import { sendMessage } from '../utils/runtime';
 import { el } from '../utils/dom';
-import { Rect, XCue, mediaIdFromUrl, xCaptionBox } from './x-vtt';
+import { Rect, XCue, X_CAPTION_GAP, mediaIdFromUrl, overlayBottomAbove, overlayUsedWidth, xCaptionBox, xCaptionFontPx } from './x-vtt';
 
 const CHUNK = 12;
 let settingsRef: () => Settings = () => ({} as Settings);
@@ -95,6 +95,8 @@ interface Bound {
   hiddenNative: HTMLElement | null;
   lastText: string;
   lastDomText: string;
+  layoutKey: string;
+  resize: ResizeObserver;
 }
 
 const bounds = new Map<HTMLVideoElement, Bound>();
@@ -108,7 +110,11 @@ function bind(video: HTMLVideoElement): void {
   const player = playerOf(video);
   if (getComputedStyle(player).position === 'static') player.style.position = 'relative';
   player.appendChild(overlay);
-  bounds.set(video, { video, overlay, zh, en, hiddenNative: null, lastText: '', lastDomText: '' });
+  const bound: Bound = { video, overlay, zh, en, hiddenNative: null, lastText: '', lastDomText: '', layoutKey: '', resize: undefined as unknown as ResizeObserver };
+  bound.resize = new ResizeObserver(() => place(bound));
+  bound.resize.observe(player);
+  bound.resize.observe(video);
+  bounds.set(video, bound);
   const id = idOf(video);
   if (id && tracks.has(id)) void translateMissing(tracks.get(id)!.map((c) => c.text));
 }
@@ -122,9 +128,15 @@ function tick(): void {
 function paint(b: Bound): void {
   const { video } = b;
   if (!video.isConnected) {
+    b.resize.disconnect();
     b.overlay.remove();
     bounds.delete(video);
     attached.delete(video);
+    return;
+  }
+  if (document.documentElement.getAttribute('data-ibt-view') === 'orig') {
+    clearNative(b);
+    hide(b);
     return;
   }
   const cues = cuesFor(video);
@@ -138,8 +150,8 @@ function paint(b: Bound): void {
     const ms = video.currentTime * 1000;
     const cue = cues.find((c) => ms >= c.start && ms < c.end) || null;
     showCue(b, cue?.text || '', translated.get(cue?.text || '') || '');
-    hideNative(b, cue?.text || '');
-    place(b);
+    syncNative(b, cue?.text || '', domNow);
+    place(b, domNow);
     return;
   }
   // No track. Fall back only while X is actually painting a caption line.
@@ -151,8 +163,8 @@ function paint(b: Bound): void {
     void translateOne(text);
   }
   showCue(b, text, translated.get(text) || '');
-  hideNative(b, text);
-  place(b);
+  syncNative(b, text, dom);
+  place(b, dom);
 }
 
 function cuesFor(video: HTMLVideoElement): XCue[] | null {
@@ -214,7 +226,7 @@ function findCaptionNode(player: HTMLElement, video: HTMLVideoElement): HTMLElem
   const vr = video.getBoundingClientRect();
   if (vr.width < 40 || vr.height < 40) return null;
   let best: HTMLElement | null = null;
-  let bestLen = 1e9;
+  let bestLen = 0;
   player.querySelectorAll('span, div, p').forEach((node) => {
     const n = node as HTMLElement;
     if (n.closest('.ibt-x-overlay, button, [role="button"], a')) return;
@@ -228,7 +240,8 @@ function findCaptionNode(player: HTMLElement, video: HTMLVideoElement): HTMLElem
     const midY = r.top + r.height / 2;
     if (midY < vr.top + vr.height * 0.5 || midY > vr.bottom + 4) return;
     if (r.left < vr.left - 12 || r.right > vr.right + 12) return;
-    if (t.length < bestLen) { best = n; bestLen = t.length; }
+    // The full caption line, not an inner word span. Width is what we anchor to.
+    if (r.width > bestLen) { best = n; bestLen = r.width; }
   });
   return best;
 }
@@ -255,11 +268,14 @@ function hideAll(): void {
   for (const [, b] of bounds) { clearNative(b); hide(b); }
 }
 
-function hideNative(b: Bound, text: string): void {
+function chineseOnly(): boolean {
+  return document.documentElement.getAttribute('data-ibt-view') === 'zh';
+}
+
+/** Bilingual mode draws English itself, so X's line is hidden. Chinese-only leaves it up. */
+function syncNative(b: Bound, text: string, node: HTMLElement | null): void {
   clearNative(b);
-  if (!text) return;
-  const node = findCaptionNode(playerOf(b.video), b.video);
-  if (!node) return;
+  if (chineseOnly() || !text || !node) return;
   const got = (node.textContent || '').replace(/\s+/g, ' ').trim();
   if (got && (got === text || text.startsWith(got.slice(0, 24)) || got.startsWith(text.slice(0, 24)))) {
     node.classList.add('ibt-x-native-cap');
@@ -272,31 +288,113 @@ function clearNative(b: Bound): void {
   b.hiddenNative = null;
 }
 
-function place(b: Bound): void {
+function place(b: Bound, native?: HTMLElement | null): void {
   const video = b.video;
   const player = playerOf(video);
   const parent = overlayParent(video, player);
-  if (b.overlay.parentElement !== parent) parent.appendChild(b.overlay);
+  if (b.overlay.parentElement !== parent) {
+    if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+    parent.appendChild(b.overlay);
+    b.resize.observe(parent);
+  }
   const fixed = document.fullscreenElement === video;
   const vr = video.getBoundingClientRect();
-  const pr = (fixed ? video : parent).getBoundingClientRect();
-  if (vr.width < 20) return;
-  const controls = controlOverlap(player, video);
-  const box = xCaptionBox(toRect(vr), toRect(fixed ? vr : pr), controls);
+  const anchor = fixed ? video : parent;
+  const pr = anchor.getBoundingClientRect();
+  if (vr.width < 20 || vr.height < 20) return;
+  // Omitted native means "look it up" (resize, fullscreen, player-mode).
+  // An explicit null means this frame has no caption.
+  let cap: HTMLElement | null = null;
+  if (native === undefined) cap = ccState(player) === false ? null : findCaptionNode(player, video);
+  else cap = native && native.isConnected ? native : null;
+  const cr = cap ? cap.getBoundingClientRect() : null;
+  const capVisible = !!cr && cr.width > 8 && cr.height > 4 && cr.bottom > vr.top && cr.top < vr.bottom + 24;
+  let bottom: number;
+  let center: number;
+  if (capVisible && cr && chineseOnly()) {
+    // Sit a fixed gap above X's English line, wherever that line currently is.
+    bottom = fixed
+      ? (window.innerHeight - cr.top + X_CAPTION_GAP)
+      : overlayBottomAbove(pr.bottom, cr.top);
+    center = (cr.left + cr.width / 2) - (fixed ? 0 : pr.left);
+  } else if (capVisible && cr) {
+    // Bilingual box replaces the native line, so its bottom matches that line.
+    bottom = fixed ? (window.innerHeight - cr.bottom) : (pr.bottom - cr.bottom);
+    center = (cr.left + cr.width / 2) - (fixed ? 0 : pr.left);
+  } else {
+    const controls = controlOverlap(player, video);
+    const ref = fixed ? toRect(vr) : toRect(pr);
+    const box = xCaptionBox(toRect(vr), ref, controls);
+    bottom = box.bottom;
+    center = fixed ? vr.left + vr.width / 2 : box.center;
+  }
+  const maxW = Math.max(80, Math.round(vr.width * 0.9));
+  const size = xCaptionFontPx(vr.width, vr.height, settingsRef().fontScale || 1);
   const s = b.overlay.style;
   s.setProperty('position', fixed ? 'fixed' : 'absolute', 'important');
-  s.setProperty('left', `${fixed ? vr.left + vr.width / 2 : box.center}px`, 'important');
-  s.setProperty('bottom', `${box.bottom}px`, 'important');
+  s.setProperty('left', `${Math.round(center)}px`, 'important');
+  s.setProperty('bottom', `${Math.round(bottom)}px`, 'important');
   s.setProperty('transform', 'translateX(-50%)', 'important');
-  s.setProperty('max-width', `${box.maxWidth}px`, 'important');
-  s.setProperty('width', 'fit-content', 'important');
   s.setProperty('margin', '0', 'important');
   s.setProperty('right', 'auto', 'important');
   s.setProperty('top', 'auto', 'important');
   s.setProperty('z-index', '5', 'important');
-  const size = Math.round(Math.min(42, Math.max(13, vr.height * 0.045)) * (settingsRef().fontScale || 1));
-  b.zh.style.fontSize = `${size}px`;
-  b.en.style.fontSize = `${size}px`;
+  s.setProperty('font-size', `${size}px`, 'important');
+  applyCaptionWidth(b, maxW, size);
+}
+
+/** Definite width from the rendered line, capped at 90% of the video. */
+function applyCaptionWidth(b: Bound, maxW: number, size: number): void {
+  if (getComputedStyle(b.overlay).display === 'none') return;
+  const view = document.documentElement.getAttribute('data-ibt-view') || '';
+  const key = `${b.zh.textContent}\n${b.en.textContent}\n${size}\n${maxW}\n${view}`;
+  if (key === b.layoutKey) return;
+  b.layoutKey = key;
+  const textW = Math.max(naturalLineWidth(b.zh, size), naturalLineWidth(b.en, size));
+  const pad = horizontalPadding(b.overlay);
+  const used = textW > 0 ? overlayUsedWidth(textW, pad, maxW) : maxW;
+  b.overlay.style.setProperty('width', `${used}px`, 'important');
+  b.overlay.style.setProperty('max-width', `${maxW}px`, 'important');
+  for (const line of [b.zh, b.en]) {
+    line.style.setProperty('width', '100%', 'important');
+    line.style.setProperty('max-width', '100%', 'important');
+    line.style.setProperty('min-width', '0', 'important');
+    line.style.setProperty('white-space', 'pre-wrap', 'important');
+    line.style.setProperty('font-size', `${size}px`, 'important');
+  }
+}
+
+function naturalLineWidth(line: HTMLElement, fontPx: number): number {
+  if (!line.textContent) return 0;
+  if (line.style.display === 'none' || getComputedStyle(line).display === 'none') return 0;
+  const body = document.body;
+  if (!body) return 0;
+  const cs = getComputedStyle(line);
+  const probe = document.createElement('div');
+  probe.textContent = line.textContent;
+  probe.style.position = 'absolute';
+  probe.style.left = '0';
+  probe.style.top = '0';
+  probe.style.visibility = 'hidden';
+  probe.style.whiteSpace = 'nowrap';
+  probe.style.width = 'auto';
+  probe.style.maxWidth = 'none';
+  probe.style.padding = '0';
+  probe.style.margin = '0';
+  probe.style.border = '0';
+  probe.style.fontSize = `${fontPx}px`;
+  probe.style.fontFamily = cs.fontFamily;
+  probe.style.fontWeight = cs.fontWeight;
+  probe.style.letterSpacing = cs.letterSpacing;
+  body.appendChild(probe);
+  const w = probe.offsetWidth;
+  probe.remove();
+  return w;
+}
+
+function horizontalPadding(node: HTMLElement): number {
+  const cs = getComputedStyle(node);
+  return (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
 }
 
 function placeAll(): void {
