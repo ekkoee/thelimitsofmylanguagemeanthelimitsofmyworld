@@ -31,6 +31,15 @@ export const SELECTORS = {
   },
 } as const;
 
+/** X paints source chips, clocks, and captions inside these. Not tweet text. */
+export const X_PLAYER_SELECTOR = '[data-testid="videoPlayer"], [data-testid="videoComponent"]';
+
+export function insideXVideo(node: Node | null | undefined): boolean {
+  if (!node) return false;
+  const el = node.nodeType === 1 ? (node as Element) : node.parentElement;
+  return !!el?.closest(X_PLAYER_SELECTOR);
+}
+
 export function queryFirst(selectors: readonly string[], root: ParentNode = document): Element[] {
   for (const sel of selectors) {
     const found = root.querySelectorAll(sel);

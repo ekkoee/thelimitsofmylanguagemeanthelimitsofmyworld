@@ -2,6 +2,7 @@ import { AlignedPair, Settings, TranslateResponse } from '../core/types';
 import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
 import { el, isProcessed, markProcessed } from '../utils/dom';
 import { sendMessage, isContextGoneError } from '../utils/runtime';
+import { insideXVideo } from './selectors';
 
 export interface TextUnit { source: HTMLElement; text: string; }
 export interface SiteAdapter { id: string; collect(): TextUnit[]; }
@@ -107,10 +108,22 @@ function showError(block: HTMLElement, message: string, retry: () => void): void
  *  can detect "this exact translation already sits here" even after the framework
  *  swaps the source node — see universal.ts. Every block is also tagged
  *  data-ibt-out so the universal MutationObserver ignores its own insertions. */
+function adjacentBlock(anchor: Node): HTMLElement | null {
+  let sib = anchor.nextSibling;
+  while (sib && sib.nodeType === 3 && !(sib.nodeValue || '').trim()) sib = sib.nextSibling;
+  if (sib && sib.nodeType === 1 && (sib as Element).classList.contains('ibt-block')) return sib as HTMLElement;
+  return null;
+}
+
 export function renderTranslationAfter(
   anchor: Node, text: string, opts?: { sig?: string },
 ): HTMLElement | null {
   if (!hasTranslatableText(text)) return null;
+  // The "From @account" chip and the rest of the player overlay are not prose.
+  if (insideXVideo(anchor)) return null;
+  // Same anchor already has our block (a second scan, or a second video node).
+  const existing = adjacentBlock(anchor);
+  if (existing) return existing;
   const block = el('div', 'ibt-block ibt-loading');
   block.dataset.ibtOut = '1';
   if (opts?.sig) block.dataset.ibtSig = opts.sig;

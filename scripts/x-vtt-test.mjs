@@ -5,7 +5,7 @@ execSync(
   'npx esbuild src/content/x-vtt.ts --bundle --platform=node --format=esm --outfile=/tmp/x-vtt.test.mjs --log-level=error',
   { cwd: new URL('..', import.meta.url).pathname, stdio: 'inherit' },
 );
-const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth } = await import('/tmp/x-vtt.test.mjs');
+const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth, isPlayerChromeText, isXCaptionText } = await import('/tmp/x-vtt.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -64,6 +64,23 @@ check('gap stays 6px when taller', (660 - (800 - overlayBottomAbove(800, 660))) 
 const maxW = Math.round(310 * 0.9);
 check('short line hugs the text', overlayUsedWidth(180, 20, maxW) === 201);
 check('long line caps at 90%', overlayUsedWidth(400, 20, maxW) === maxW);
+
+check('from-account chip', isPlayerChromeText('From AmericaAmerica'));
+check('from @handle', isPlayerChromeText('From @AmericaAmerica'));
+check('localized from chip', isPlayerChromeText('來自 AmericaAmerica'));
+check('clock', isPlayerChromeText('0:42'));
+check('clock range', isPlayerChromeText('0:42 / 3:10'));
+check('view count', isPlayerChromeText('1.2M views'));
+check('gif badge', isPlayerChromeText('GIF'));
+check('spoken line kept', !isPlayerChromeText('From day one this changed the race'));
+check('caption sentence kept', !isPlayerChromeText('such as USDC, USDT, BTC, E, BNB'));
+
+const picture = { left: 0, top: 0, width: 560, height: 315, right: 560, bottom: 315 };
+const fromChip = { left: 12, top: 260, width: 200, height: 36, right: 212, bottom: 296 };
+const centered = { left: 70, top: 250, width: 420, height: 28, right: 490, bottom: 278 };
+check('quote-tweet source is not a caption', !isXCaptionText('From AmericaAmerica', fromChip, picture));
+check('centered line is a caption', isXCaptionText('such as USDC, USDT, BTC, E, BNB', centered, picture));
+check('corner clock is not a caption', !isXCaptionText('0:42 / 3:10', { left: 430, top: 270, width: 110, height: 22, right: 540, bottom: 292 }, picture));
 
 if (failures) {
   console.error(`\n${failures} failed`);

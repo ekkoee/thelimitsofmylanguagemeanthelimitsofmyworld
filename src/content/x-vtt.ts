@@ -75,6 +75,53 @@ export function subtitleUris(playlist: string, baseUrl: string): string[] {
   return out;
 }
 
+/**
+ * Player chrome that is painted on the video but is not a caption:
+ * the "From @account" source chip, a duration, a view count, GIF/ALT badges.
+ * A spoken line that merely starts with "From" and runs past a short name is kept.
+ */
+export function isPlayerChromeText(text: string): boolean {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (!t) return true;
+  if (/^(gif|alt)$/i.test(t)) return true;
+  if (/^\d+:\d{2}(:\d{2})?(\s*\/\s*\d+:\d{2}(:\d{2})?)?$/.test(t)) return true;
+  if (/^[\d.,]+\s*[kmbt]?\s*(views?|次觀看|次观看)?$/i.test(t)) return true;
+  if (/^(play|pause|mute|unmute|fullscreen|exit fullscreen|settings|closed captions?|subtitles?|cc|replay|volume)$/i.test(t)) return true;
+  // "From AmericaAmerica", "From @name", "來自 AmericaAmerica" — a name, not a sentence.
+  // CJK has no word boundary after 來自, so that prefix is matched on its own.
+  if (/[.?!。！？]/.test(t)) return false;
+  if (/^from\b/i.test(t) || /^(?:來自|来自)(?:\s|$)/u.test(t)) {
+    const words = t.split(/\s+/).length;
+    if (words <= 4 && t.length <= 48) return true;
+  }
+  return false;
+}
+
+/**
+ * X draws captions across the middle of the picture. The source chip, the
+ * clock, and GIF/ALT badges sit in a corner and do not cross the center.
+ */
+export function isCenteredCaption(node: Rect, video: Rect): boolean {
+  if (video.width < 40 || node.width < 24 || node.height < 8) return false;
+  const videoCenter = video.left + video.width / 2;
+  const crossesCenter = node.left <= videoCenter && node.right >= videoCenter;
+  if (crossesCenter) return true;
+  const mid = node.left + node.width / 2;
+  return Math.abs(mid - videoCenter) <= Math.max(24, video.width * 0.12);
+}
+
+/** Lower-half, on-picture line that is a caption rather than player chrome. */
+export function isXCaptionText(text: string, node: Rect, video: Rect): boolean {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (t.length < 8 || t.length > 240) return false;
+  if (isPlayerChromeText(t)) return false;
+  if (node.height > video.height * 0.45) return false;
+  const midY = node.top + node.height / 2;
+  if (midY < video.top + video.height * 0.5 || midY > video.bottom + 4) return false;
+  if (node.left < video.left - 12 || node.right > video.right + 12) return false;
+  return isCenteredCaption(node, video);
+}
+
 /** Fixed gap between our Chinese line and X's native English caption, in px. */
 export const X_CAPTION_GAP = 6;
 

@@ -1,5 +1,5 @@
 import { renderTranslationAfter } from './engine';
-import { SELECTORS, queryFirst } from './selectors';
+import { SELECTORS, insideXVideo, queryFirst } from './selectors';
 import { isProcessed, markProcessed } from '../utils/dom';
 import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
 import { Settings } from '../core/types';
@@ -231,6 +231,7 @@ export function scanTwitter(s: Settings): void {
   // 1) Tweets / replies / quotes — interleave a translation after each line.
   for (const node of queryFirst(SELECTORS.x.text)) {
     const tt = node as HTMLElement;
+    if (insideXVideo(tt)) continue;
     healSplits(tt);
     // A Chinese tweet is left COMPLETELY alone — judged as a whole tweet, not per
     // paragraph, so its FTX.com / kyc / @mentions are never "translated", and its
@@ -280,7 +281,7 @@ export function scanTwitter(s: Settings): void {
   // 3) Profile bios.
   for (const node of queryFirst(SELECTORS.x.bio)) {
     const b = node as HTMLElement;
-    if (isProcessed(b)) continue;
+    if (insideXVideo(b) || isProcessed(b)) continue;
     const text = b.innerText?.trim() ?? '';
     if (!text || isAlreadyTargetLang(text, s.targetLangCode)) continue; // skip empty / already-Chinese
     markProcessed(b);
@@ -315,7 +316,7 @@ function collectArticleLeaves(root: HTMLElement): HTMLElement[] {
   // ancestor and re-translate it — that was an infinite tree-walking loop.
   const leaves = matches.filter((c) => !matches.some((o) => o !== c && c.contains(o)));
   return leaves.filter((e) => {
-    if (isProcessed(e) || e.closest(ARTICLE_SKIP)) return false;
+    if (isProcessed(e) || insideXVideo(e) || e.closest(ARTICLE_SKIP)) return false;
     const t = e.innerText?.trim() ?? '';
     return !!t && t.length >= 2;
   });

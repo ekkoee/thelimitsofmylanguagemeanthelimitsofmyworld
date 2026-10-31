@@ -12,7 +12,7 @@
 import { Settings, TranslateBatchResponse, TranslateResponse } from '../core/types';
 import { sendMessage } from '../utils/runtime';
 import { el } from '../utils/dom';
-import { Rect, XCue, X_CAPTION_GAP, mediaIdFromUrl, overlayBottomAbove, overlayUsedWidth, xCaptionBox, xCaptionFontPx } from './x-vtt';
+import { Rect, XCue, X_CAPTION_GAP, isXCaptionText, mediaIdFromUrl, overlayBottomAbove, overlayUsedWidth, xCaptionBox, xCaptionFontPx } from './x-vtt';
 
 const CHUNK = 12;
 let settingsRef: () => Settings = () => ({} as Settings);
@@ -79,6 +79,7 @@ function idOf(video: HTMLVideoElement): string {
 }
 
 function scan(): void {
+  for (const v of attached) if (!v.isConnected) attached.delete(v);
   document.querySelectorAll('video').forEach((node) => {
     const video = node as HTMLVideoElement;
     if (attached.has(video)) return;
@@ -89,6 +90,7 @@ function scan(): void {
 
 interface Bound {
   video: HTMLVideoElement;
+  player: HTMLElement;
   overlay: HTMLDivElement;
   zh: HTMLDivElement;
   en: HTMLDivElement;
@@ -102,21 +104,61 @@ interface Bound {
 const bounds = new Map<HTMLVideoElement, Bound>();
 
 function bind(video: HTMLVideoElement): void {
+  const player = playerOf(video);
+  const existing = boundFor(player);
+  if (existing) {
+    adoptVideo(existing, video);
+    keepOneOverlay(player, existing.overlay);
+    return;
+  }
+  // A box left behind by a previous injection has no live owner. Drop it so
+  // this pass attaches exactly one.
+  player.querySelectorAll('.ibt-x-overlay').forEach((n) => n.remove());
   const overlay = el('div', 'ibt-x-overlay');
   const zh = el('div', 'ibt-yt-zh');
   const en = el('div', 'ibt-yt-en');
   overlay.append(zh, en);
   overlay.style.display = 'none';
-  const player = playerOf(video);
   if (getComputedStyle(player).position === 'static') player.style.position = 'relative';
   player.appendChild(overlay);
-  const bound: Bound = { video, overlay, zh, en, hiddenNative: null, lastText: '', lastDomText: '', layoutKey: '', resize: undefined as unknown as ResizeObserver };
+  const bound: Bound = { video, player, overlay, zh, en, hiddenNative: null, lastText: '', lastDomText: '', layoutKey: '', resize: undefined as unknown as ResizeObserver };
   bound.resize = new ResizeObserver(() => place(bound));
   bound.resize.observe(player);
   bound.resize.observe(video);
   bounds.set(video, bound);
   const id = idOf(video);
   if (id && tracks.has(id)) void translateMissing(tracks.get(id)!.map((c) => c.text));
+}
+
+function boundFor(player: HTMLElement): Bound | undefined {
+  for (const b of bounds.values()) {
+    if (b.player === player || b.overlay.parentElement === player) return b;
+  }
+  return undefined;
+}
+
+/** One player, one overlay. A second <video> in the same player reuses the box. */
+function adoptVideo(b: Bound, video: HTMLVideoElement): void {
+  if (b.video === video) return;
+  const next = area(video);
+  const prev = b.video.isConnected ? area(b.video) : 0;
+  if (next < prev) return;
+  b.resize.unobserve(b.video);
+  bounds.delete(b.video);
+  b.video = video;
+  bounds.set(video, b);
+  b.resize.observe(video);
+}
+
+function area(video: HTMLVideoElement): number {
+  const r = video.getBoundingClientRect();
+  return Math.max(0, r.width) * Math.max(0, r.height);
+}
+
+function keepOneOverlay(player: HTMLElement, keep: HTMLElement): void {
+  player.querySelectorAll('.ibt-x-overlay').forEach((n) => {
+    if (n !== keep) n.remove();
+  });
 }
 
 function tick(): void {
@@ -140,13 +182,16 @@ function paint(b: Bound): void {
     return;
   }
   const cues = cuesFor(video);
-  const player = playerOf(video);
+  const player = b.player.isConnected ? b.player : playerOf(video);
+  b.player = player;
   const cc = ccState(player);
   const trackOn = textTrackOn(video);
-  const domNow = cc === false ? null : findCaptionNode(player, video);
-  // A fetched track is shown while CC is on. If we cannot see the CC button,
-  // a visible native caption (or a showing TextTrack) means the viewer turned it on.
-  if (cues && cc !== false && (cc === true || trackOn || domNow)) {
+  // CC explicitly off: nothing, even if the "From @account" chip is on screen.
+  if (cc === false) { clearNative(b); hide(b); return; }
+  const domNow = findCaptionNode(player, video);
+  // A fetched track is shown while CC is on. If the CC button is not in the DOM
+  // (controls hidden), a real caption line or a showing TextTrack means it is on.
+  if (cues && (cc === true || trackOn || domNow)) {
     const ms = video.currentTime * 1000;
     const cue = cues.find((c) => ms >= c.start && ms < c.end) || null;
     showCue(b, cue?.text || '', translated.get(cue?.text || '') || '');
@@ -225,21 +270,16 @@ function ccState(player: HTMLElement): boolean | null {
 function findCaptionNode(player: HTMLElement, video: HTMLVideoElement): HTMLElement | null {
   const vr = video.getBoundingClientRect();
   if (vr.width < 40 || vr.height < 40) return null;
+  const videoRect = toRect(vr);
   let best: HTMLElement | null = null;
   let bestLen = 0;
   player.querySelectorAll('span, div, p').forEach((node) => {
     const n = node as HTMLElement;
-    if (n.closest('.ibt-x-overlay, button, [role="button"], a')) return;
-    if (n.querySelector('.ibt-x-overlay, button')) return;
+    if (n.closest('.ibt-x-overlay, .ibt-block, button, [role="button"], a')) return;
+    if (n.querySelector('.ibt-x-overlay, .ibt-block, button')) return;
     const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
-    if (t.length < 8 || t.length > 240) return;
-    if (/^\d+:\d{2}/.test(t)) return;
-    if (/^(play|pause|mute|unmute|fullscreen|settings|closed captions?)$/i.test(t)) return;
     const r = n.getBoundingClientRect();
-    if (r.width < 24 || r.height < 8 || r.height > vr.height * 0.45) return;
-    const midY = r.top + r.height / 2;
-    if (midY < vr.top + vr.height * 0.5 || midY > vr.bottom + 4) return;
-    if (r.left < vr.left - 12 || r.right > vr.right + 12) return;
+    if (!isXCaptionText(t, toRect(r), videoRect)) return;
     // The full caption line, not an inner word span. Width is what we anchor to.
     if (r.width > bestLen) { best = n; bestLen = r.width; }
   });

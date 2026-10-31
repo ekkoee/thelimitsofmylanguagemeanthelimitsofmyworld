@@ -1,4 +1,5 @@
 import { hasTranslatableText } from '../core/segmentation';
+import { X_PLAYER_SELECTOR } from './selectors';
 
 // Generic, layout-aware block detection for the "translate any page" engine.
 //
@@ -114,6 +115,8 @@ export function collectUnits(root: HTMLElement): Unit[] {
     if (el.isContentEditable) return true;
     if (el.classList.contains('ibt-block') || el.dataset.ibtOut === '1') return true; // our own output
     if (el.getAttribute('aria-hidden') === 'true') return true;
+    // Video-player overlay (source chip, captions, controls). Never a post body.
+    if (el.closest(X_PLAYER_SELECTOR)) return true;
     return false;
   };
 
