@@ -67,8 +67,11 @@ export function applyRootState(s: {
   // translated-text visual style
   r.setAttribute('data-ibt-style', s.transStyle || 'plain');
   // custom translated-text color (unset → CSS fallback to default)
-  // One color for every site. Empty storage means the settings-page blue, not "inherit white".
+  // Page text (tweets, GitHub, LinkedIn) uses the settings blue unless the user saved a color.
   r.style.setProperty('--ibt-trans-color', s.transColor || DEFAULT_TRANS_COLOR);
+  // Video subtitles (X and YouTube) stay white until that same saved color is set.
+  if (s.transColor) r.style.setProperty('--ibt-sub-color', s.transColor);
+  else r.style.removeProperty('--ibt-sub-color');
   // left marker bar: style + custom color (user-configurable / hideable)
   r.setAttribute('data-ibt-bar', s.barStyle || 'bar');
   if (s.barColor) r.style.setProperty('--ibt-bar-color', s.barColor);
