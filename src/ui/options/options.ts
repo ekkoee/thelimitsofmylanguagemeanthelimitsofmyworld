@@ -1,7 +1,7 @@
 import { loadSettings, saveSettings } from '../../core/storage';
 import { clearPersistentCache } from '../../core/cache';
 import { disableDblClick, registerDblClick, requestAllUrls } from '../../core/dblclick';
-import { DEFAULT_MODELS, ProviderId, Settings } from '../../core/types';
+import { DEFAULT_MODELS, DEFAULT_TRANS_COLOR, ProviderId, Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -47,8 +47,7 @@ async function init() {
     r.setAttribute('data-ibt-bar', barStyle.value || 'bar');
     const code = (s.targetLangCode || '').trim();
     r.setAttribute('data-ibt-lang', code === 'zh-CN' ? 'zh-CN' : 'zh-TW');
-    if (appliedColor) r.style.setProperty('--ibt-trans-color', appliedColor);
-    else r.style.removeProperty('--ibt-trans-color');
+    r.style.setProperty('--ibt-trans-color', appliedColor || DEFAULT_TRANS_COLOR);
     if (appliedBarColor) r.style.setProperty('--ibt-bar-color', appliedBarColor);
     else r.style.removeProperty('--ibt-bar-color');
   };
@@ -58,7 +57,12 @@ async function init() {
 
   if (s.transColor) transColor.value = s.transColor;
   transColor.addEventListener('change', () => { appliedColor = transColor.value; save({ transColor: appliedColor }); syncPreview(); });
-  $('transColorReset').addEventListener('click', () => { appliedColor = ''; save({ transColor: '' }); syncPreview(); });
+  $('transColorReset').addEventListener('click', () => {
+    appliedColor = '';
+    transColor.value = DEFAULT_TRANS_COLOR;
+    save({ transColor: '' });
+    syncPreview();
+  });
 
   barStyle.value = s.barStyle || 'bar';
   barStyle.addEventListener('change', () => { save({ barStyle: barStyle.value }); syncPreview(); });

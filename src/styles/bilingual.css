@@ -1,7 +1,11 @@
 /* Injected on X / Reddit / YouTube. Namespaced with .ibt- to avoid collisions.
    Colors inherit from the host page so it adapts to light/dark automatically. */
 
-:root { --ibt-font-scale: 1; }
+:root {
+  --ibt-font-scale: 1;
+  /* Settings-page default. A saved color overwrites this from chrome.storage. */
+  --ibt-trans-color: #6c7aff;
+}
 
 .ibt-block {
   margin: 4px 0 8px;
@@ -61,7 +65,7 @@
 .ibt-orig { display: none; opacity: 0.55; font-size: 0.9em; }
 :root[data-ibt-show-original="true"] .ibt-orig { display: block; }
 
-.ibt-trans { color: var(--ibt-trans-color, #7188f5); }
+.ibt-trans { color: var(--ibt-trans-color); }
 
 /* The title's translation block is projected into the title slot — give it a
    touch more size/weight so it reads like the headline it translates. */
@@ -126,7 +130,7 @@
 .ibt-yt-overlay {
   font-family: var(--ibt-yt-font, "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", sans-serif);
 }
-.ibt-yt-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-trans-color, #fff); }
+.ibt-yt-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-trans-color); }
 
 /* X video bilingual captions. Same single box as YouTube. Position is set from
    the <video> box each frame (inline, expanded, fullscreen). */
@@ -168,7 +172,7 @@
   font-weight: 400;
   box-sizing: border-box;
 }
-.ibt-x-overlay .ibt-yt-zh { color: var(--ibt-trans-color, #fff); }
+.ibt-x-overlay .ibt-yt-zh { color: var(--ibt-trans-color); }
 .ibt-x-native-cap { visibility: hidden !important; opacity: 0 !important; }
 /* X's native CC is often the browser cue on <video>, not a DOM node we can class. */
 video.ibt-x-hide-cue::-webkit-media-text-track-container,
@@ -195,7 +199,7 @@ video.ibt-x-hide-cue::cue {
   padding: 0 6px;
   border-radius: 3px;
   background: rgba(8, 8, 8, 0.75);
-  color: #fff;
+  color: var(--ibt-trans-color);
   line-height: 1.3;
   font-weight: 400;
   white-space: pre-wrap;
@@ -305,7 +309,7 @@ video.ibt-x-hide-cue::cue {
   background: rgba(255, 214, 10, 0.30); border-radius: 3px; padding: 0 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone;
 }
 :root[data-ibt-style="highlight"] .ibt-yt-zh {
-  background: rgba(255, 214, 10, 0.45) !important; color: #111 !important;
+  background: rgba(255, 214, 10, 0.45) !important;
 }
 :root[data-ibt-style="dim"] .ibt-trans,
 :root[data-ibt-style="dim"] .ibt-yt-zh { opacity: 0.6; }

@@ -421,20 +421,31 @@ function place(b: Bound, native?: HTMLElement | null, cueText?: string): void {
     : (capVisible && cr ? toRect(cr) : null);
   let bottom: number;
   let center: number;
-  if (measured && chineseOnly()) {
-    // Sit a fixed gap above X's English line, wherever that line currently is.
-    bottom = fixed
-      ? (window.innerHeight - measured.top + X_CAPTION_GAP)
-      : overlayBottomAbove(pr.bottom, measured.top);
-    center = (measured.left + measured.width / 2) - (fixed ? 0 : pr.left);
-  } else if (chineseOnly() && cue) {
+  let branch = 'bottom-margin';
+  if (chineseOnly() && cue) {
+    // Always clear a band at the bottom of the picture. A measured rect may
+    // only be the cue's baseline (inline ::cue), which would pull us down onto
+    // the English. The band is the minimum; a higher measured top still wins.
     const controls = controlOverlap(player, video);
-    const font = nativeCueFontPx(vr.height);
-    const lines = cueLineCount(cue, measureTextWidth(cue, font), vr.width * 0.96);
+    const font = Math.max(nativeCueFontPx(vr.height), xCaptionFontPx(vr.width, vr.height, settingsRef().fontScale || 1));
+    let lines = cueLineCount(cue, measureTextWidth(cue, font), Math.max(40, vr.width * 0.9));
+    if (measured && measured.height > font) lines = Math.max(lines, Math.round(measured.height / font));
     const reserve = nativeCueReservePx(font, lines);
     const letterbox = fixed ? Math.max(0, window.innerHeight - vr.bottom) : Math.max(0, pr.bottom - vr.bottom);
     bottom = overlayBottomClearingCue(letterbox, controls, reserve);
     center = (vr.left + vr.width / 2) - (fixed ? 0 : pr.left);
+    branch = 'reserve';
+    if (measured && measured.top < vr.bottom - 4) {
+      const fromRect = fixed
+        ? (window.innerHeight - measured.top + X_CAPTION_GAP)
+        : overlayBottomAbove(pr.bottom, measured.top);
+      if (fromRect > bottom) {
+        bottom = fromRect;
+        center = (measured.left + measured.width / 2) - (fixed ? 0 : pr.left);
+        branch = 'measured';
+      }
+    }
+    xCapLog({ branch, bottom: Math.round(bottom), lines, font, reserve, measured, cue: cue.slice(0, 80), fixed, letterbox, controls });
   } else if (capVisible && cr) {
     // Bilingual box replaces the native line, so its bottom matches that line.
     bottom = fixed ? (window.innerHeight - cr.bottom) : (pr.bottom - cr.bottom);
@@ -513,6 +524,13 @@ function naturalLineWidth(line: HTMLElement, fontPx: number): number {
 function horizontalPadding(node: HTMLElement): number {
   const cs = getComputedStyle(node);
   return (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+}
+
+function xCapLog(info: unknown): void {
+  try {
+    if (localStorage.getItem('ibt-x-debug') !== '1') return;
+  } catch { return; }
+  console.log('[IBT x-cap]', info);
 }
 
 function usableCaptionRect(r: DOMRect, video: DOMRect): boolean {

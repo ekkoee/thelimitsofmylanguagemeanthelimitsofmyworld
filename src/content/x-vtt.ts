@@ -164,11 +164,15 @@ export function cueLineCount(text: string, textWidth: number, maxWidth: number):
   return Math.max(hard, wrapped);
 }
 
-/** Pixel height of the native cue block (not including the gap above it). */
+/**
+ * Pixel height of the native cue block (not including the 6px gap above it).
+ * 1.7em plus padding is larger than Chrome's ::cue line box on purpose: a short
+ * estimate is what put the Chinese line on top of the English in the timeline.
+ */
 export function nativeCueReservePx(fontPx: number, lineCount: number): number {
-  const font = Math.max(1, fontPx);
+  const font = Math.max(12, fontPx);
   const lines = Math.max(1, Math.round(lineCount) || 1);
-  return Math.round(lines * font * 1.25);
+  return Math.round(lines * font * 1.7 + 8);
 }
 
 /**

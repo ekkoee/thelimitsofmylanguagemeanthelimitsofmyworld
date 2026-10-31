@@ -114,6 +114,11 @@ async function handleAltA(tab: chrome.tabs.Tab | undefined): Promise<void> {
     return;
   }
   try {
+    // Prefer the content script already on the page (LinkedIn included).
+    await chrome.tabs.sendMessage(tab.id, { type: 'ibt-toggle-page' });
+    return;
+  } catch { /* script not there yet */ }
+  try {
     await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['bilingual.css'] });
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['universal-inject.js'] });
   } catch (e) {

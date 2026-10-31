@@ -29,6 +29,9 @@ export interface Settings {
   dblClickTranslate: boolean;   // double-click word popup (needs <all_urls>, off by default)
 }
 
+/** Settings-page swatch. Used wherever the user has not picked a custom translation color. */
+export const DEFAULT_TRANS_COLOR = '#6c7aff';
+
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   sites: { x: true, reddit: true, youtube: true },

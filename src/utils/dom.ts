@@ -1,3 +1,5 @@
+import { DEFAULT_TRANS_COLOR } from '../core/types';
+
 export const NS = 'ibt'; // injected-node class/attribute namespace
 
 export const PROCESSED_ATTR = 'data-ibt-done';
@@ -65,8 +67,8 @@ export function applyRootState(s: {
   // translated-text visual style
   r.setAttribute('data-ibt-style', s.transStyle || 'plain');
   // custom translated-text color (unset → CSS fallback to default)
-  if (s.transColor) r.style.setProperty('--ibt-trans-color', s.transColor);
-  else r.style.removeProperty('--ibt-trans-color');
+  // One color for every site. Empty storage means the settings-page blue, not "inherit white".
+  r.style.setProperty('--ibt-trans-color', s.transColor || DEFAULT_TRANS_COLOR);
   // left marker bar: style + custom color (user-configurable / hideable)
   r.setAttribute('data-ibt-bar', s.barStyle || 'bar');
   if (s.barColor) r.style.setProperty('--ibt-bar-color', s.barColor);

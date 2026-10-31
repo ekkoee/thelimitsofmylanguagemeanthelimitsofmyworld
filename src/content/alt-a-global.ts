@@ -29,16 +29,17 @@ if (AUTO_SITE_RE.test(location.href)) {
   }
 
   async function onAltA(): Promise<void> {
+    const now = Date.now();
+    // Page-world forward and this listener both see one keypress.
+    if (now - (w.__ibtAltAAt || 0) < 500) return;
+    w.__ibtAltAAt = now;
     // Already translated → cycle the 3-state display (pure CSS).
     if (w.__ibtUniversal) {
-      // The command listener may inject universal-inject for the same keypress.
-      if (Date.now() - (w.__ibtAltAAt || 0) < 800) return;
       const next = cycleView();
       toast(VIEW_LABEL[next]);
       void saveSettings({ viewMode: next });
       return;
     }
-    w.__ibtAltAAt = Date.now();
 
     let settings = await loadSettings();
     applyVisual(settings);
@@ -49,10 +50,35 @@ if (AUTO_SITE_RE.test(location.href)) {
     uni.activate();
   }
 
-  window.addEventListener('keydown', (e: KeyboardEvent) => {
+  // Apply the saved color as soon as this script exists, and again if the
+  // options page changes it. The stylesheet is injected with this script.
+  onSettingsChanged((s) => applyVisual(s));
+  loadSettings().then((s) => { if (!w.__ibtUniversal) applyVisual(s); }).catch(() => {});
+
+  const onKey = (e: KeyboardEvent) => {
+    if (!e.altKey) return;
     if (!isAltA(e)) return;
+    console.log('[IBT] Alt+A received', location.hostname, e.code, e.key);
     e.preventDefault();
     e.stopPropagation();
-    onAltA().catch(() => {});
-  }, true);
+    onAltA().catch((err) => console.log('[IBT] Alt+A failed', err));
+  };
+  console.log('[IBT] Alt+A listener ready (isolated)', location.hostname);
+  window.addEventListener('keydown', onKey, true);
+  document.addEventListener('keydown', onKey, true);
+
+  window.addEventListener('message', (e: MessageEvent) => {
+    if (e.source !== window) return;
+    const d = e.data;
+    if (!d || d.source !== 'ibt-alt-a' || d.type !== 'toggle') return;
+    console.log('[IBT] Alt+A received (from page)', location.hostname);
+    onAltA().catch((err) => console.log('[IBT] Alt+A failed', err));
+  });
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === 'ibt-toggle-page') {
+      console.log('[IBT] Alt+A received (popup/command)', location.hostname);
+      onAltA().catch((err) => console.log('[IBT] Alt+A failed', err));
+    }
+  });
 }

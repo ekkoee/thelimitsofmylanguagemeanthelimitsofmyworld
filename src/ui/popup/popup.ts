@@ -88,6 +88,13 @@ async function init() {
       window.close();
       return;
     }
+    // The content script is already on http(s) pages (including LinkedIn).
+    // Ask it first. Inject only if that script is missing.
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: 'ibt-toggle-page' });
+      window.close();
+      return;
+    } catch { /* no receiver — fall through to injection */ }
     try {
       await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['bilingual.css'] });
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['universal-inject.js'] });
