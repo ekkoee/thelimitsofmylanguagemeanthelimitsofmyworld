@@ -5,7 +5,7 @@ execSync(
   'npx esbuild src/content/x-vtt.ts --bundle --platform=node --format=esm --outfile=/tmp/x-vtt.test.mjs --log-level=error',
   { cwd: new URL('..', import.meta.url).pathname, stdio: 'inherit' },
 );
-const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth, isPlayerChromeText, isXCaptionText, xVideoView, captionTextMatches } = await import('/tmp/x-vtt.test.mjs');
+const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth, isPlayerChromeText, isXCaptionText, xVideoView, captionTextMatches, nativeCueFontPx, nativeCueReservePx, cueLineCount, overlayBottomClearingCue } = await import('/tmp/x-vtt.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -91,6 +91,21 @@ const cue = 'Pete Hegseth, everybody knows that guy from the locker room';
 check('full cue matches', captionTextMatches(cue, cue));
 check('word span matches', captionTextMatches('everybody', cue));
 check('source chip plus cue is not the cue', !captionTextMatches('From Chuck Ross ' + cue, cue));
+
+// Inline landscape: ::cue has no box. The old ~6% margin sits inside a 5vh cue.
+const inlineH = 360;
+const inlineFont = nativeCueFontPx(inlineH);
+const oneLine = nativeCueReservePx(inlineFont, 1);
+const oldMargin = Math.round(Math.max(8, inlineH * 0.06));
+check('inline cue font is 5% of height', inlineFont === 18);
+check('one-line cue block', oneLine === Math.round(18 * 1.25));
+check('old margin overlaps that cue', oldMargin < oneLine);
+check('unmeasured inline gap is 6px', overlayBottomClearingCue(0, 0, oneLine) - oneLine === 6);
+check('two-line cue is twice the block', nativeCueReservePx(inlineFont, cueLineCount('a\nb', 10, 400)) === nativeCueReservePx(inlineFont, 2));
+check('wraps to two lines', cueLineCount('hello', 1000, 500) === 2);
+check('controls and letterbox stay under the cue', overlayBottomClearingCue(12, 36, oneLine) === 12 + 36 + oneLine + 6);
+check('portrait cue uses its own height', nativeCueFontPx(560) === 28);
+check('fullscreen measured gap unchanged', overlayBottomAbove(800, 700) === 106);
 
 if (failures) {
   console.error(`\n${failures} failed`);

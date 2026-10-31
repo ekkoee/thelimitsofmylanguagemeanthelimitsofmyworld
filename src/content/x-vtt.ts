@@ -148,6 +148,38 @@ export function captionTextMatches(nodeText: string, cue: string): boolean {
 export const X_CAPTION_GAP = 6;
 
 /**
+ * WebVTT's default cue font is 5% of the video height. Inline X players often
+ * paint that cue with ::cue, which has no element rect, and the old bottom
+ * margin (about 6% of height) lands inside the cue instead of above it.
+ */
+export function nativeCueFontPx(videoHeight: number): number {
+  return Math.round(Math.min(32, Math.max(12, Math.max(0, videoHeight) * 0.05)));
+}
+
+/** How many rows the native cue occupies: hard breaks, or wrapping at maxWidth. */
+export function cueLineCount(text: string, textWidth: number, maxWidth: number): number {
+  const hard = text.split(/\n/).map((s) => s.trim()).filter(Boolean).length || 1;
+  const inner = Math.max(40, maxWidth);
+  const wrapped = Math.max(1, Math.ceil(Math.max(textWidth, 1) / inner));
+  return Math.max(hard, wrapped);
+}
+
+/** Pixel height of the native cue block (not including the gap above it). */
+export function nativeCueReservePx(fontPx: number, lineCount: number): number {
+  const font = Math.max(1, fontPx);
+  const lines = Math.max(1, Math.round(lineCount) || 1);
+  return Math.round(lines * font * 1.25);
+}
+
+/**
+ * CSS `bottom` when the cue has no box to measure: letterbox and the control
+ * bar, then the cue block, then the same 6px gap used when the box is known.
+ */
+export function overlayBottomClearingCue(letterbox: number, controlsOverlap: number, reservePx: number, gap = X_CAPTION_GAP): number {
+  return Math.round(Math.max(0, letterbox) + Math.max(0, controlsOverlap) + Math.max(0, reservePx) + gap);
+}
+
+/**
  * Font size from the rendered video box. A portrait clip is tall and narrow,
  * so the width drives the size; height only caps it. 310px-wide timeline
  * players stay near X's own caption size instead of covering the face.

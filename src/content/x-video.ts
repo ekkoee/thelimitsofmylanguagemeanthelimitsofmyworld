@@ -12,7 +12,7 @@
 import { Settings, TranslateBatchResponse, TranslateResponse } from '../core/types';
 import { sendMessage } from '../utils/runtime';
 import { el } from '../utils/dom';
-import { Rect, XCue, X_CAPTION_GAP, captionTextMatches, isXCaptionText, mediaIdFromUrl, overlayBottomAbove, overlayUsedWidth, xCaptionBox, xCaptionFontPx, xVideoView } from './x-vtt';
+import { Rect, XCue, X_CAPTION_GAP, captionTextMatches, cueLineCount, isXCaptionText, mediaIdFromUrl, nativeCueFontPx, nativeCueReservePx, overlayBottomAbove, overlayBottomClearingCue, overlayUsedWidth, xCaptionBox, xCaptionFontPx, xVideoView } from './x-vtt';
 
 const CHUNK = 12;
 let settingsRef: () => Settings = () => ({} as Settings);
@@ -196,7 +196,7 @@ function paint(b: Bound): void {
     const cue = cues.find((c) => ms >= c.start && ms < c.end) || null;
     showCue(b, cue?.text || '', translated.get(cue?.text || '') || '');
     syncNative(b, cue?.text || '', domNow);
-    place(b, b.hiddenNodes[0] || domNow);
+    place(b, b.hiddenNodes[0] || domNow, cue?.text || '');
     return;
   }
   // No track. Fall back only while X is actually painting a caption line.
@@ -209,7 +209,7 @@ function paint(b: Bound): void {
   }
   showCue(b, text, translated.get(text) || '');
   syncNative(b, text, dom);
-  place(b, b.hiddenNodes[0] || dom);
+  place(b, b.hiddenNodes[0] || dom, text);
 }
 
 function cuesFor(video: HTMLVideoElement): XCue[] | null {
@@ -390,7 +390,7 @@ function clearNative(b: Bound): void {
   b.video.classList.remove('ibt-x-hide-cue');
 }
 
-function place(b: Bound, native?: HTMLElement | null): void {
+function place(b: Bound, native?: HTMLElement | null, cueText?: string): void {
   const video = b.video;
   const player = playerOf(video);
   const parent = overlayParent(video, player);
@@ -410,15 +410,31 @@ function place(b: Bound, native?: HTMLElement | null): void {
   if (native === undefined) cap = ccState(player) === false ? null : findCaptionNode(player, video);
   else cap = native && native.isConnected ? native : null;
   const cr = cap ? cap.getBoundingClientRect() : null;
-  const capVisible = !!cr && cr.width > 8 && cr.height > 4 && cr.bottom > vr.top && cr.top < vr.bottom + 24;
+  const capVisible = !!cr && usableCaptionRect(cr, vr);
+  const cue = (cueText ?? b.lastText ?? '').trim();
+  // Inline timeline captions are often ::cue, or text inside the mute-button
+  // cluster, so the element box is missing. Measure glyphs; if that fails and
+  // CC is on, reserve the cue's line height so we still clear it by 6px.
+  const root = (video.closest('[data-testid="videoComponent"]') as HTMLElement) || player;
+  const measured = chineseOnly()
+    ? (measureCueRect(root, video, cue) || (capVisible && cr ? toRect(cr) : null))
+    : (capVisible && cr ? toRect(cr) : null);
   let bottom: number;
   let center: number;
-  if (capVisible && cr && chineseOnly()) {
+  if (measured && chineseOnly()) {
     // Sit a fixed gap above X's English line, wherever that line currently is.
     bottom = fixed
-      ? (window.innerHeight - cr.top + X_CAPTION_GAP)
-      : overlayBottomAbove(pr.bottom, cr.top);
-    center = (cr.left + cr.width / 2) - (fixed ? 0 : pr.left);
+      ? (window.innerHeight - measured.top + X_CAPTION_GAP)
+      : overlayBottomAbove(pr.bottom, measured.top);
+    center = (measured.left + measured.width / 2) - (fixed ? 0 : pr.left);
+  } else if (chineseOnly() && cue) {
+    const controls = controlOverlap(player, video);
+    const font = nativeCueFontPx(vr.height);
+    const lines = cueLineCount(cue, measureTextWidth(cue, font), vr.width * 0.96);
+    const reserve = nativeCueReservePx(font, lines);
+    const letterbox = fixed ? Math.max(0, window.innerHeight - vr.bottom) : Math.max(0, pr.bottom - vr.bottom);
+    bottom = overlayBottomClearingCue(letterbox, controls, reserve);
+    center = (vr.left + vr.width / 2) - (fixed ? 0 : pr.left);
   } else if (capVisible && cr) {
     // Bilingual box replaces the native line, so its bottom matches that line.
     bottom = fixed ? (window.innerHeight - cr.bottom) : (pr.bottom - cr.bottom);
@@ -499,8 +515,77 @@ function horizontalPadding(node: HTMLElement): number {
   return (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
 }
 
+function usableCaptionRect(r: DOMRect, video: DOMRect): boolean {
+  return r.width > 8 && r.height > 4 && r.height < video.height * 0.45
+    && r.bottom > video.top && r.top < video.bottom + 24
+    && r.top > video.top + video.height * 0.35;
+}
+
+/** Glyph box of the cue, including text that shares a container with the mute button. */
+function measureCueRect(root: HTMLElement, video: HTMLVideoElement, cue: string): Rect | null {
+  const cueN = normCue(cue);
+  if (cueN.length < 8) return null;
+  const vr = video.getBoundingClientRect();
+  let best: Rect | null = null;
+  let bestW = 0;
+  const consider = (r: DOMRect | Rect) => {
+    if (!usableCaptionRect(r as DOMRect, vr) && !(r.width > 8 && r.height > 4 && r.height < vr.height * 0.45 && r.bottom > vr.top + vr.height * 0.45 && r.top < vr.bottom + 24)) return;
+    if (r.width > bestW) {
+      best = { left: r.left, top: r.top, width: r.width, height: r.height, bottom: r.bottom, right: r.right };
+      bestW = r.width;
+    }
+  };
+  root.querySelectorAll('span, div, p').forEach((node) => {
+    const n = node as HTMLElement;
+    if (n.closest('.ibt-x-overlay, .ibt-block')) return;
+    const t = normCue(n.textContent || '');
+    if (!captionTextMatches(t, cueN) || t.length < cueN.length - 2) return;
+    const glyphs = rangeOfCue(n, cueN);
+    if (glyphs) consider(glyphs);
+    else if (!n.querySelector('button, [role="button"]')) consider(n.getBoundingClientRect());
+  });
+  return best;
+}
+
+function rangeOfCue(root: HTMLElement, cueN: string): DOMRect | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  let any = false;
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    if (node.parentElement?.closest('.ibt-x-overlay, .ibt-block')) continue;
+    const raw = normCue(node.nodeValue || '');
+    if (raw.length < 2 || !cueN.includes(raw)) continue;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    for (const r of range.getClientRects()) {
+      if (r.width < 1 || r.height < 1) continue;
+      any = true;
+      left = Math.min(left, r.left);
+      top = Math.min(top, r.top);
+      right = Math.max(right, r.right);
+      bottom = Math.max(bottom, r.bottom);
+    }
+  }
+  if (!any) return null;
+  return new DOMRect(left, top, right - left, bottom - top);
+}
+
+function measureTextWidth(text: string, fontPx: number): number {
+  const probe = document.createElement('div');
+  probe.textContent = text.replace(/\n/g, ' ');
+  probe.style.cssText = `position:absolute;left:0;top:0;visibility:hidden;white-space:nowrap;width:auto;padding:0;margin:0;font-size:${fontPx}px;font-family:Arial,sans-serif`;
+  (document.body || document.documentElement).appendChild(probe);
+  const w = probe.offsetWidth;
+  probe.remove();
+  return w;
+}
+
 function placeAll(): void {
-  for (const [, b] of bounds) place(b);
+  for (const [, b] of bounds) place(b, undefined, b.lastText);
 }
 
 function overlayParent(video: HTMLVideoElement, player: HTMLElement): HTMLElement {
