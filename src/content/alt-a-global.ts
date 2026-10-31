@@ -8,7 +8,7 @@
 // it directly instantiates UniversalTranslator, no extra permission needed.
 //
 // Auto-sites (x/reddit/youtube) are excluded: content.js handles Alt+A there.
-import { loadSettings, onSettingsChanged } from '../core/storage';
+import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
 import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
@@ -23,13 +23,18 @@ if (AUTO_SITE_RE.test(location.href)) {
     applyRootState({
       enabled: s.enabled, showOriginal: s.showOriginal, layout: s.layout, fontScale: s.fontScale,
       targetLangCode: s.targetLangCode, transStyle: s.transStyle, transColor: s.transColor,
-      barStyle: s.barStyle, barColor: s.barColor,
+      barStyle: s.barStyle, barColor: s.barColor, viewMode: s.viewMode,
     });
   }
 
   async function onAltA(): Promise<void> {
     // Already translated → cycle the 3-state display (pure CSS).
-    if (w.__ibtUniversal) { toast(VIEW_LABEL[cycleView()]); return; }
+    if (w.__ibtUniversal) {
+      const next = cycleView();
+      toast(VIEW_LABEL[next]);
+      void saveSettings({ viewMode: next });
+      return;
+    }
 
     let settings = await loadSettings();
     applyVisual(settings);

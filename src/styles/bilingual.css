@@ -149,7 +149,16 @@
   box-sizing: border-box;
 }
 .ibt-x-overlay .ibt-yt-zh { color: var(--ibt-trans-color, #fff); }
-.ibt-x-native-cap { visibility: hidden !important; }
+.ibt-x-native-cap { visibility: hidden !important; opacity: 0 !important; }
+/* X's native CC is often the browser cue on <video>, not a DOM node we can class. */
+video.ibt-x-hide-cue::-webkit-media-text-track-container,
+video.ibt-x-hide-cue::-webkit-media-text-track-display {
+  display: none !important;
+}
+video.ibt-x-hide-cue::cue {
+  visibility: hidden;
+  opacity: 0;
+}
 
 .ibt-yt-line {
   display: block;

@@ -122,6 +122,28 @@ export function isXCaptionText(text: string, node: Rect, video: Rect): boolean {
   return isCenteredCaption(node, video);
 }
 
+/**
+ * What an X video draws. Native CC already shows the original, so the default
+ * (no explicit choice yet) is Chinese only. YouTube and the rest of the page
+ * do not use this — they stay bilingual until the user picks otherwise.
+ * An explicit 'both' / 'zh' / 'orig' always wins over that default.
+ */
+export function xVideoView(explicit: string | undefined | null): 'zh' | 'both' | 'orig' {
+  if (explicit === 'zh' || explicit === 'both' || explicit === 'orig') return explicit;
+  return 'zh';
+}
+
+/**
+ * `nodeText` is the cue, or a piece of it (a word span). A container that
+ * holds the cue plus other UI is longer than the cue and does not match.
+ */
+export function captionTextMatches(nodeText: string, cue: string): boolean {
+  if (!nodeText || !cue) return false;
+  if (nodeText === cue) return true;
+  if (Math.abs(nodeText.length - cue.length) <= 2 && (nodeText.startsWith(cue.slice(0, 16)) || cue.startsWith(nodeText.slice(0, 16)))) return true;
+  return nodeText.length >= 8 && nodeText.length < cue.length && cue.includes(nodeText);
+}
+
 /** Fixed gap between our Chinese line and X's native English caption, in px. */
 export const X_CAPTION_GAP = 6;
 

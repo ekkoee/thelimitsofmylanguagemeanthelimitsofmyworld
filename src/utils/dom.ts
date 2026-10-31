@@ -47,10 +47,15 @@ export function applyRootState(s: {
   enabled: boolean; showOriginal: boolean; layout: string; fontScale: number;
   targetLangCode?: string; transStyle?: string; transColor?: string;
   barStyle?: string; barColor?: string;
+  viewMode?: string;
 }): void {
   const r = document.documentElement;
-  // Default display is bilingual; never clobber a view the user has cycled to.
-  if (!r.hasAttribute(VIEW_ATTR)) r.setAttribute(VIEW_ATTR, 'both');
+  // An explicit choice (chrome.storage) wins. With no choice, pages and YouTube
+  // stay bilingual — but only fill the attribute when it is missing, so a live
+  // Alt+A cycle is not overwritten before the save comes back.
+  const chosen = s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '';
+  if (chosen) r.setAttribute(VIEW_ATTR, chosen);
+  else if (!r.hasAttribute(VIEW_ATTR)) r.setAttribute(VIEW_ATTR, 'both');
   r.setAttribute('data-ibt-enabled', String(s.enabled));
   r.setAttribute('data-ibt-show-original', String(s.showOriginal));
   r.setAttribute('data-ibt-layout', s.layout);

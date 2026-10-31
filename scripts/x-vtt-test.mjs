@@ -5,7 +5,7 @@ execSync(
   'npx esbuild src/content/x-vtt.ts --bundle --platform=node --format=esm --outfile=/tmp/x-vtt.test.mjs --log-level=error',
   { cwd: new URL('..', import.meta.url).pathname, stdio: 'inherit' },
 );
-const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth, isPlayerChromeText, isXCaptionText } = await import('/tmp/x-vtt.test.mjs');
+const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth, isPlayerChromeText, isXCaptionText, xVideoView, captionTextMatches } = await import('/tmp/x-vtt.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -81,6 +81,16 @@ const centered = { left: 70, top: 250, width: 420, height: 28, right: 490, botto
 check('quote-tweet source is not a caption', !isXCaptionText('From AmericaAmerica', fromChip, picture));
 check('centered line is a caption', isXCaptionText('such as USDC, USDT, BTC, E, BNB', centered, picture));
 check('corner clock is not a caption', !isXCaptionText('0:42 / 3:10', { left: 430, top: 270, width: 110, height: 22, right: 540, bottom: 292 }, picture));
+
+// No stored choice → X video is Chinese-only. An explicit pick wins, including bilingual.
+check('x video default is chinese only', xVideoView(undefined) === 'zh' && xVideoView('') === 'zh');
+check('explicit bilingual wins', xVideoView('both') === 'both');
+check('explicit chinese wins', xVideoView('zh') === 'zh');
+check('explicit original wins', xVideoView('orig') === 'orig');
+const cue = 'Pete Hegseth, everybody knows that guy from the locker room';
+check('full cue matches', captionTextMatches(cue, cue));
+check('word span matches', captionTextMatches('everybody', cue));
+check('source chip plus cue is not the cue', !captionTextMatches('From Chuck Ross ' + cue, cue));
 
 if (failures) {
   console.error(`\n${failures} failed`);

@@ -1,5 +1,5 @@
 import { detectSite } from '../utils/site';
-import { loadSettings, onSettingsChanged } from '../core/storage';
+import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
 import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
 import { observeMutations, onUrlChange } from '../utils/observer';
 import { Engine } from './engine';
@@ -35,7 +35,7 @@ import { Settings } from '../core/types';
       // If our own keydown handler just toggled (<1s ago), skip — the SW
       // command and the keypress both fire for one Alt+A, don't double-toggle.
       if (Date.now() - lastDirectToggle < 1000) return;
-      flash(VIEW_LABEL[cycleView()]);
+      cycleAndSave();
     }
   });
 
@@ -47,7 +47,7 @@ import { Settings } from '../core/types';
         (e.key === 'a' || e.key === 'A')) {
       e.preventDefault();
       lastDirectToggle = Date.now();
-      flash(VIEW_LABEL[cycleView()]);
+      cycleAndSave();
     }
   }, true);
 
@@ -78,11 +78,18 @@ import { Settings } from '../core/types';
   onSettingsChanged((s) => { settings = s; applyRoot(s); engine.setSettings(s); scan(); });
 })();
 
+function cycleAndSave(): void {
+  const next = cycleView();
+  flash(VIEW_LABEL[next]);
+  void saveSettings({ viewMode: next });
+}
+
 function applyRoot(s: Settings) {
   applyRootState({
     enabled: s.enabled, showOriginal: s.showOriginal, layout: s.layout, fontScale: s.fontScale,
     targetLangCode: s.targetLangCode, transStyle: s.transStyle, transColor: s.transColor,
     barStyle: s.barStyle, barColor: s.barColor,
+    viewMode: s.viewMode,
   });
 }
 

@@ -10,32 +10,30 @@ async function init() {
   enabled.checked = s.enabled;
   enabled.addEventListener('change', () => saveSettings({ enabled: enabled.checked }));
 
-  // 譯文呈現 — mirrors the page's CURRENT 3-state view and sets it on change.
-  // Read/write <html data-ibt-view> on the active tab so the popup always shows
-  // the real state (and stays in sync after Alt+A cycling).
+  // 譯文呈現. The value lives in chrome.storage. Reading it off the page
+  // showed "bilingual" after every reload, because nothing had saved the choice
+  // and the page default is bilingual. An empty stored value is "never chosen":
+  // on X the video default is Chinese-only (native CC already has the English).
   const viewMode = $<HTMLSelectElement>('viewMode');
-  const activeTabId = async (): Promise<number | undefined> => {
+  const activeTab = async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tab?.id;
+    return tab;
   };
-  const tabId = await activeTabId();
-  if (tabId != null) {
-    try {
-      const [res] = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => document.documentElement.getAttribute('data-ibt-view') || 'both',
-      });
-      if (res?.result) viewMode.value = String(res.result);
-    } catch { /* page not scriptable (chrome://, store) — keep default */ }
-  }
+  const tab = await activeTab();
+  const onX = !!tab?.url && /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com)\//i.test(tab.url);
+  const chosen = s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '';
+  viewMode.value = chosen || (onX ? 'zh' : 'both');
   viewMode.addEventListener('change', async () => {
-    const id = await activeTabId();
+    const v = viewMode.value;
+    if (v !== 'zh' && v !== 'both' && v !== 'orig') return;
+    await saveSettings({ viewMode: v });
+    const id = (await activeTab())?.id;
     if (id == null) return;
     try {
       await chrome.scripting.executeScript({
         target: { tabId: id },
-        func: (v: string) => document.documentElement.setAttribute('data-ibt-view', v),
-        args: [viewMode.value],
+        func: (mode: string) => document.documentElement.setAttribute('data-ibt-view', mode),
+        args: [v],
       });
     } catch { /* not scriptable */ }
   });

@@ -2,7 +2,7 @@
 // ACTIVE tab when the user presses the Alt+A command. Because it's injected on a
 // user gesture under the activeTab permission, the extension does NOT need broad
 // "all sites" host access — which keeps the Web Store review fast and clean.
-import { loadSettings, onSettingsChanged } from '../core/storage';
+import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
 import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
@@ -12,7 +12,12 @@ import { Settings } from '../core/types';
 
   // Already translated this page → each subsequent Alt+A cycles the 3-state
   // display (原文+中文 → 原文 → 中文 → …), pure CSS, no re-translation.
-  if (w.__ibtUniversal) { toast(VIEW_LABEL[cycleView()]); return; }
+  if (w.__ibtUniversal) {
+    const next = cycleView();
+    toast(VIEW_LABEL[next]);
+    void saveSettings({ viewMode: next });
+    return;
+  }
 
   let settings = await loadSettings();
   applyVisual(settings); // also sets the default 'both' view
@@ -29,7 +34,7 @@ import { Settings } from '../core/types';
     applyRootState({
       enabled: s.enabled, showOriginal: s.showOriginal, layout: s.layout, fontScale: s.fontScale,
       targetLangCode: s.targetLangCode, transStyle: s.transStyle, transColor: s.transColor,
-      barStyle: s.barStyle, barColor: s.barColor,
+      barStyle: s.barStyle, barColor: s.barColor, viewMode: s.viewMode,
     });
   }
 })();

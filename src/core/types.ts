@@ -2,11 +2,14 @@ export type ProviderId = 'google' | 'microsoft' | 'openai' | 'gemini' | 'ollama'
 export type Layout = 'origTop' | 'transTop';
 export type SubtitleOrder = 'zhTop' | 'enTop';   // YouTube movie-mode line order
 export type SiteId = 'x' | 'reddit' | 'youtube';
+/** Page display. Empty string means the user has not chosen — each surface keeps its own default. */
+export type ViewModeSetting = '' | 'both' | 'zh' | 'orig';
 
 export interface Settings {
   enabled: boolean;
   sites: Record<SiteId, boolean>;
   showOriginal: boolean;        // also repeat the original inside our block (default false → no duplication)
+  viewMode: ViewModeSetting;    // explicit 譯文呈現; '' = never chosen (not the same as 'both')
   layout: Layout;
   subtitleOrder: SubtitleOrder; // YouTube subtitle order (both languages shown); default Chinese on top
   transStyle: string;           // visual style of the translated text (underline / box / blur / …)
@@ -30,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   sites: { x: true, reddit: true, youtube: true },
   showOriginal: false,
+  viewMode: '',
   layout: 'transTop',
   subtitleOrder: 'zhTop',
   transStyle: 'plain',

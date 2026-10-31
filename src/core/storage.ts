@@ -18,6 +18,8 @@ function normalizeSettings(s: Settings): Settings {
     translateOnVisible: true,
     cacheEnabled: true,
     sites: { x: true, reddit: true, youtube: true },
+    // '' is "never chosen". Do not coerce it to 'both' — X video treats unset as Chinese-only.
+    viewMode: s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '',
   };
 }
 
