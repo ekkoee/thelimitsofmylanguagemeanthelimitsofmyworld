@@ -27,6 +27,7 @@ export interface Settings {
   ollamaEndpoint: string;
   cacheEnabled: boolean;
   dblClickTranslate: boolean;   // double-click word popup (needs <all_urls>, off by default)
+  linkedinExpandTranslate: boolean; // translate a LinkedIn post when its "more" control opens it
 }
 
 /** Settings-page swatch. Used wherever the user has not picked a custom translation color. */
@@ -54,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,
   dblClickTranslate: false,    // ← least privilege: opt-in, requests <all_urls> only when enabled
+  linkedinExpandTranslate: true,
 };
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {

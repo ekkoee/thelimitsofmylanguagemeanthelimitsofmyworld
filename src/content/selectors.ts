@@ -112,10 +112,15 @@ export const SITE_RULES: SiteRule[] = [
       '.share-box-feed-entry__wrapper', '.share-creation-state',
       '.social-actions', '.feed-shared-social-action-bar',
       '.comments-comment-social-bar',
+      '.feed-shared-see-translation-button',
+      '[class*="see-translation"]',
+      '[data-test-id*="translation"]',
     ].join(','),
     include: [
       '.update-components-text', '.feed-shared-update-v2__description',
       '.feed-shared-inline-show-more-text', '.comments-comment-item__main-content',
+      '[data-test-id="main-feed-activity-card__commentary"]',
+      '.attributed-text-segment-list__content',
     ].join(','),
   },
 ];

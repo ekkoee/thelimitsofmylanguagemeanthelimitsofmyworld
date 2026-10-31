@@ -13,11 +13,16 @@ import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
 import { isAltA } from './alt-a-key';
+import { startLinkedIn } from './linkedin';
+
+console.log('[IBT] content script loaded', location.hostname, location.href);
 
 const AUTO_SITE_RE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
 if (AUTO_SITE_RE.test(location.href)) {
   // content.js owns Alt+A on auto-sites; do nothing here.
+  console.log('[IBT] auto-site, Alt+A owned by content.js', location.hostname);
 } else {
+  try {
   const w = window as unknown as { __ibtUniversal?: UniversalTranslator; __ibtAltAAt?: number };
 
   function applyVisual(s: Settings) {
@@ -30,8 +35,11 @@ if (AUTO_SITE_RE.test(location.href)) {
 
   async function onAltA(): Promise<void> {
     const now = Date.now();
-    // Page-world forward and this listener both see one keypress.
-    if (now - (w.__ibtAltAAt || 0) < 500) return;
+    // Page-world forward, this listener, and chrome.commands all see one keypress.
+    if (now - (w.__ibtAltAAt || 0) < 500) {
+      console.log('[IBT] Alt+A ignored, duplicate');
+      return;
+    }
     w.__ibtAltAAt = now;
     // Already translated → cycle the 3-state display (pure CSS).
     if (w.__ibtUniversal) {
@@ -68,17 +76,28 @@ if (AUTO_SITE_RE.test(location.href)) {
   document.addEventListener('keydown', onKey, true);
 
   window.addEventListener('message', (e: MessageEvent) => {
-    if (e.source !== window) return;
     const d = e.data;
     if (!d || d.source !== 'ibt-alt-a' || d.type !== 'toggle') return;
+    // MAIN-world postMessage is same-origin. Do not drop it when the isolated
+    // window object is not === event.source.
+    if (e.source !== window && e.origin !== location.origin) return;
     console.log('[IBT] Alt+A received (from page)', location.hostname);
     onAltA().catch((err) => console.log('[IBT] Alt+A failed', err));
   });
 
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg?.type === 'ibt-toggle-page') {
-      console.log('[IBT] Alt+A received (popup/command)', location.hostname);
-      onAltA().catch((err) => console.log('[IBT] Alt+A failed', err));
-    }
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type !== 'ibt-toggle-page') return;
+    console.log('[IBT] Alt+A received (popup/command)', location.hostname);
+    onAltA()
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => {
+        console.log('[IBT] Alt+A failed', err);
+        sendResponse({ ok: false, error: String(err) });
+      });
+    return true;
   });
+  startLinkedIn();
+} catch (err) {
+  console.log('[IBT] content script init failed', err);
+}
 }

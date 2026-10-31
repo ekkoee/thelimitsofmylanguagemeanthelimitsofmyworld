@@ -6,8 +6,10 @@ import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
 import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
+import { startLinkedIn } from './linkedin';
 
 (async function () {
+  try { startLinkedIn(); } catch (err) { console.log('[IBT] LinkedIn watcher failed', err); }
   const w = window as unknown as { __ibtUniversal?: UniversalTranslator; __ibtAltAAt?: number };
 
   // Already translated this page → each subsequent Alt+A cycles the 3-state

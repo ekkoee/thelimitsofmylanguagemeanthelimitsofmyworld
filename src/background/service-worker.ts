@@ -115,12 +115,17 @@ async function handleAltA(tab: chrome.tabs.Tab | undefined): Promise<void> {
   }
   try {
     // Prefer the content script already on the page (LinkedIn included).
+    // The listener calls sendResponse; a missing script rejects instead.
     await chrome.tabs.sendMessage(tab.id, { type: 'ibt-toggle-page' });
+    console.log('[IBT] command delivered to content script', tab.url);
     return;
-  } catch { /* script not there yet */ }
+  } catch (err) {
+    console.log('[IBT] command message failed', tab.url, err);
+  }
   try {
     await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['bilingual.css'] });
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['universal-inject.js'] });
+    console.log('[IBT] command inject fallback', tab.url);
   } catch (e) {
     console.log('[IBT] inject skipped:', e);
   }

@@ -3,6 +3,7 @@ import { chineseShare, isAlreadyTargetLang, stripNoise } from '../core/segmentat
 import { renderTranslationAfter } from './engine';
 import { collectUnits } from './blocks';
 import { matchSiteRule } from './selectors';
+import { linkedInCollapsed, linkedInHost } from './linkedin';
 
 const UNI_ATTR = 'data-ibt-uni'; // cheap hint we've handled a source (teardown aid)
 
@@ -16,20 +17,36 @@ function fingerprint(text: string): string {
 
 // Is this passage part of a Chinese article / post / page? English words, names and headings inside Chinese
 // writing are left alone. Decided per article (a feed post is a [role="article"]), so an English post in a
-// mostly Chinese feed is still translated.
+// mostly Chinese feed is still translated — except when the only box we can see is <main> or <body>.
+// That fallback stays for GitHub and other sites. LinkedIn's Traditional Chinese shell lives in <main>
+// and was making Alt+A skip every English post; LinkedIn uses the unit's own text instead (see scan).
 const ARTICLE_SELECTOR = 'article, [role="article"], main, [role="main"]';
-const contextCache = new WeakMap<Element, { at: number; cn: boolean }>();
-function inChineseContext(node: Element, targetLangCode: string): boolean {
+const contextCache = new WeakMap<Element, { at: number; text: string }>();
+
+export function shellIsChinese(text: string, targetLangCode: string): boolean {
   if (!(targetLangCode || '').toLowerCase().startsWith('zh')) return false;
-  const box = node.closest(ARTICLE_SELECTOR) || document.body;
+  const han = (stripNoise(text).match(/\p{Script=Han}/gu) || []).length;
+  return han >= 12 && chineseShare(text) >= 0.5;
+}
+
+/** LinkedIn judges the post text. Other sites still skip English inside a Chinese shell (GitHub included). */
+export function chineseSkipReason(
+  host: string, unitText: string, shellText: string, targetLangCode: string,
+): '' | 'target' | 'shell' {
+  if (isAlreadyTargetLang(unitText, targetLangCode)) return 'target';
+  if (linkedInHost(host)) return '';
+  if (shellIsChinese(shellText, targetLangCode)) return 'shell';
+  return '';
+}
+
+function articleText(node: Element): string {
+  const box = (node.closest(ARTICLE_SELECTOR) || document.body) as HTMLElement;
   const now = Date.now();
   const hit = contextCache.get(box);
-  if (hit && now - hit.at < 3000) return hit.cn;
-  const text = ((box as HTMLElement).innerText || box.textContent || '').slice(0, 8000);
-  const han = (stripNoise(text).match(/\p{Script=Han}/gu) || []).length;
-  const cn = han >= 12 && chineseShare(text) >= 0.5;
-  contextCache.set(box, { at: now, cn });
-  return cn;
+  if (hit && now - hit.at < 3000) return hit.text;
+  const text = (box.innerText || box.textContent || '').slice(0, 8000);
+  contextCache.set(box, { at: now, text });
+  return text;
 }
 
 // Is this one of OUR inserted nodes? Keeps the MutationObserver from reacting to its
@@ -138,18 +155,32 @@ export class UniversalTranslator {
     if (!this.active || !this.settings.enabled) return;
     let rendered = 0;
     let skippedTarget = 0;
+    let skippedShell = 0;
+    let skippedCollapsed = 0;
+    let candidates = 0;
+    const onLinkedIn = linkedInHost();
 
     for (const root of this.takeRoots()) {
       if (!root.isConnected) continue;
       for (const unit of collectUnits(root)) {
         const node = unit.element;
+        candidates++;
         if (node.closest('.ibt-block')) continue;        // never our own output
         if (this.excludeSel && node.closest(this.excludeSel)) continue; // per-site chrome
+        if (linkedInCollapsed(node)) { skippedCollapsed++; continue; }
         const sig = fingerprint(unit.text);
 
-        // Skip text already in the target language (e.g. Chinese on a zh page),
-        // and anything inside a Chinese article/post (English headings/names there stay as-is).
-        if (isAlreadyTargetLang(unit.text, this.settings.targetLangCode) || inChineseContext(node, this.settings.targetLangCode)) { skippedTarget++; continue; }
+        // Skip text already in the target language, and (except on LinkedIn) English
+        // inside a Chinese article. LinkedIn's zh-TW chrome sits in <main>; passing
+        // an empty shell here means only the post's own text can skip it.
+        const reason = chineseSkipReason(
+          location.hostname,
+          unit.text,
+          onLinkedIn ? '' : articleText(node),
+          this.settings.targetLangCode,
+        );
+        if (reason === 'target') { skippedTarget++; continue; }
+        if (reason === 'shell') { skippedShell++; continue; }
 
         // Locate any block we already placed for this source — by identity first,
         // then by a short forward sibling scan (survives React swapping the node).
@@ -178,14 +209,23 @@ export class UniversalTranslator {
         (node as any).__ibtSig = sig;
         rendered++;
 
-        if (this.settings.translateOnVisible) this.ensureIO().observe(node);
-        else this.render(node);
+        // On LinkedIn, translate a post already on screen now. Waiting for
+        // IntersectionObserver hid the request when the feed's scroll root
+        // never notified us. Below-the-fold posts still wait for a scroll.
+        const rect = node.getBoundingClientRect();
+        const inView = rect.bottom > 0 && rect.top < (window.innerHeight || 800) + 200 && rect.height >= 8;
+        if (this.settings.translateOnVisible && !(onLinkedIn && inView)) {
+          if (onLinkedIn) console.log('[IBT] queued for view', unit.text.slice(0, 60));
+          this.ensureIO().observe(node);
+        } else this.render(node);
       }
     }
 
     if (!this.firstScanReported) {
       this.firstScanReported = true;
-      if (!rendered && skippedTarget > 0) toast('這頁看起來已經是中文，不需要翻譯');
+      console.log('[IBT] scan done', { candidates, rendered, skippedTarget, skippedShell, skippedCollapsed, host: location.hostname });
+      if (!rendered && skippedCollapsed > 0 && !skippedTarget && !skippedShell) toast('貼文還摺著，點「更多」後會翻譯這則');
+      else if (!rendered && (skippedTarget > 0 || skippedShell > 0) && !skippedCollapsed) toast('這頁看起來已經是中文，不需要翻譯');
     }
   }
 
@@ -220,6 +260,7 @@ export class UniversalTranslator {
     if (old) { old.remove(); this.blocks.delete(old); }
     const text = (node as any).__ibtText || (node.textContent || '').replace(/\s+/g, ' ').trim();
     const sig = (node as any).__ibtSig || fingerprint(text);
+    console.log('[IBT] request sent', text.slice(0, 80));
     const block = renderTranslationAfter(node, text, { sig });
     if (block) {
       block.classList.add('ibt-uni');

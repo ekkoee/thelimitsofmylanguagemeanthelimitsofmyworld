@@ -1,4 +1,5 @@
 import { hasTranslatableText } from '../core/segmentation';
+import { isLinkedInCommentaryControl } from './linkedin';
 import { X_PLAYER_SELECTOR, matchSiteRule } from './selectors';
 
 // Generic, layout-aware block detection for the "translate any page" engine.
@@ -76,6 +77,8 @@ const PROSE_HOME_SEL = [
   '[itemprop="description"]',
   '.update-components-text', '.feed-shared-update-v2__description',
   '.feed-shared-inline-show-more-text',
+  '[data-test-id="main-feed-activity-card__commentary"]',
+  '.attributed-text-segment-list__content',
 ].join(',');
 
 const HIDDEN_SEL = [
@@ -142,7 +145,12 @@ export function collectUnits(root: HTMLElement): Unit[] {
 
   const skip = (el: Element): boolean => {
     if (!(el instanceof HTMLElement)) return true;          // SVG / MathML / foreign
-    if (HARD_SKIP.has(el.tagName)) return true;
+    if (HARD_SKIP.has(el.tagName)) {
+      // LinkedIn sometimes wraps the whole commentary in the see-more button.
+      // A short toggle stays skipped; the long post body does not.
+      if (el.tagName === 'BUTTON' && isLinkedInCommentaryControl(el as HTMLElement)) return false;
+      return true;
+    }
     if (el.isContentEditable) return true;
     if (el.classList.contains('ibt-block') || el.dataset.ibtOut === '1') return true; // our own output
     if (el.getAttribute('aria-hidden') === 'true') return true;
@@ -251,7 +259,11 @@ function visibleText(el: HTMLElement): string {
       if (n === el) return NodeFilter.FILTER_SKIP;
       if (n.nodeType === 1) {
         const e = n as HTMLElement;
-        if (HARD_SKIP.has(e.tagName) || e.closest(CONTROL_SEL)) return NodeFilter.FILTER_REJECT;
+        if (HARD_SKIP.has(e.tagName)) return NodeFilter.FILTER_REJECT;
+        // A control inside the block is chrome. When the block itself is that
+        // control (LinkedIn's commentary button), its own text is the post.
+        const control = e.closest(CONTROL_SEL);
+        if (control && control !== el) return NodeFilter.FILTER_REJECT;
         if (e.classList.contains('ibt-block') || e.dataset.ibtOut === '1') return NodeFilter.FILTER_REJECT;
         if (e.closest(HIDDEN_SEL) || /\b(sr-only|visually-hidden)\b/i.test(classBlob(e))) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_SKIP;
@@ -286,7 +298,7 @@ function siteAllows(el: HTMLElement): boolean {
 function passesGate(el: HTMLElement, text: string): boolean {
   const t = text.trim();
   if (!hasTranslatableText(t)) return false;
-  if (el.closest(CONTROL_SEL)) return false;
+  if (el.closest(CONTROL_SEL) && !isLinkedInCommentaryControl(el)) return false;
   if (isHiddenFromView(el)) return false;
   if (isShortcutHint(t)) return false;
   const allowed = siteAllows(el);
