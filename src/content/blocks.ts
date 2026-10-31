@@ -1,5 +1,5 @@
 import { hasTranslatableText } from '../core/segmentation';
-import { X_PLAYER_SELECTOR } from './selectors';
+import { X_PLAYER_SELECTOR, matchSiteRule } from './selectors';
 
 // Generic, layout-aware block detection for the "translate any page" engine.
 //
@@ -44,14 +44,44 @@ const HARD_SKIP = new Set([
   'EMBED', 'MATH', 'BUTTON',
 ]);
 
-// Areas/roles that are non-content chrome (nav bars, sidebars, toolbars, banners),
-// not the main readable prose. Landmark roles + their HTML equivalents.
-const SKIP_CHROME = [
-  'nav', 'aside', 'time', 'label',
-  '[role="button"]', '[role="menuitem"]', '[role="menu"]', '[role="menubar"]',
-  '[role="tab"]', '[role="tablist"]', '[role="switch"]', '[role="toolbar"]',
-  '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]', '[role="complementary"]',
-  '[translate="no"]', '.notranslate', '[data-testid="User-Name"]',
+// Click targets and form chrome. A wrapper div around <button>Debug</button> is not
+// itself a button, so callers must walk ancestors — otherwise the wrapper's
+// textContent is "Debug" and we insert a translation beside the control.
+const CONTROL_SEL = [
+  'button', 'summary', 'label', 'time', 'kbd',
+  'input', 'textarea', 'select',
+  '[role="button"]', '[role="tab"]', '[role="switch"]', '[role="checkbox"]',
+  '[role="menuitem"]', '[role="option"]', '[role="menu"]', '[role="menubar"]',
+  '[role="tablist"]', '[role="tooltip"]', '[role="search"]',
+  '[translate="no"]', '.notranslate',
+].join(',');
+
+// Landmarks. A README that actually lives in the article is allowed through
+// even when a landmark wraps the page.
+const CHROME_SEL = [
+  'header', 'footer', 'nav', 'aside',
+  '[role="banner"]', '[role="navigation"]', '[role="contentinfo"]', '[role="complementary"]',
+  '[role="toolbar"]',
+  '[data-testid="User-Name"]',
+].join(',');
+
+// Where real writing lives. Short strings here (an issue title, a one-line
+// comment) are still content. The same string in a toolbar is a label.
+const PROSE_HOME_SEL = [
+  'article',
+  '.markdown-body', '.prose', '.mw-parser-output',
+  '.js-issue-title', '.gh-header-title', '.markdown-title',
+  '.comment-body', '.js-comment-body', '.review-comment',
+  '.commit-title', '.commit-desc', '.commit-message',
+  '[itemprop="description"]',
+  '.update-components-text', '.feed-shared-update-v2__description',
+  '.feed-shared-inline-show-more-text',
+].join(',');
+
+const HIDDEN_SEL = [
+  '[hidden]', '[aria-hidden="true"]',
+  '.sr-only', '.visually-hidden', '.visuallyHidden',
+  '.screen-reader-text', '.screenreader', '.screen-reader-only',
 ].join(',');
 
 type DisplayKind = 'block' | 'inline' | 'none' | 'contents';
@@ -78,7 +108,9 @@ export function collectUnits(root: HTMLElement): Unit[] {
     let kind: DisplayKind;
     if (d === 'none') kind = 'none';
     else if (d === 'contents') kind = 'contents';
-    else if (d.startsWith('inline')) kind = PHRASING.has(el.tagName) ? 'inline' : 'block';
+    // inline-block / inline-flex still form their own box (a PR title link).
+    // Only a true inline phrasing element is transparent.
+    else if (d === 'inline' && PHRASING.has(el.tagName)) kind = 'inline';
     else kind = 'block';
     const s = { kind, visible: cs.visibility !== 'hidden' && cs.visibility !== 'collapse' };
     scache.set(el, s);
@@ -86,14 +118,13 @@ export function collectUnits(root: HTMLElement): Unit[] {
   };
   const display = (el: Element): DisplayKind => styleOf(el).kind;
 
-  // An element actually paints a box of meaningful size. Filters display:none-detached
-  // (no rects), zero-size measurement nodes, and visibility:hidden — the hidden a11y /
-  // placeholder elements SPAs like Facebook scatter everywhere. Translating those would
-  // stack a column of junk blocks even though the source itself is invisible.
+  // An element actually paints a box. 1×1 clip-rect "sr-only" nodes used to pass
+  // (width >= 1) and we translated screen-reader shortcut hints in the header.
   const rendered = (el: Element): boolean => {
     if (!styleOf(el).visible) return false;
+    if (isHiddenFromView(el as HTMLElement)) return false;
     const rects = (el as HTMLElement).getClientRects();
-    return rects.length > 0 && rects[0].width >= 1 && rects[0].height >= 1;
+    return rects.length > 0 && rects[0].width >= 8 && rects[0].height >= 8;
   };
 
   // innerText forces a layout per call — on heavy pages (BBC, news sites) that
@@ -152,7 +183,9 @@ export function collectUnits(root: HTMLElement): Unit[] {
     if (hasChildBlockWithText(el)) {
       for (const ch of Array.from(el.children)) visit(ch);     // container → go deeper
     } else {
-      const text = textOf(el);                                  // leaf block → one unit
+      // textContent includes buttons and sr-only descendants. Read only the text
+      // a person can see, so "Debug" inside a button is not a paragraph.
+      const text = visibleText(el as HTMLElement);
       if (text && rendered(el) && passesGate(el as HTMLElement, text)) units.push({ element: el as HTMLElement, text });
     }
   };
@@ -169,22 +202,115 @@ function linkDensity(el: HTMLElement): number {
   return linked / total;
 }
 
-// Keep real prose, drop UI chrome. The content-vs-chrome heuristics, in order:
-//   1. landmark/role chrome (nav, aside, toolbar, buttons, …)
-//   2. short text INSIDE a link → a name / tag / nav item (post & comment BODIES are
-//      not wrapped in links, so this spares them while killing author names that sit
-//      in an <a>/[role=link] — where the leaf's own link-density is 0)
-//   3. link-density → text that mostly IS links (nav rows, contact lists)
-//   4. minimum length (CJK gets a shorter bar — a 2-char Chinese phrase is meaningful)
+function wordCount(t: string): number {
+  return t.split(/\s+/).filter(Boolean).length;
+}
+
+/** Under about three words and not a sentence. Button labels, not paragraphs. */
+export function isShortLabel(text: string): boolean {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (!t) return true;
+  const sentence = /[.!?]["'”’)\]]*$/.test(t) || /[。！？]$/.test(t);
+  const words = wordCount(t);
+  // "Good morning, ekkoee!" is a greeting, not a paragraph. A 4-word sentence is.
+  if (sentence) return words <= 3 && t.length < 32;
+  if (words <= 3) return true;
+  return words <= 4 && t.length < 22;
+}
+
+/** Keyboard-shortcut hints ("g then d", "g 然後 d") are chrome, not prose. */
+export function isShortcutHint(text: string): boolean {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (t.length > 90) return false;
+  return (/\bthen\b/i.test(t) || t.includes('然後')) && /\b[a-zA-Z]\b/.test(t);
+}
+
+function classBlob(el: Element): string {
+  return typeof (el as HTMLElement).className === 'string' ? (el as HTMLElement).className : '';
+}
+
+/** Screen-reader-only, clipped, or zero-size. Not "scrolled off screen". */
+export function isHiddenFromView(el: HTMLElement): boolean {
+  if (el.closest(HIDDEN_SEL)) return true;
+  if (/\b(sr-only|visually-hidden|visuallyHidden|screen-reader|screenreader)\b/i.test(classBlob(el))) return true;
+  const cs = getComputedStyle(el);
+  if (cs.visibility === 'hidden' || cs.visibility === 'collapse' || cs.display === 'none') return true;
+  if (Number(cs.opacity) === 0) return true;
+  if ((parseFloat(cs.fontSize) || 0) < 2) return true;
+  if ((cs.position === 'absolute' || cs.position === 'fixed') && /rect\(\s*0/i.test(cs.clip || '')) return true;
+  const r = el.getBoundingClientRect();
+  if (r.width < 4 || r.height < 4) return true;
+  if (r.left < -2000 || r.top < -2000) return true;
+  return false;
+}
+
+function visibleText(el: HTMLElement): string {
+  let s = '';
+  const tw = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      if (n === el) return NodeFilter.FILTER_SKIP;
+      if (n.nodeType === 1) {
+        const e = n as HTMLElement;
+        if (HARD_SKIP.has(e.tagName) || e.closest(CONTROL_SEL)) return NodeFilter.FILTER_REJECT;
+        if (e.classList.contains('ibt-block') || e.dataset.ibtOut === '1') return NodeFilter.FILTER_REJECT;
+        if (e.closest(HIDDEN_SEL) || /\b(sr-only|visually-hidden)\b/i.test(classBlob(e))) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_SKIP;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let c: Node | null;
+  while ((c = tw.nextNode())) s += `${c.nodeValue || ''} `;
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function isContentHeading(el: HTMLElement, text: string): boolean {
+  if (!/^H[1-6]$/.test(el.tagName) || text.trim().length < 2) return false;
+  return !!el.closest(PROSE_HOME_SEL);
+}
+
+function isContentParagraph(el: HTMLElement): boolean {
+  if (!/^(P|LI|BLOCKQUOTE|FIGCAPTION)$/.test(el.tagName)) return false;
+  return !!el.closest(PROSE_HOME_SEL);
+}
+
+function siteAllows(el: HTMLElement): boolean {
+  const rule = matchSiteRule(location.hostname);
+  if (!rule?.include) return false;
+  try { return el.matches(rule.include) || !!el.closest(rule.include); } catch { return false; }
+}
+
+// Keep real prose. Drop labels, controls, landmarks, and hidden a11y text.
+// A short string is skipped rather than drawn as its own block — that block is
+// what pushed Debug / Agent / Create issue apart and turned shortcut hints visible.
 function passesGate(el: HTMLElement, text: string): boolean {
   const t = text.trim();
-  if (!hasTranslatableText(t)) return false;                // needs a letter, len >= 2
-  if (el.closest(SKIP_CHROME)) return false;                // nav / sidebar / buttons
-  if (t.length < 30 && el.closest('a,[role="link"]')) return false; // name / nav link / tag
+  if (!hasTranslatableText(t)) return false;
+  if (el.closest(CONTROL_SEL)) return false;
+  if (isHiddenFromView(el)) return false;
+  if (isShortcutHint(t)) return false;
+  const allowed = siteAllows(el);
+  const heading = isContentHeading(el, t);
+  const paragraph = isContentParagraph(el);
+  if (isShortLabel(t) && !heading && !paragraph && !allowed) {
+    // A PR/issue title is often only a few words and is still the row's content.
+    const titleLink = !!el.closest('a') && !el.closest(CHROME_SEL) && t.length >= 12 && wordCount(t) >= 3;
+    if (!titleLink) return false;
+  }
+  if (/^H[1-6]$/.test(el.tagName) && !heading && wordCount(t) < 8 && t.length < 60) return false;
+  const inChrome = !!el.closest(CHROME_SEL) && !el.closest(PROSE_HOME_SEL) && !allowed;
+  if (inChrome && t.length < 80) return false;
+  if (el.closest('a,[role="link"]') && !el.closest(PROSE_HOME_SEL) && !allowed) {
+    const title = t.length >= 12 && wordCount(t) >= 3 && !el.closest(CHROME_SEL);
+    if (!title && (isShortLabel(t) || t.length < 20)) return false;
+  }
+  // Toolbar leftovers ("Auto Optimized for: Balance") are several short labels
+  // glued together. Outside a content block they are still chrome.
+  const title = !!el.closest('a') && !el.closest(CHROME_SEL) && t.length >= 12 && wordCount(t) >= 3;
+  if (!el.closest(PROSE_HOME_SEL) && !allowed && !heading && !paragraph && !title) {
+    if (wordCount(t) < 8 && t.length < 80 && !/[.!?。！？]/.test(t)) return false;
+  }
   const density = linkDensity(el);
-  if (density > 0.9) return false;                          // near-fully-linked card / promo, any length
-  if (t.length < 40 && density > 0.5) return false;         // short + mostly link → menu / author
-  const hasCJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(t);
-  if (!hasCJK && t.length < 3) return false;                // stray single short token
+  if (density > 0.85 && t.length < 80 && !allowed) return false;
   return true;
 }

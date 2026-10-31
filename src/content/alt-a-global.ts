@@ -12,12 +12,13 @@ import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
 import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
+import { isAltA } from './alt-a-key';
 
 const AUTO_SITE_RE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
 if (AUTO_SITE_RE.test(location.href)) {
   // content.js owns Alt+A on auto-sites; do nothing here.
 } else {
-  const w = window as unknown as { __ibtUniversal?: UniversalTranslator };
+  const w = window as unknown as { __ibtUniversal?: UniversalTranslator; __ibtAltAAt?: number };
 
   function applyVisual(s: Settings) {
     applyRootState({
@@ -30,11 +31,14 @@ if (AUTO_SITE_RE.test(location.href)) {
   async function onAltA(): Promise<void> {
     // Already translated → cycle the 3-state display (pure CSS).
     if (w.__ibtUniversal) {
+      // The command listener may inject universal-inject for the same keypress.
+      if (Date.now() - (w.__ibtAltAAt || 0) < 800) return;
       const next = cycleView();
       toast(VIEW_LABEL[next]);
       void saveSettings({ viewMode: next });
       return;
     }
+    w.__ibtAltAAt = Date.now();
 
     let settings = await loadSettings();
     applyVisual(settings);
@@ -46,13 +50,9 @@ if (AUTO_SITE_RE.test(location.href)) {
   }
 
   window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (
-      e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
-      (e.key === 'a' || e.key === 'A')
-    ) {
-      e.preventDefault();
-      e.stopPropagation();
-      onAltA().catch(() => {});
-    }
+    if (!isAltA(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onAltA().catch(() => {});
   }, true);
 }

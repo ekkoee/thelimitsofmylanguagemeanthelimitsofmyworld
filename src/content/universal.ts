@@ -223,21 +223,30 @@ export class UniversalTranslator {
     const block = renderTranslationAfter(node, text, { sig });
     if (block) {
       block.classList.add('ibt-uni');
-      // Match the translation's size to the source element, so a big <h1> heading's
-      // translation reads as a heading, not tiny body text (the block is a sibling, so
-      // it can't inherit the heading's font-size on its own). Only ever grow: never
-      // shrink below the default body size — a leaf block's computed font-size can be
-      // smaller than the visible text (e.g. X's last-paragraph wrapper), which made
-      // translations render tiny.
-      const srcFs = parseFloat(getComputedStyle(node).fontSize) || 0;
-      const bodyFs = parseFloat(getComputedStyle(document.body).fontSize) || 16;
-      if (srcFs > bodyFs * 1.05) {
-        block.style.setProperty('--ibt-src-fs', getComputedStyle(node).fontSize);
+      const srcFs = parseFloat(getComputedStyle(node).fontSize) || 14;
+      const dense = isDenseRow(node);
+      // Inherit the block's size. Dense rows (a PR title) scale down slightly so
+      // the line fits under the title instead of blowing the row open.
+      const px = dense ? Math.max(11, Math.round(srcFs * 0.85)) : Math.max(12, Math.round(srcFs));
+      block.style.fontSize = `${px}px`;
+      block.style.maxWidth = '100%';
+      if (dense) {
+        block.classList.add('ibt-fit');
+        // Keep the line inside the title's own box (the row), not as a flex sibling.
+        if (node.tagName === 'A' || /^H[1-6]$/.test(node.tagName)) node.appendChild(block);
       }
       this.blocks.add(block);
       this.blockBySource.set(node, block);
     }
   }
+}
+
+function isDenseRow(node: HTMLElement): boolean {
+  if (/^(P|LI|BLOCKQUOTE|PRE|FIGCAPTION)$/.test(node.tagName)) return false;
+  if (node.matches('a, .markdown-title, .js-issue-title, .commit-title, .gh-header-title')) return true;
+  const fs = parseFloat(getComputedStyle(node).fontSize) || 16;
+  const h = node.getBoundingClientRect().height;
+  return h > 0 && h < fs * 2.4;
 }
 
 // --- tiny transient toast (bottom-center) ---

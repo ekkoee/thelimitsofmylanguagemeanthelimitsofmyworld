@@ -61,6 +61,8 @@ export interface SiteRule {
   match: RegExp;
   /** Drop any generic unit whose element is inside one of these (UI chrome only). */
   exclude?: string;
+  /** Content that should still be translated even when it is only a short title. */
+  include?: string;
 }
 
 export const SITE_RULES: SiteRule[] = [
@@ -81,6 +83,40 @@ export const SITE_RULES: SiteRule[] = [
     // scoping (keeps the right-hand About panel translatable too).
     match: /(^|\.)facebook\.com$/,
     exclude: '[role="button"],[role="toolbar"],[role="menu"],[role="menuitem"]',
+  },
+  {
+    // GitHub. The generic gate already skips buttons and short labels. This drops
+    // the app header, search, and Copilot composer chrome, and keeps README /
+    // issue / commit text even when the title is short.
+    match: /(^|\.)github\.com$/,
+    exclude: [
+      'header', 'nav', 'footer',
+      '.AppHeader', '.js-header-wrapper', '.Header',
+      'qbsearch-input', '[role="search"]', '.AppHeader-search',
+      '.copilot-chat-input', 'form.js-site-search-form',
+    ].join(','),
+    include: [
+      '.markdown-body', '.js-issue-title', '.gh-header-title', '.markdown-title',
+      '.comment-body', '.js-comment-body', '.review-comment',
+      '.commit-title', '.commit-desc', '.commit-message',
+      '[itemprop="description"]',
+    ].join(','),
+  },
+  {
+    // LinkedIn feed. Nav, the share box, and the Like/Comment bar are chrome.
+    // Post bodies and comments stay in the generic prose path.
+    match: /(^|\.)linkedin\.com$/,
+    exclude: [
+      'header', 'nav', 'footer',
+      '.global-nav', '.scaffold-layout__aside',
+      '.share-box-feed-entry__wrapper', '.share-creation-state',
+      '.social-actions', '.feed-shared-social-action-bar',
+      '.comments-comment-social-bar',
+    ].join(','),
+    include: [
+      '.update-components-text', '.feed-shared-update-v2__description',
+      '.feed-shared-inline-show-more-text', '.comments-comment-item__main-content',
+    ].join(','),
   },
 ];
 

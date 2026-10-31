@@ -19,14 +19,34 @@
 .ibt-block.ibt-uni {
   display: block;
   width: 100%;
+  max-width: 100%;
   flex-basis: 100%;
   grid-column: 1 / -1;
   box-sizing: border-box;
   contain: layout;
+  position: static;
+  overflow-wrap: break-word;
   /* match the source element's size (set per-block in universal.ts) so a heading's
      translation reads as a heading; falls back to the default body size. */
   font-size: calc(var(--ibt-src-fs, 0.98rem) * var(--ibt-font-scale));
 }
+/* List-row titles (a PR title, a commit subject). A smaller muted line under the
+   title, inside the row. Not a full-width flex track and not position:absolute. */
+.ibt-block.ibt-uni.ibt-fit {
+  width: auto;
+  max-width: 100%;
+  flex: 0 0 auto;
+  flex-basis: auto;
+  grid-column: auto;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  contain: none;
+  position: static;
+  white-space: normal;
+  line-height: 1.35;
+}
+.ibt-block.ibt-fit .ibt-trans { font-size: 1em; opacity: 0.82; }
 
 /* Left marker bar — user-configurable in options (style + color + hide). */
 :root[data-ibt-bar="thick"] .ibt-block { border-left-width: 6px; }

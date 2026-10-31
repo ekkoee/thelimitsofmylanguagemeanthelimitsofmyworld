@@ -7,6 +7,7 @@ import { scanTwitter } from './twitter';
 import { redditAdapter } from './reddit';
 import { startYouTube, updateYouTubeSettings } from './youtube';
 import { startXVideo, updateXVideoSettings } from './x-video';
+import { isAltA } from './alt-a-key';
 import { startWordPopup, stopWordPopup } from './word-popup';
 import { Settings } from '../core/types';
 
@@ -43,12 +44,10 @@ import { Settings } from '../core/types';
   // is missing/broken (e.g. new extension ID after re-install). The SW command
   // above is deduped via lastDirectToggle so a single press toggles once.
   window.addEventListener('keydown', (e) => {
-    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
-        (e.key === 'a' || e.key === 'A')) {
-      e.preventDefault();
-      lastDirectToggle = Date.now();
-      cycleAndSave();
-    }
+    if (!isAltA(e)) return;
+    e.preventDefault();
+    lastDirectToggle = Date.now();
+    cycleAndSave();
   }, true);
 
   if (site === 'youtube') {

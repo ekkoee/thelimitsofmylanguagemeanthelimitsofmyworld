@@ -8,16 +8,19 @@ import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
 
 (async function () {
-  const w = window as unknown as { __ibtUniversal?: UniversalTranslator };
+  const w = window as unknown as { __ibtUniversal?: UniversalTranslator; __ibtAltAAt?: number };
 
   // Already translated this page → each subsequent Alt+A cycles the 3-state
   // display (原文+中文 → 原文 → 中文 → …), pure CSS, no re-translation.
+  // The content-script listener and chrome.commands can both see one keypress.
   if (w.__ibtUniversal) {
+    if (Date.now() - (w.__ibtAltAAt || 0) < 800) return;
     const next = cycleView();
     toast(VIEW_LABEL[next]);
     void saveSettings({ viewMode: next });
     return;
   }
+  w.__ibtAltAAt = Date.now();
 
   let settings = await loadSettings();
   applyVisual(settings); // also sets the default 'both' view
