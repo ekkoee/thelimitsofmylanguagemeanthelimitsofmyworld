@@ -1,5 +1,5 @@
 import { checkGeminiKey, normalizeGeminiKey } from '../../core/gemini-key';
-import { applyI18n, setUiLang, t, watchUiLang } from '../../core/i18n';
+import { applyI18n, getUiLang, setUiLang, t, watchUiLang } from '../../core/i18n';
 import { loadSettings, saveSettings } from '../../core/storage';
 import { DEFAULT_MODELS, DEFAULT_SETTINGS, ProviderId, Settings, normalizeTint } from '../../core/types';
 import { VocabEntry, clearVocab, listVocab, removeVocab, vocabToCsv, vocabToTxt } from '../../core/vocab';
@@ -26,12 +26,16 @@ async function init() {
   setUiLang(s.uiLang || '');
   applyI18n();
   watchUiLang();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync' && changes.ibt_settings) paintPreview();
+  });
   const uiLang = $<HTMLSelectElement>('uiLang');
   uiLang.value = s.uiLang || '';
   uiLang.addEventListener('change', () => {
     void save({ uiLang: uiLang.value }).then(() => {
       setUiLang(uiLang.value);
       applyI18n();
+      paintPreview();
       refreshVocab();
     });
   });
@@ -94,6 +98,30 @@ async function init() {
   void bindVocab();
 }
 
+const EN_SENTENCE = 'Good design is quiet; it helps you read without getting in the way.';
+const ZH_TW_SENTENCE = '好的設計很安靜，它幫助你閱讀，卻不會打擾你。';
+const PREVIEW_TRANS: Record<string, string> = {
+  'zh-TW': ZH_TW_SENTENCE,
+  'zh-CN': '好的设计很安静，它帮助你阅读，却不会打扰你。',
+  ja: '良いデザインは静かです。読むことを助け、邪魔をしません。',
+  ko: '좋은 디자인은 조용합니다. 읽기를 도우면서도 방해하지 않습니다.',
+  de: 'Gutes Design ist leise. Es hilft beim Lesen und steht nicht im Weg.',
+  fr: 'Un bon design est discret. Il aide à lire sans gêner.',
+  es: 'Un buen diseño es discreto. Ayuda a leer sin estorbar.',
+  en: EN_SENTENCE,
+};
+
+/** English source with a translation in the interface language. English UI uses the Traditional sentence as the source. */
+function paintPreview(): void {
+  const lang = getUiLang();
+  const englishUi = lang === 'en';
+  const orig = englishUi ? ZH_TW_SENTENCE : EN_SENTENCE;
+  const trans = PREVIEW_TRANS[lang] || EN_SENTENCE;
+  document.querySelectorAll<HTMLElement>('[data-preview="orig"]').forEach((node) => { node.textContent = orig; });
+  document.querySelectorAll<HTMLElement>('[data-preview="trans"]').forEach((node) => { node.textContent = trans; });
+  document.documentElement.setAttribute('data-ibt-lang', lang === 'zh-CN' ? 'zh-CN' : 'zh-TW');
+}
+
 const STYLE_VALUES = ['plain', 'underline', 'dashed', 'dotted', 'wavy', 'solidBox', 'dashedBox', 'highlight', 'dim', 'italic', 'bold', 'blur'];
 const BAR_VALUES = ['none', 'bar', 'thick', 'dashed'];
 const INHERIT_SWATCH = '#1c1c1c';
@@ -120,7 +148,7 @@ function bindAppearance(s: Settings) {
     root.setAttribute('data-ibt-style', style.value || 'plain');
     root.setAttribute('data-ibt-bar', barStyle.value || 'none');
     root.setAttribute('data-ibt-highlight', highlight.checked ? 'on' : 'off');
-    root.setAttribute('data-ibt-lang', 'zh-TW');
+    paintPreview();
     swatchRow.hidden = !highlight.checked;
     if (textColor) {
       root.setAttribute('data-ibt-custom-color', 'on');

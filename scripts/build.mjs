@@ -21,6 +21,7 @@ const copies = [
   ['public/offscreen.html', 'dist/offscreen.html'],
   ['node_modules/tesseract.js/dist/tesseract.min.js', 'dist/ocr/tesseract.min.js'],
   ['node_modules/tesseract.js/dist/worker.min.js', 'dist/ocr/worker.min.js'],
+  ['public/ocr/worker-quiet.js', 'dist/ocr/worker-quiet.js'],
   ['node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js', 'dist/ocr/core/tesseract-core-simd-lstm.wasm.js'],
 ];
 function copyAll() {

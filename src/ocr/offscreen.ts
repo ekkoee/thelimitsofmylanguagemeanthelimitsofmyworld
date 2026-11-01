@@ -3,6 +3,9 @@
 
 import { setUiLang, t } from '../core/i18n';
 import { loadSettings } from '../core/storage';
+import { hushTessConsole } from './quiet-log';
+
+hushTessConsole();
 import { acceptOcrWord, OcrToken, tokensToRegions } from './paragraphs';
 import { ENG_TRAINEDDATA_SHA256, ENG_TRAINEDDATA_URL, OCR_CACHE_KEY, gunzipBytes, sha256Hex } from './traineddata';
 
@@ -83,13 +86,21 @@ async function getWorker(): Promise<TessWorker> {
       const api = (globalThis as unknown as { Tesseract?: TessApi }).Tesseract;
       if (!api) throw new Error(t('ocrMissing'));
       const worker = await api.createWorker('eng', 1, {
-        workerPath: chrome.runtime.getURL('ocr/worker.min.js'),
+        workerPath: chrome.runtime.getURL('ocr/worker-quiet.js'),
         corePath: chrome.runtime.getURL('ocr/core'),
         cachePath: 'ibt-ocr',
         workerBlobURL: false,
         gzip: false,
+        logger: () => {},
+        errorHandler: () => {},
       });
-      await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' });
+      // A fixed DPI stops Tesseract from estimating resolution and logging it.
+      await worker.setParameters({
+        tessedit_pageseg_mode: '11',
+        preserve_interword_spaces: '1',
+        user_defined_dpi: '300',
+        debug_file: '/dev/null',
+      });
       return worker;
     })();
   }
