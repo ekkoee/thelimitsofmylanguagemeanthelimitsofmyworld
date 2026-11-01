@@ -6,10 +6,13 @@ import { applyRootState } from '../utils/dom';
 import { loadSettings } from '../core/storage';
 import { pageFontPx } from './page-font';
 import { belowAnchor, imageDecision, overlayHost } from './image-place';
-import type { ImageRegion } from '../providers/gemini';
+import { friendlyTranslateError } from '../core/errors';
+import { IMAGE_JPEG_QUALITY, IMAGE_MAX_EDGE, ImageRegion, isMostlyLatin } from '../providers/gemini-image';
 
 const EMPTY = '圖片中沒有可翻譯的文字';
 const LOADING = '圖片翻譯中…';
+const FAILED_ZH = '無法把圖片裡的文字翻成中文，請再試一次';
+const inflight = new Map<string, Promise<void>>();
 
 type ImgHit = HTMLImageElement | HTMLElement;
 
@@ -95,7 +98,16 @@ async function run(srcUrl: string): Promise<void> {
   }
   const prior = existingFor(img);
   if (prior) { prior.remove(); delete (img as HTMLElement).dataset.ibtImg; return; }
+  const key = srcUrl || (img instanceof HTMLImageElement ? (img.currentSrc || img.src) : '');
+  const pending = inflight.get(key);
+  if (pending) return pending;
 
+  const job = runOne(img, srcUrl);
+  if (key) inflight.set(key, job);
+  try { await job; } finally { if (key) inflight.delete(key); }
+}
+
+async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
   const decision = imageDecision(img as HTMLElement);
   console.log('[IBT] image mode', decision.mode, decision.reason);
   const shell = mount(img, decision.mode, LOADING);
@@ -103,15 +115,17 @@ async function run(srcUrl: string): Promise<void> {
     const settings = await loadSettings();
     applyRootState(settings);
     const bytes = await acquire(img, srcUrl);
+    if (!shell.isConnected) return;
     if (!bytes) throw new Error('無法讀取這張圖片');
-    console.log('[IBT] image encoded', bytes.via, bytes.mime, bytes.data.length);
+    console.log('[IBT] image encoded', bytes.via, bytes.mime, bytes.data.length, new Date().toISOString());
     const resp = await chrome.runtime.sendMessage({
       type: 'ibt-translate-image', mime: bytes.mime, data: bytes.data,
     }) as { ok?: boolean; text?: string; regions?: ImageRegion[]; error?: string };
+    if (!shell.isConnected) return;
     if (!resp?.ok) throw new Error(resp?.error || '圖片翻譯失敗');
-    paint(shell, img, decision.mode, resp.text || '', resp.regions || []);
+    paint(shell, decision.mode, resp.text || '', resp.regions || []);
   } catch (err) {
-    paint(shell, img, decision.mode, String((err as Error)?.message || err), []);
+    if (shell.isConnected) paint(shell, decision.mode, friendlyTranslateError(err, 'image'), []);
   }
 }
 
@@ -148,11 +162,11 @@ function mount(img: ImgHit, mode: 'below' | 'overlay', text: string): HTMLElemen
   return overlay;
 }
 
-function paint(shell: HTMLElement, img: ImgHit, mode: 'below' | 'overlay', text: string, regions: ImageRegion[]): void {
-  const body = text.trim();
-  const empty = !body;
-  const shown = empty ? EMPTY : body;
-  if (mode === 'below' || !regions.length || empty) {
+function paint(shell: HTMLElement, mode: 'below' | 'overlay', text: string, regions: ImageRegion[]): void {
+  const placed = regions.filter((r) => r.textZh && r.box);
+  const body = (placed.length ? placed.map((r) => r.textZh).join('\n') : text).trim();
+  const shown = !body ? EMPTY : (isMostlyLatin(body) ? FAILED_ZH : body);
+  if (mode === 'below' || !placed.length) {
     const line = shell.querySelector('.ibt-trans, .ibt-img-panel') as HTMLElement | null;
     if (line) line.textContent = shown;
     if (mode === 'overlay') {
@@ -162,19 +176,21 @@ function paint(shell: HTMLElement, img: ImgHit, mode: 'below' | 'overlay', text:
     return;
   }
   shell.querySelector('.ibt-img-panel')?.remove();
-  for (const region of regions) {
+  for (const region of placed) {
     const box = document.createElement('div');
     box.className = 'ibt-img-region';
-    const [x, y, w, h] = region.box;
-    box.style.left = `${x * 100}%`;
-    box.style.top = `${y * 100}%`;
-    box.style.width = `${w * 100}%`;
-    box.style.height = `${h * 100}%`;
-    box.textContent = region.text;
+    const [x, y, w, h] = region.box as [number, number, number, number];
+    const pad = 0.012;
+    const left = Math.max(0, x - pad);
+    const top = Math.max(0, y - pad);
+    box.style.left = `${left * 100}%`;
+    box.style.top = `${top * 100}%`;
+    box.style.width = `${Math.min(1 - left, w + pad * 2) * 100}%`;
+    box.style.height = `${Math.min(1 - top, h + pad * 2) * 100}%`;
+    box.textContent = region.textZh;
     shell.appendChild(box);
     fitOverlay(box, box);
   }
-  void img;
 }
 
 function controls(overlay: HTMLElement): HTMLElement {
@@ -247,16 +263,16 @@ async function acquire(img: ImgHit, srcUrl: string): Promise<Bytes | null> {
   if (url && !url.startsWith('data:')) {
     try {
       const fetched = await chrome.runtime.sendMessage({ type: 'ibt-fetch-image', url }) as { ok?: boolean; mime?: string; data?: string };
-      if (fetched?.ok && fetched.data) return { mime: fetched.mime || 'image/jpeg', data: fetched.data, via: 'fetch' };
+      if (fetched?.ok && fetched.data) return shrink({ mime: fetched.mime || 'image/jpeg', data: fetched.data, via: 'fetch' });
     } catch { /* content script can still draw it */ }
   }
   if (url?.startsWith('data:')) {
     const m = /^data:([^;,]+);base64,(.+)$/i.exec(url);
-    if (m) return { mime: m[1], data: m[2], via: 'data-url' };
+    if (m) return shrink({ mime: m[1], data: m[2], via: 'data-url' });
   }
   if (img instanceof HTMLImageElement) {
     const drawn = drawImage(img);
-    if (drawn) return drawn;
+    if (drawn) return shrink(drawn);
   }
   const rect = img.getBoundingClientRect();
   if (rect.width < 8 || rect.height < 8) return null;
@@ -264,10 +280,35 @@ async function acquire(img: ImgHit, srcUrl: string): Promise<Bytes | null> {
     const shot = await chrome.runtime.sendMessage({ type: 'ibt-capture-tab' }) as { ok?: boolean; dataUrl?: string };
     if (shot?.ok && shot.dataUrl) {
       const cropped = await cropShot(shot.dataUrl, rect, window.devicePixelRatio || 1);
-      if (cropped) return { mime: 'image/png', data: cropped, via: 'capture' };
+      if (cropped) return shrink({ mime: 'image/png', data: cropped, via: 'capture' });
     }
   } catch { /* no tab capture */ }
   return null;
+}
+
+async function shrink(bytes: Bytes): Promise<Bytes> {
+  try {
+    const img = new Image();
+    img.src = `data:${bytes.mime};base64,${bytes.data}`;
+    await img.decode();
+    const edge = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+    const scale = Math.min(1, IMAGE_MAX_EDGE / edge);
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return bytes;
+    ctx.drawImage(img, 0, 0, w, h);
+    const url = canvas.toDataURL('image/jpeg', IMAGE_JPEG_QUALITY);
+    const data = url.split(',')[1] || '';
+    if (!data) return bytes;
+    console.log('[IBT] image jpeg', w, h, data.length);
+    return { mime: 'image/jpeg', data, via: bytes.via };
+  } catch {
+    return bytes;
+  }
 }
 
 function drawImage(img: HTMLImageElement): Bytes | null {

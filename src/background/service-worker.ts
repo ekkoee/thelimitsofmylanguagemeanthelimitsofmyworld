@@ -9,7 +9,8 @@ import { toTraditional } from '../core/st2t';
 import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
 import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
-import { translateImage } from '../providers/gemini';
+import { friendlyTranslateError } from '../core/errors';
+import { echoesEnglish, translateImageSequential } from '../providers/gemini-image';
 
 const queue = new TaskQueue(4);
 
@@ -35,11 +36,22 @@ let lastLLMStart = 0;
 /** Space LLM request starts (free-tier RPM protection). Only waits when the
  *  previous request started less than the current spacing ago — the first
  *  batch after idle goes immediately instead of paying a gratuitous wait. */
+let imageGate: Promise<void> = Promise.resolve();
+function withImageLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = imageGate.then(fn, fn);
+  imageGate = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 function paceLLM(): Promise<void> {
+  // An image call is one vision request. Page translation waits so it does not
+  // spend the same per-minute quota in parallel.
+  const afterImage = imageGate;
   if (Date.now() > llmCalmAt) llmSpacing = LLM_SPACING_FAST_MS;
   const wait = llmSpacing - (Date.now() - lastLLMStart);
   lastLLMStart = Date.now() + Math.max(0, wait);
-  return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)) : Promise.resolve();
+  const paced = wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)) : Promise.resolve();
+  return afterImage.then(() => paced);
 }
 /** True for metered LLM providers (everything except the free MT endpoints). */
 function isMetered(p: { id: string }): boolean {
@@ -171,13 +183,13 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
   if (msg?.type === 'translate') {
     handleTranslate(msg.text, { title: msg.title, mode: msg.mode })
       .then((pairs) => sendResponse({ ok: true, pairs } satisfies TranslateResponse))
-      .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateResponse));
+      .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'page') } satisfies TranslateResponse));
     return true; // async response
   }
   if (msg?.type === 'translateBatch') {
     handleTranslateBatch(msg.texts)
       .then((translations) => sendResponse({ ok: true, translations } satisfies TranslateBatchResponse))
-      .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateBatchResponse));
+      .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'page') } satisfies TranslateBatchResponse));
     return true; // async response
   }
   if (msg?.type === 'ibt-fetch-image') {
@@ -198,7 +210,7 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
   if (msg?.type === 'ibt-translate-image') {
     translateImageMessage(msg.mime, msg.data)
       .then((result) => sendResponse({ ok: true, ...result }))
-      .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) }));
+      .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'image') }));
     return true;
   }
   if (msg?.type === 'lookup') {
@@ -237,14 +249,49 @@ async function fetchImageBytes(url: string): Promise<{ mime: string; data: strin
   }
 }
 
+const imageInflight = new Map<string, Promise<{ text: string; regions: { textEn: string; textZh: string; box?: [number, number, number, number] }[]; model: string }>>();
+
 async function translateImageMessage(mime: string, data: string) {
   const settings = await loadSettings();
-  return translateImage({
-    mime,
-    data,
-    key: settings.apiKeys.gemini || '',
-    model: settings.model,
+  const key = (settings.apiKeys.gemini || '').trim();
+  if (!key) throw new Error('NO_API_KEY:image');
+  const sig = `${data.length}:${data.slice(0, 48)}:${data.slice(-24)}`;
+  const hit = imageInflight.get(sig);
+  if (hit) {
+    console.log('[IBT] image gemini deduped', sig.slice(0, 24));
+    return hit;
+  }
+  const job = withImageLock(async () => {
+    const got = await translateImageSequential({
+      key, model: settings.model, mime, data,
+    });
+    const regions = [];
+    for (const region of got.regions) {
+      const textZh = await chineseLine(region.textEn, region.textZh, settings);
+      if (!textZh) continue;
+      regions.push({ ...region, textZh });
+    }
+    const text = regions.map((r) => r.textZh).join('\n') || await chineseLine('', got.text, settings);
+    if (!text && got.regions.some((r) => r.textEn)) throw new Error('IMAGE_ECHO');
+    return { text, regions, model: got.model };
   });
+  imageInflight.set(sig, job);
+  try { return await job; } finally { imageInflight.delete(sig); }
+}
+
+async function chineseLine(en: string, zh: string, settings: Settings): Promise<string> {
+  if (zh && !echoesEnglish(en || zh, zh)) return zh;
+  const source = (en || '').trim();
+  if (!source) return '';
+  try {
+    const free = { ...settings, provider: 'google' as const, model: '' };
+    const pairs = await withFreeFallback(free, (p) => translateWith(p, source, free, { mode: 'prose' }));
+    const t = pairs.map((p) => p.t).join('').trim();
+    if (t && !echoesEnglish(source, t)) return t;
+  } catch (err) {
+    console.log('[IBT] image text fallback failed', String((err as Error)?.message || err).slice(0, 180));
+  }
+  return '';
 }
 
 async function handleTranslate(

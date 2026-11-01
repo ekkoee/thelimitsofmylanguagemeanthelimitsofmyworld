@@ -119,7 +119,7 @@
 .ibt-img-panel,
 .ibt-img-region {
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(8, 8, 8, 0.96);
   color: var(--ibt-trans-color, #f2d492);
   font-family: var(--ibt-zh-font);
   font-weight: 400;
