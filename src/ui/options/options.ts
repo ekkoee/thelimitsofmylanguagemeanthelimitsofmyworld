@@ -85,13 +85,6 @@ async function init() {
   });
 
   bindDblClickToggle(s.dblClickTranslate);
-  bindLinkedInExpand(s.linkedinExpandTranslate !== false);
-}
-
-function bindLinkedInExpand(initial: boolean) {
-  const cb = $<HTMLInputElement>('linkedinExpandTranslate');
-  cb.checked = initial;
-  cb.addEventListener('change', () => save({ linkedinExpandTranslate: cb.checked }));
 }
 
 // The double-click popup needs broad host access, so enabling it requests <all_urls>

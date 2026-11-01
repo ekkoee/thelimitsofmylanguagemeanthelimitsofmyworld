@@ -20,10 +20,13 @@ export function migrateDefaultColor(value: string | undefined): string {
  * from the settings UI. Force their values on read so stale stored settings can never
  * leave the extension in a state the user can no longer see or change.
  */
-function normalizeSettings(s: Settings): Settings {
+function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown }): Settings {
   const isGemini = s.provider === 'gemini';
+  // The LinkedIn expand toggle was removed. A stored false must not survive on the object.
+  const rest = { ...s };
+  delete rest.linkedinExpandTranslate;
   return {
-    ...s,
+    ...rest,
     provider: isGemini ? 'gemini' : 'google',
     model: isGemini && !/^gemini/i.test(s.model || '') ? 'gemini-3.5-flash-lite' : s.model || '',
     sourceLang: 'auto',
@@ -32,8 +35,6 @@ function normalizeSettings(s: Settings): Settings {
     sites: { x: true, reddit: true, youtube: true, netflix: true },
     // '' is "never chosen". Do not coerce it to 'both' — X video treats unset as Chinese-only.
     viewMode: s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '',
-    // Missing means on. Only an explicit false turns LinkedIn expand-translation off.
-    linkedinExpandTranslate: s.linkedinExpandTranslate !== false,
     transColor: migrateDefaultColor(s.transColor),
     barColor: migrateDefaultColor(s.barColor),
   };
@@ -41,7 +42,8 @@ function normalizeSettings(s: Settings): Settings {
 
 export async function loadSettings(): Promise<Settings> {
   const raw = await chrome.storage.sync.get(SETTINGS_KEY);
-  const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings>;
+  const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings> & { linkedinExpandTranslate?: unknown };
+  const dropLinkedIn = Object.prototype.hasOwnProperty.call(stored, 'linkedinExpandTranslate');
   const hadLegacy = isLegacyDefaultColor(stored.transColor) || isLegacyDefaultColor(stored.barColor);
   // deep-ish merge so new default keys appear after upgrades
   const next = normalizeSettings({
@@ -51,8 +53,9 @@ export async function loadSettings(): Promise<Settings> {
     apiKeys: { ...DEFAULT_SETTINGS.apiKeys, ...(stored.apiKeys ?? {}) },
   });
   // Drop a stored #6c7aff so the new default shows up, without rewriting other fields.
-  if (hadLegacy) {
+  if (hadLegacy || dropLinkedIn) {
     const patched = { ...stored };
+    delete patched.linkedinExpandTranslate;
     if (isLegacyDefaultColor(stored.transColor)) patched.transColor = '';
     if (isLegacyDefaultColor(stored.barColor)) patched.barColor = '';
     await chrome.storage.sync.set({ [SETTINGS_KEY]: patched });

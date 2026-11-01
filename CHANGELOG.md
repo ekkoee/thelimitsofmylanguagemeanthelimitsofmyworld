@@ -2,6 +2,10 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.4.20] — 2026-11-01
+### 變更 Changed
+- **設定頁拿掉「LinkedIn：展開貼文時翻譯」。** 展開貼文仍會翻譯，而且不能關掉。以前存成關閉的值會在讀取設定時刪掉。雙擊單字翻譯和清除快取沒動。
+
 ## [1.4.19] — 2026-11-01
 ### 新增 Added
 - **Netflix 觀看頁字幕。** `www.netflix.com/watch/…` 讀畫面上的 `.player-timedtext`，把每一句翻成繁體中文，中文行在原生字幕上方，間距跟 X 一樣。預設只顯示我們的中文、原生英文字幕留著。選「原文＋中文」會改由我們畫英文並藏起 Netflix 那一行；選「只顯示原文」就關掉。字用 `--ibt-zh-font`，預設白色，自訂譯文色會跟著變。除錯：`localStorage.setItem('ibt-nf-debug','1')` 後看 `[IBT nf-cap]`。

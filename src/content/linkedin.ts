@@ -1,8 +1,6 @@
 // LinkedIn feed. Posts are often clamped behind a "see more" / "更多" control.
 // Translating the clamped preview spends a request and then goes stale when the
 // reader expands the post, so expansion itself is what translates that card.
-import { Settings } from '../core/types';
-import { loadSettings, onSettingsChanged } from '../core/storage';
 import { renderTranslationAfter } from './engine';
 
 const POST = [
@@ -145,7 +143,6 @@ function linkedInOwnTranslation(scope: ParentNode): boolean {
   return false;
 }
 
-let expandOn = true;
 const pending = new WeakMap<HTMLElement, number>();
 
 function placeBlock(body: HTMLElement, text: string, sig: string): void {
@@ -171,7 +168,6 @@ function placeBlock(body: HTMLElement, text: string, sig: string): void {
 }
 
 function translateBody(body: HTMLElement, why: string): void {
-  if (!expandOn && why === 'expand') return;
   const post = postOf(body) || body;
   if (linkedInOwnTranslation(post)) {
     const next = body.nextElementSibling;
@@ -228,12 +224,8 @@ export function startLinkedIn(): void {
   if (w.__ibtLiWatch) return;
   w.__ibtLiWatch = true;
   console.log('[IBT] LinkedIn expand watcher ready', location.href);
-  const apply = (s: Settings) => { expandOn = s.linkedinExpandTranslate !== false; };
-  loadSettings().then(apply).catch((err) => console.log('[IBT] LinkedIn settings failed', err));
-  onSettingsChanged(apply);
 
   document.addEventListener('click', (e) => {
-    if (!expandOn) return;
     const kind = controlFromElement(e.target as Element);
     if (kind !== 'expand' && kind !== 'collapse') return;
     const btn = (e.target as Element).closest('button, [role="button"]') as HTMLElement | null;
@@ -244,7 +236,7 @@ export function startLinkedIn(): void {
 
   const mo = new MutationObserver((recs) => {
     for (const r of recs) {
-      if (r.type === 'attributes' && r.attributeName === 'aria-expanded' && expandOn) {
+      if (r.type === 'attributes' && r.attributeName === 'aria-expanded') {
         const el = r.target as HTMLElement;
         const kind = controlFromElement(el);
         if (kind === 'collapse' && el.getAttribute('aria-expanded') === 'true') onControl(el, 'expand');
