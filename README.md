@@ -1,10 +1,29 @@
+<div align="center">
+
+<img src="public/icons/icon128.png" width="96" alt="雙語對照翻譯 icon">
+
+# 雙語對照翻譯 · Bilingual Translate
+
+**原文一行、譯文一行，讀外文像讀母語一樣自然。**<br>
+Line-by-line bilingual reading for the web and video captions.
+
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-安裝%20%2F%20Install-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/hhhlkbfhcnbonndnnooanhdopbepjban)
+[![Release](https://img.shields.io/github/v/release/ekkoee/thelimitsofmylanguagemeanthelimitsofmyworld?label=release)](https://github.com/ekkoee/thelimitsofmylanguagemeanthelimitsofmyworld/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 [繁體中文](#zh-hant) · [English](#english)
+
+</div>
 
 <a id="zh-hant"></a>
 
-# 雙語對照翻譯
+## 簡介
 
 把正在讀的外文，排成原文一行、譯文一行。網頁、YouTube、Netflix 與 X 的影片字幕都能對照。預設走免費的 Google 翻譯，不必申請 API 金鑰。
+
+適合每天在 X、Reddit、LinkedIn 追外文資訊、看 YouTube 和 Netflix 學語言的人：不用切換分頁、不用複製貼上，原文和譯文就排在一起，讀得快，也看得懂原句怎麼說。
+
+👉 **[從 Chrome 線上應用程式商店安裝](https://chromewebstore.google.com/detail/hhhlkbfhcnbonndnnooanhdopbepjban)**
 
 ## 主要功能
 
@@ -21,9 +40,9 @@
 
 ## 安裝
 
-### Chrome 線上應用程式商店
+### Chrome 線上應用程式商店（推薦）
 
-即將上架。
+前往 [雙語對照翻譯 — Chrome 線上應用程式商店](https://chromewebstore.google.com/detail/hhhlkbfhcnbonndnnooanhdopbepjban)，點「加到 Chrome」即可，之後會自動更新。
 
 ### 載入未封裝項目
 
@@ -98,9 +117,13 @@ npm run zip         # 把 dist/ 包成專案根目錄的 immersive-bilingual.zip
 
 <a id="english"></a>
 
-# Bilingual Translate
+## Overview
 
 Read foreign text as the original on one line and the translation on the next. It covers web pages and captions on YouTube, Netflix, and videos inside X posts. The default engine is free Google Translate, and it does not ask for an API key.
+
+Built for people who follow news on X, Reddit, and LinkedIn in other languages, or learn a language through YouTube and Netflix: no tab switching and no copy-paste. The original and the translation sit side by side, so you read faster and still see how it was really said.
+
+👉 **[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/hhhlkbfhcnbonndnnooanhdopbepjban)**
 
 ## Features
 
@@ -117,9 +140,9 @@ Read foreign text as the original on one line and the translation on the next. I
 
 ## Install
 
-### Chrome Web Store
+### Chrome Web Store (recommended)
 
-Coming soon.
+Open [Bilingual Translate on the Chrome Web Store](https://chromewebstore.google.com/detail/hhhlkbfhcnbonndnnooanhdopbepjban) and choose Add to Chrome. Updates install automatically.
 
 ### Load unpacked
 
