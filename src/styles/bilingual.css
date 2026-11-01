@@ -289,6 +289,20 @@
   color: #e8eaf2;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.46);
 }
+.ibt-sel-card::-webkit-scrollbar { width: 6px; height: 6px; }
+.ibt-sel-card::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.ibt-sel-card::-webkit-scrollbar-track { background: transparent; }
+.ibt-sel-card::-webkit-scrollbar-thumb {
+  background: rgba(154, 163, 184, 0.4);
+  border-radius: 99px;
+}
+.ibt-sel-card::-webkit-scrollbar-thumb:hover { background: rgba(154, 163, 184, 0.72); }
+@supports not selector(::-webkit-scrollbar) {
+  .ibt-sel-card {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(154, 163, 184, 0.45) transparent;
+  }
+}
 .ibt-sel-card.ibt-sel-drag { animation: none; }
 @keyframes ibt-sel-in {
   from { opacity: 0; transform: translateY(8px) scale(0.96); }
