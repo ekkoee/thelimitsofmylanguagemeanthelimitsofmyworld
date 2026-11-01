@@ -181,13 +181,15 @@ function bindAppearance(s: Settings) {
   $('resetDefaults').addEventListener('click', () => { confirm.hidden = false; });
   $('resetNo').addEventListener('click', () => { confirm.hidden = true; });
   $('resetYes').addEventListener('click', async () => {
-    const keep = (await loadSettings()).apiKeys;
     await save({
-      ...DEFAULT_SETTINGS,
-      apiKeys: keep,
+      transStyle: DEFAULT_SETTINGS.transStyle,
+      transColor: '',
       transColorSet: true,
+      barStyle: 'none',
+      barColor: '',
+      transHighlight: true,
       transHighlightSet: true,
-      selectionInstantSet: true,
+      highlightColor: '',
     });
     location.reload();
   });

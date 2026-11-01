@@ -11,7 +11,7 @@ import { friendlyTranslateError } from '../core/errors';
 import { IMAGE_JPEG_QUALITY, IMAGE_MAX_EDGE, ImageRegion, isMostlyLatin, selectInPlace } from '../providers/gemini-image';
 
 const EMPTY = '圖片中沒有可翻譯的文字';
-const LOADING = '圖片翻譯中…';
+const LOADING = '右鍵圖片翻譯中…';
 const FAILED_ZH = '無法把圖片裡的文字翻成中文，請再試一次';
 const inflight = new Map<string, Promise<void>>();
 

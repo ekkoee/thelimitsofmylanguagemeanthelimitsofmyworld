@@ -45,7 +45,7 @@
           </label>
         </div>
         <label class="field">
-          <span>圖片翻譯</span>
+          <span>右鍵圖片翻譯</span>
           <select id="imageModel">
             <option value="local">本機辨識（免費、不限次數）</option>
             <option value="gemini">Gemini 看圖（較準，每天約 20 次）</option>
@@ -96,16 +96,16 @@
             <option value="blur">模糊（學習模式 · 滑過才顯示）</option>
           </select>
         </label>
-        <label class="field">
-          <span>譯文顏色</span>
+        <div class="field">
+          <span id="transColorLabel">譯文顏色</span>
           <span class="color-line">
             <span class="swatch-wrap" id="transColorWrap">
-              <input type="color" id="transColor" value="#1c1c1c" aria-label="譯文顏色" />
+              <input type="color" id="transColor" value="#1c1c1c" aria-labelledby="transColorLabel" />
               <span class="none-mark" id="transColorNone" aria-hidden="true"></span>
             </span>
             <button type="button" id="transColorReset" class="text-btn">跟頁面顏色</button>
           </span>
-        </label>
+        </div>
         <label class="field">
           <span>左側標記</span>
           <select id="barStyle">
@@ -115,20 +115,20 @@
             <option value="dashed">虛線</option>
           </select>
         </label>
-        <label class="field">
-          <span>標記顏色</span>
+        <div class="field">
+          <span id="barColorLabel">標記顏色</span>
           <span class="color-line">
             <span class="swatch-wrap" id="barColorWrap">
-              <input type="color" id="barColor" value="#6c7aff" aria-label="標記顏色" />
+              <input type="color" id="barColor" value="#6c7aff" aria-labelledby="barColorLabel" />
               <span class="none-mark" id="barColorNone" aria-hidden="true"></span>
             </span>
             <button type="button" id="barColorReset" class="text-btn">無</button>
           </span>
-        </label>
-        <label class="toggle">
-          <span>淡底色</span>
-          <span class="switch"><input type="checkbox" id="transHighlight" checked /><span class="slider"></span></span>
-        </label>
+        </div>
+        <div class="toggle">
+          <span id="highlightLabel">淡底色</span>
+          <label class="switch"><input type="checkbox" id="transHighlight" checked aria-labelledby="highlightLabel" /><span class="slider"></span></label>
+        </div>
         <div class="swatches" id="tintSwatches">
           <button type="button" class="swatch auto" data-tint="" aria-label="自動"></button>
           <button type="button" class="swatch" data-tint="blue" aria-label="藍"></button>
@@ -154,23 +154,23 @@
         <div class="reset-row">
           <button type="button" id="resetDefaults" class="ghost-btn">恢復預設</button>
           <span id="resetConfirm" hidden>
-            <span>恢復所有設定？金鑰會保留。</span>
+            <span>將外觀設定恢復為預設？</span>
             <button type="button" id="resetYes" class="ghost-btn">確定</button>
-            <button type="button" id="resetNo" class="text-btn">取消</button>
+            <button type="button" id="resetNo" class="ghost-btn">取消</button>
           </span>
         </div>
       </section>
 
       <section class="card" data-panel="advanced">
-        <h2>劃詞</h2>
-        <label class="toggle">
-          <span>劃詞翻譯</span>
-          <span class="switch"><input type="checkbox" id="selectionTranslate" /><span class="slider"></span></span>
-        </label>
-        <label class="toggle">
-          <span>選取後立即顯示</span>
-          <span class="switch"><input type="checkbox" id="selectionInstant" /><span class="slider"></span></span>
-        </label>
+        <h2>反白翻譯</h2>
+        <div class="toggle">
+          <span id="selectionLabel">反白翻譯功能</span>
+          <label class="switch"><input type="checkbox" id="selectionTranslate" aria-labelledby="selectionLabel" /><span class="slider"></span></label>
+        </div>
+        <div class="toggle">
+          <span id="instantLabel">選取後立即顯示</span>
+          <label class="switch"><input type="checkbox" id="selectionInstant" aria-labelledby="instantLabel" /><span class="slider"></span></label>
+        </div>
       </section>
     </main>
   </div>

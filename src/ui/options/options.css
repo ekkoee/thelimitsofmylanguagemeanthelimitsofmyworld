@@ -89,7 +89,7 @@ h2 {
   color: var(--ink);
 }
 .field { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; }
-.field:last-child { margin-bottom: 0; }
+.card > .field:last-child { margin-bottom: 0; }
 .field > span, .toggle > span { font-size: 13px; font-weight: 500; color: var(--muted); }
 .key-label { display: flex; justify-content: space-between; gap: 12px; max-width: 440px; }
 .key-label a { color: var(--accent); font-weight: 500; text-decoration: none; }

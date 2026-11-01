@@ -18,7 +18,7 @@ export function friendlyTranslateError(err: unknown, kind: 'page' | 'image' = 'p
   if (/[\u4e00-\u9fff]/.test(msg) && !/[{"]/.test(msg) && msg.length < 160) return msg;
   if (/IMAGE_ECHO/.test(msg)) return '無法把圖片裡的文字翻成中文，請再試一次';
   if (/NO_API_KEY:image/i.test(msg) || (kind === 'image' && /NO_API_KEY/i.test(msg))) {
-    return '圖片翻譯需要 Gemini 金鑰。請到選項頁填入。';
+    return '右鍵圖片翻譯需要 Gemini 金鑰。請到選項頁填入。';
   }
   if (/NO_API_KEY/i.test(msg)) {
     return '此引擎需要 API key — 點擊擴充功能圖示 → 選項頁填入（或切回免費引擎）。';
