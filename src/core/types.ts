@@ -23,8 +23,12 @@ export interface Settings {
   translateOnVisible: boolean;  // only translate elements scrolled into view
   provider: ProviderId;
   model: string;                // ignored by the free Google engine
-  /** Image translation model. 'auto' picks the best model that still has free-tier quota. */
+  /** 'local' reads the image on-device. 'gemini' sends it to a vision model. */
   imageModel: string;
+  /** Show a 「譯」 button beside a text selection. Default on. */
+  selectionTranslate: boolean;
+  /** Open the selection card immediately, without the button. */
+  selectionInstant: boolean;
   apiKeys: Record<ProviderId, string>;
   ollamaEndpoint: string;
   cacheEnabled: boolean;
@@ -56,7 +60,9 @@ export const DEFAULT_SETTINGS: Settings = {
   translateOnVisible: true,
   provider: 'google',          // ← FREE by default, no API key required
   model: '',
-  imageModel: 'auto',
+  imageModel: 'local',
+  selectionTranslate: true,
+  selectionInstant: false,
   apiKeys: { google: '', microsoft: '', openai: '', gemini: '', ollama: '' },
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,
@@ -79,6 +85,7 @@ export interface TranslateMessage {
   text: string;
   title?: string;                // page title, sent by the content script as LLM context (prose path)
   mode?: 'prose' | 'subtitle';   // translation register; service worker treats a missing mode as 'subtitle'
+  retry?: boolean;               // the user clicked 重試: try a spent Gemini model once
 }
 
 export interface TranslateResponse {
@@ -132,5 +139,11 @@ export interface TranslateImageMessage {
   mime: string;
   data: string;
 }
+export interface OcrTranslateMessage {
+  type: 'ibt-ocr-translate';
+  mime: string;
+  data: string;
+  manga?: boolean;
+}
 
-export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage | FetchImageMessage | CaptureTabMessage | TranslateImageMessage;
+export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage | FetchImageMessage | CaptureTabMessage | TranslateImageMessage | OcrTranslateMessage;

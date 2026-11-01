@@ -44,6 +44,8 @@ export interface GeminiRouteOpts {
   budgetMs?: number;
   headerTimeoutMs?: number;
   bodyTimeoutMs?: number;
+  /** User clicked 重試: try a model once even if it is marked exhausted. */
+  force?: boolean;
 }
 
 function isAbort(err: unknown): boolean {
@@ -139,11 +141,13 @@ export async function executeGeminiRoute(opts: GeminiRouteOpts): Promise<{ model
   const attempts = new Map<string, number>();
   let last: RouteSignal | null = null;
   let minuteSec = 0;
+  let force = Boolean(opts.force);
 
   for (let step = 0; step < 8; step++) {
     const t = now();
     if (t >= deadline) break;
-    const pick = pickModel(opts.chain, opts.state, t);
+    const pick = pickModel(opts.chain, opts.state, t, { ignoreExhausted: force });
+    force = false;
     if (pick.kind === 'day') throw new Error(allExhaustedMessage(pick.resetAt));
     if (pick.kind === 'none') break;
     if (pick.kind === 'wait') {

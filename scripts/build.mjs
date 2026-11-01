@@ -17,6 +17,10 @@ const copies = [
   ['src/ui/options/options.css', 'dist/options.css'],
   ['src/styles/bilingual.css', 'dist/bilingual.css'],
   ['public/icons', 'dist/icons'],
+  ['public/offscreen.html', 'dist/offscreen.html'],
+  ['node_modules/tesseract.js/dist/tesseract.min.js', 'dist/ocr/tesseract.min.js'],
+  ['node_modules/tesseract.js/dist/worker.min.js', 'dist/ocr/worker.min.js'],
+  ['node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js', 'dist/ocr/core/tesseract-core-simd-lstm.wasm.js'],
 ];
 function copyAll() {
   for (const [from, to] of copies) {
@@ -44,6 +48,7 @@ const iifeEntries = {
   'x-main': 'src/content/x-main.ts',
   'universal-inject': 'src/content/universal-inject.ts',
   'image-inject': 'src/content/image-inject.ts',
+  'offscreen': 'src/ocr/offscreen.ts',
   'popup': 'src/ui/popup/popup.ts',
   'options': 'src/ui/options/options.ts',
 };

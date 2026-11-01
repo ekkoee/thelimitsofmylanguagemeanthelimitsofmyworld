@@ -2,18 +2,21 @@
 import { geminiProvider } from '../src/providers/gemini';
 import { translateImageSequential } from '../src/providers/gemini-image';
 import { Settings } from '../src/core/types';
+import { isQuotaError, LlmBatcher } from '../src/core/llm-batcher';
 import {
   IMAGE_CHAIN_BUDGET_MS,
   IMAGE_HEADER_TIMEOUT_MS,
   allExhaustedMessage,
   bindQuota,
   emptyQuotaState,
+  fingerprintKey,
   formatTaipeiHM,
   minuteMessage,
   nextPacificMidnight,
   noteDay,
   parseQuotaFailure,
   pickModel,
+  quotaForKey,
   quotaStatusText,
   switchedMessage,
 } from '../src/core/quota-router';
@@ -84,6 +87,26 @@ check('timeouts and budgets match the image limits', IMAGE_HEADER_TIMEOUT_MS ===
 check('minute message is specific', minuteMessage(10) === '請求太頻繁，10 秒後自動重試' && !minuteMessage(10).includes('請稍後再試'));
 const dayMsg = allExhaustedMessage(nextPacificMidnight(july));
 check('all-day message names the reset and stops there', dayMsg === 'Gemini 免費額度已用完，將於 15:00 重置');
+check('a Gemini quota message is a page-translation fallback, not a tweet error', isQuotaError(new Error(dayMsg)));
+
+const LITE_DAY = JSON.stringify({
+  error: {
+    code: 429,
+    message: 'You exceeded your current quota',
+    status: 'RESOURCE_EXHAUSTED',
+    details: [
+      { violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '20', quotaDimensions: { model: 'gemini-2.5-flash-lite' } }] },
+      { retryDelay: '8250s' },
+    ],
+  },
+});
+const liteDay = parseQuotaFailure(LITE_DAY, 'gemini-2.5-flash-lite');
+check('flash-lite is also 20 a day', !!liteDay && liteDay.perDay && !liteDay.perMinute && liteDay.quotaValue === 20);
+const liteState = emptyQuotaState();
+noteDay(liteState, 'gemini-2.5-flash-lite', liteDay!, july);
+check('the 8250s delay does not become a short retry wait', (liteState.models['gemini-2.5-flash-lite']?.retryAt ?? 0) === 0);
+const forced = pickModel(['gemini-2.5-flash-lite'], liteState, july + 1000, { ignoreExhausted: true });
+check('重試 tries an exhausted model once', forced.kind === 'ready' && forced.model === 'gemini-2.5-flash-lite');
 
 interface Bucket { day: number; dayUsed: number; rpm: number; stamps: number[] }
 const limits: Record<string, Bucket> = {
@@ -169,6 +192,36 @@ const settings = {
 } as Settings;
 
 async function main(): Promise<void> {
+  const idA = await fingerprintKey('key-account-a');
+  const idB = await fingerprintKey('key-account-b');
+  let keyed = quotaForKey(emptyQuotaState(), idA);
+  noteDay(keyed, 'gemini-3.5-flash', day!, july);
+  keyed = quotaForKey(keyed, idB);
+  check('a new API key does not inherit the old quota', keyed.keyId === idB && !keyed.models['gemini-3.5-flash']);
+
+  const spent = emptyQuotaState();
+  for (const model of ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite']) {
+    noteDay(spent, model, day!, Date.now());
+  }
+  bindQuota({ state: spent, persist: () => undefined });
+  let fellBack = false;
+  const batcher = new LlmBatcher({
+    pace: async () => undefined,
+    run: (fn) => fn(),
+    onBatchFallback: async (reqs) => {
+      fellBack = true;
+      return reqs.map((req) => [{ o: req.text, t: '免費譯文' }]);
+    },
+  }, { windowMs: 5 });
+  const pairs = await batcher.submit({
+    text: 'Hello from X',
+    settings,
+    provider: geminiProvider,
+    mode: 'prose',
+  });
+  check('exhausted Gemini page translation shows the free translation', fellBack && pairs[0]?.t === '免費譯文' && !pairs.some((p) => /免費額度/.test(p.t)));
+  bindQuota({ state, persist: () => undefined });
+
   globalThis.fetch = fetchImpl;
   let pageSlow = 0;
   for (let i = 0; i < 25; i++) {

@@ -79,9 +79,9 @@ function isPureUrl(s: string): boolean {
   return /^(https?:\/\/|www\.)\S+$/i.test(t) || /^[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(t);
 }
 
-async function translateBlock(text: string): Promise<AlignedPair[]> {
+async function translateBlock(text: string, retry = false): Promise<AlignedPair[]> {
   // Reddit / X / universal are prose; carry the page title as background context.
-  const resp = await sendMessage<TranslateResponse>({ type: 'translate', text, title: document.title, mode: 'prose' });
+  const resp = await sendMessage<TranslateResponse>({ type: 'translate', text, title: document.title, mode: 'prose', retry });
   if (!resp?.ok) throw new Error(resp?.error || 'translate failed');
   return resp.pairs || [];
 }
@@ -176,17 +176,17 @@ export function renderTranslationAfter(
 
   applyPageFont(block, anchor);
 
-  const run = async () => {
+  const run = async (retry = false) => {
     setBlockClass(block, 'ibt-loading');
     block.textContent = '';
     block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
     try {
-      const pairs = await translateBlock(text);
+      const pairs = await translateBlock(text, retry);
       fillPairs(block, pairs, opts?.chips);
     } catch (err: any) {
       // Extension was reloaded/updated → quiet "refresh" hint, no retry spam.
       if (isContextGoneError(err)) { showReloadHint(block); return; }
-      showError(block, String(err?.message ?? err), run);
+      showError(block, String(err?.message ?? err), () => run(true));
     }
   };
   void run();

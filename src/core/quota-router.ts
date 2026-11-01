@@ -13,6 +13,8 @@ export interface ModelQuota {
 }
 
 export interface QuotaState {
+  /** First 16 hex chars of SHA-256(api key). A different key starts empty. */
+  keyId: string;
   models: Record<string, ModelQuota>;
   switchedFrom: string;
   switchedTo: string;
@@ -41,7 +43,19 @@ const DAY_ID = /PerDay/i;
 const MINUTE_ID = /PerMinute/i;
 
 export function emptyQuotaState(): QuotaState {
-  return { models: {}, switchedFrom: '', switchedTo: '' };
+  return { keyId: '', models: {}, switchedFrom: '', switchedTo: '' };
+}
+
+/** Stable id for an API key. The key itself is never stored. */
+export async function fingerprintKey(key: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key.trim()));
+  return [...new Uint8Array(digest)].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Drop another key's exhausted models. The same key keeps its hint. */
+export function quotaForKey(state: QuotaState, keyId: string): QuotaState {
+  if (state.keyId === keyId) return state;
+  return { ...emptyQuotaState(), keyId };
 }
 
 export function emptyModel(): ModelQuota {
@@ -65,6 +79,7 @@ export function normalizeQuotaState(raw: unknown): QuotaState {
     };
   }
   return {
+    keyId: typeof src.keyId === 'string' ? src.keyId : '',
     models,
     switchedFrom: typeof src.switchedFrom === 'string' ? src.switchedFrom : '',
     switchedTo: typeof src.switchedTo === 'string' ? src.switchedTo : '',
@@ -213,13 +228,18 @@ export function minuteWaitMs(m: ModelQuota, now: number): number {
   return Math.max(retry, oldest + 60_000 - now);
 }
 
-export function pickModel(chain: string[], state: QuotaState, now: number): PickResult {
+export function pickModel(
+  chain: string[],
+  state: QuotaState,
+  now: number,
+  opts?: { ignoreExhausted?: boolean },
+): PickResult {
   let bestWait: { model: string; waitMs: number } | null = null;
   let resetAt = 0;
   let sawDay = false;
   for (const model of chain) {
     const m = modelQuota(state, model);
-    if (m.exhaustedUntil > now) {
+    if (m.exhaustedUntil > now && !opts?.ignoreExhausted) {
       sawDay = true;
       if (!resetAt || m.exhaustedUntil < resetAt) resetAt = m.exhaustedUntil;
       continue;
@@ -304,9 +324,30 @@ export interface QuotaBinding {
 
 let binding: QuotaBinding | null = null;
 let ready: Promise<void> = Promise.resolve();
+let align: (key: string) => Promise<void> = async () => {};
+let forceOnce = false;
 
 export function bindQuota(next: QuotaBinding | null): void {
   binding = next;
+}
+
+/** Service worker installs this so a new API key does not inherit another key's caps. */
+export function setQuotaAlign(fn: (key: string) => Promise<void>): void {
+  align = fn;
+}
+
+export function alignQuotaKey(key: string): Promise<void> {
+  return align(key);
+}
+
+export function requestGeminiRetry(): void {
+  forceOnce = true;
+}
+
+export function consumeGeminiRetry(): boolean {
+  const force = forceOnce;
+  forceOnce = false;
+  return force;
 }
 
 export function setQuotaReady(pending: Promise<void>): void {

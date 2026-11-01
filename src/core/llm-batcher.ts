@@ -41,7 +41,9 @@ export interface BatcherDeps {
 
 export function isQuotaError(err: unknown): boolean {
   const msg = String((err as { message?: unknown })?.message ?? err);
-  return /\b(403|429)\b/.test(msg) || /quota|rate.?limit|resource.exhausted|too many requests/i.test(msg);
+  return /\b(403|429)\b/.test(msg)
+    || /quota|rate.?limit|resource.exhausted|too many requests/i.test(msg)
+    || /免費額度|請求太頻繁/.test(msg);
 }
 
 // The LLM returned something we can't use (malformed JSON, safety block with no

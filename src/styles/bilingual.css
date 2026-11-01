@@ -177,6 +177,47 @@
 .ibt-img-overlay.is-peek .ibt-img-panel,
 .ibt-img-overlay.is-peek .ibt-img-region { opacity: 0; }
 
+.ibt-sel-btn,
+.ibt-sel-card {
+  position: fixed;
+  z-index: 2147483646;
+  font-family: var(--ibt-zh-font);
+}
+.ibt-sel-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: #1c1c1c;
+  color: var(--ibt-trans-color, #f2d492);
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.ibt-sel-card {
+  width: 260px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #1c1c1c;
+  color: var(--ibt-trans-color, #f2d492);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+.ibt-sel-head { display: flex; gap: 8px; align-items: flex-start; }
+.ibt-sel-orig { flex: 1; color: #ddd; font-size: 12px; line-height: 1.4; }
+.ibt-sel-x, .ibt-sel-copy {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: 12px/1 var(--ibt-zh-font);
+}
+.ibt-sel-body { margin-top: 6px; font-size: 14px; font-weight: 400; line-height: 1.45; }
+.ibt-sel-dict { margin-top: 6px; color: #ddd; font-size: 12px; line-height: 1.4; }
+.ibt-sel-copy { margin-top: 6px; padding: 0; }
+
 .ibt-retry {
   margin-left: 8px; font-size: 0.8em; padding: 1px 8px; cursor: pointer;
   border-radius: 6px; border: 1px solid currentColor; background: transparent; color: inherit;

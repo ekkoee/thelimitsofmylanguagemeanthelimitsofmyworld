@@ -31,7 +31,7 @@ export function startImageTranslate(): void {
   listening = true;
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== 'ibt-image') return;
-    void run(String(msg.srcUrl || ''))
+    void run(String(msg.srcUrl || ''), Boolean(msg.manga))
       .then(() => sendResponse({ ok: true }))
       .catch((err) => {
         console.log('[IBT] image translate failed', err);
@@ -91,7 +91,7 @@ function tag(img: ImgHit): string {
   return (img as HTMLElement).dataset.ibtImg || '';
 }
 
-async function run(srcUrl: string): Promise<void> {
+async function run(srcUrl: string, manga = false): Promise<void> {
   const img = findImage(srcUrl);
   if (!img) {
     console.log('[IBT] image target not found', srcUrl);
@@ -103,12 +103,12 @@ async function run(srcUrl: string): Promise<void> {
   const pending = inflight.get(key);
   if (pending) return pending;
 
-  const job = runOne(img, srcUrl);
+  const job = runOne(img, srcUrl, manga);
   if (key) inflight.set(key, job);
   try { await job; } finally { if (key) inflight.delete(key); }
 }
 
-async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
+async function runOne(img: ImgHit, srcUrl: string, manga = false): Promise<void> {
   const decision = imageDecision(img as HTMLElement);
   console.log('[IBT] image mode', decision.mode, decision.reason);
   const shell = mountOverlay(img);
@@ -119,26 +119,40 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
     if (!shell.isConnected) return;
     if (!bytes) throw new Error('無法讀取這張圖片');
     console.log('[IBT] image encoded', bytes.via, bytes.mime, bytes.data.length, new Date().toISOString());
-    const resp = await chrome.runtime.sendMessage({
-      type: 'ibt-translate-image', mime: bytes.mime, data: bytes.data,
-    }) as { ok?: boolean; text?: string; regions?: ImageRegion[]; error?: string };
+    if (!manga && settings.imageModel === 'gemini') {
+      const resp = await chrome.runtime.sendMessage({
+        type: 'ibt-translate-image', mime: bytes.mime, data: bytes.data,
+      }) as { ok?: boolean; text?: string; regions?: ImageRegion[]; error?: string };
+      if (!shell.isConnected) return;
+      if (resp?.ok) {
+        const picked = selectInPlace(resp.regions || []);
+        console.log('[IBT] image place', picked.mode, picked.regions.length);
+        if (picked.mode === 'inplace') {
+          await paintInPlace(shell, img, bytes, picked.regions);
+          return;
+        }
+        const body = (resp.text || '').trim();
+        const shown = !body ? EMPTY : (isMostlyLatin(body) ? FAILED_ZH : body);
+        if (decision.mode === 'below') { shell.remove(); mountBelow(img, shown); return; }
+        paintPanel(shell, shown);
+        return;
+      }
+      console.log('[IBT] vision unavailable, local ocr', (resp?.error || '').slice(0, 120));
+    }
+    const ocr = await chrome.runtime.sendMessage({
+      type: 'ibt-ocr-translate', mime: bytes.mime, data: bytes.data, manga,
+    }) as { ok?: boolean; regions?: ImageRegion[]; error?: string; ms?: number };
     if (!shell.isConnected) return;
-    if (!resp?.ok) throw new Error(resp?.error || '圖片翻譯失敗');
-    const picked = selectInPlace(resp.regions || []);
-    console.log('[IBT] image place', picked.mode, picked.regions.length);
-    if (picked.mode === 'inplace') {
-      await paintInPlace(shell, img, bytes, picked.regions);
+    if (!ocr?.ok) throw new Error(ocr?.error || '本機文字辨識失敗');
+    console.log('[IBT] ocr', ocr.ms, 'regions', (ocr.regions || []).length);
+    const ocrPicked = selectInPlace(ocr.regions || []);
+    if (ocrPicked.mode === 'inplace') {
+      await paintInPlace(shell, img, bytes, ocrPicked.regions);
       return;
     }
-    const body = (resp.text || '').trim();
-    const shown = !body ? EMPTY : (isMostlyLatin(body) ? FAILED_ZH : body);
-    if (decision.mode === 'below') {
-      shell.remove();
-      const block = mountBelow(img, shown);
-      void block;
-      return;
-    }
-    paintPanel(shell, shown);
+    const ocrShown = (ocr.regions || []).map((r) => r.textZh).filter(Boolean).join('\n') || EMPTY;
+    if (decision.mode === 'below') { shell.remove(); mountBelow(img, ocrShown); return; }
+    paintPanel(shell, ocrShown);
   } catch (err) {
     if (!shell.isConnected) return;
     const shown = friendlyTranslateError(err, 'image');

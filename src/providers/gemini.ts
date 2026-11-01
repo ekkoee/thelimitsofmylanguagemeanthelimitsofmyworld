@@ -1,7 +1,7 @@
 import { Settings } from '../core/types';
 import { TranslateInput, TranslationProvider, buildSystemPrompt, coerceTranslations } from './base';
 import { executeGeminiRoute } from '../core/gemini-route';
-import { pageModelChain, quotaBindingReady } from '../core/quota-router';
+import { pageModelChain, quotaBindingReady, alignQuotaKey, consumeGeminiRetry } from '../core/quota-router';
 
 /** Gemini 3 family model ids support thinkingLevel (v3 API shape). */
 function isGemini3(model: string): boolean {
@@ -13,9 +13,10 @@ export const geminiProvider: TranslationProvider = {
   async translate(input: TranslateInput, settings: Settings): Promise<string[]> {
     const key = settings.apiKeys.gemini?.trim();
     if (!key) throw new Error('NO_API_KEY:gemini');
+    await alignQuotaKey(key);
     const bound = await quotaBindingReady();
     if (bound?.waitForImage) await bound.waitForImage();
-    const state = bound?.state ?? { models: {}, switchedFrom: '', switchedTo: '' };
+    const state = bound?.state ?? { keyId: '', models: {}, switchedFrom: '', switchedTo: '' };
     const prompt = buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode });
     const t0 = performance.now();
     const routed = await executeGeminiRoute({
@@ -24,6 +25,7 @@ export const geminiProvider: TranslationProvider = {
       purpose: 'page',
       state,
       onState: () => bound?.persist(),
+      force: consumeGeminiRetry(),
       buildBody: (model) => ({
         systemInstruction: { parts: [{ text: prompt }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify({ sentences: input.sentences }) }] }],
