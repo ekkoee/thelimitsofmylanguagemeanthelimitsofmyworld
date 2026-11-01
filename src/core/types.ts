@@ -30,8 +30,12 @@ export interface Settings {
   linkedinExpandTranslate: boolean; // translate a LinkedIn post when its "more" control opens it
 }
 
-/** Settings-page swatch. Used wherever the user has not picked a custom translation color. */
-export const DEFAULT_TRANS_COLOR = '#6c7aff';
+/** Page-translation text and the default left marker. Video subtitles stay white until a custom color is saved. */
+export const DEFAULT_TRANS_COLOR = '#f2d492';
+/** Left marker is its own setting. Its default matches the page-text default. */
+export const DEFAULT_BAR_COLOR = '#f2d492';
+/** Stored before 1.4.18 when the picker saved the old blue default. Treated as "never customized". */
+export const LEGACY_DEFAULT_COLOR = '#6c7aff';
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,

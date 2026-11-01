@@ -22,11 +22,16 @@ execSync(
   'npx esbuild src/content/youtube.ts --bundle --platform=node --format=esm --outfile=/tmp/youtube.test.mjs --log-level=error',
   { cwd: root, stdio: 'inherit' },
 );
+execSync(
+  'npx esbuild src/core/storage.ts --bundle --platform=node --format=esm --outfile=/tmp/storage.test.mjs --log-level=error',
+  { cwd: root, stdio: 'inherit' },
+);
 const { isShortLabel, isShortcutHint } = await import('/tmp/blocks.test.mjs');
 const { isAltA } = await import('/tmp/alt-a-key.test.mjs');
 const { controlFromElement, linkedInCollapsed, commentaryText } = await import('/tmp/linkedin.test.mjs');
 const { chineseSkipReason } = await import('/tmp/universal.test.mjs');
 const { withCjkTail } = await import('/tmp/youtube.test.mjs');
+const { migrateDefaultColor } = await import('/tmp/storage.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -65,6 +70,9 @@ check('cjk tail keeps YouTube faces first', tailed.startsWith('"YouTube Noto", R
 check('jhenghei comes after the latin stack', tailed.indexOf('Microsoft JhengHei') > tailed.indexOf('PT Sans Caption'));
 check('noto tc does not jump ahead of jhenghei', tailed.indexOf('Noto Sans TC') > tailed.indexOf('Microsoft JhengHei'));
 check('cjk tail is not doubled', withCjkTail(tailed) === tailed);
+check('old blue default migrates to unset', migrateDefaultColor('#6c7aff') === '' && migrateDefaultColor('#6C7AFF') === '');
+check('empty color stays unset', migrateDefaultColor('') === '' && migrateDefaultColor(undefined) === '');
+check('custom color is kept', migrateDefaultColor('#112233') === '#112233');
 
 let parseHTML = null;
 try {

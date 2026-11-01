@@ -4,7 +4,7 @@
 :root {
   --ibt-font-scale: 1;
   /* Settings-page default. A saved color overwrites this from chrome.storage. */
-  --ibt-trans-color: #6c7aff;
+  --ibt-trans-color: #f2d492;
   /* One family for every Chinese translation: YouTube captions, X video subs,
      tweets, GitHub, LinkedIn, and other page text. The first eight names are
      YouTube's .ytp-caption-segment stack (weight 400). "YouTube Noto" and
@@ -20,7 +20,7 @@
 .ibt-block {
   margin: 4px 0 8px;
   padding: 1px 0 1px 10px;
-  border-left: 3px solid var(--ibt-bar-color, rgba(108, 122, 255, 0.55));
+  border-left: 3px solid var(--ibt-bar-color, #f2d492);
   font-size: calc(0.98rem * var(--ibt-font-scale));
   line-height: 1.5;
   color: inherit;
@@ -292,7 +292,7 @@ video.ibt-x-hide-cue::cue {
 }
 :root[data-ibt-style="wavy"] .ibt-trans,
 :root[data-ibt-style="wavy"] .ibt-yt-zh {
-  text-decoration: underline wavy; text-decoration-color: rgba(108,122,255,0.9); text-underline-offset: 3px;
+  text-decoration: underline wavy; text-decoration-color: currentColor; text-underline-offset: 3px;
 }
 :root[data-ibt-style="solidBox"] .ibt-trans,
 :root[data-ibt-style="solidBox"] .ibt-yt-zh {

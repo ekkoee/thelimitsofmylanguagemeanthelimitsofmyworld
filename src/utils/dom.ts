@@ -1,4 +1,4 @@
-import { DEFAULT_TRANS_COLOR } from '../core/types';
+import { DEFAULT_BAR_COLOR, DEFAULT_TRANS_COLOR } from '../core/types';
 
 export const NS = 'ibt'; // injected-node class/attribute namespace
 
@@ -74,8 +74,7 @@ export function applyRootState(s: {
   else r.style.removeProperty('--ibt-sub-color');
   // left marker bar: style + custom color (user-configurable / hideable)
   r.setAttribute('data-ibt-bar', s.barStyle || 'bar');
-  if (s.barColor) r.style.setProperty('--ibt-bar-color', s.barColor);
-  else r.style.removeProperty('--ibt-bar-color');
+  r.style.setProperty('--ibt-bar-color', s.barColor || DEFAULT_BAR_COLOR);
   rootApplied = true;
 }
 export function rootStateApplied(): boolean { return rootApplied; }

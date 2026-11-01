@@ -2,6 +2,11 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.4.18] — 2026-11-01
+### 變更 Changed
+- **網頁譯文和左側標記的預設色改為 #f2d492。** 設定頁色票、預覽、沒有自訂顏色時的 CSS 變數都是這個顏色。影片字幕預設仍是白色。
+- **存過舊預設藍 #6c7aff 的設定會清成「用預設」。** 其他自訂色照舊。清成空白後，網頁用新的金色、字幕回到白色。
+
 ## [1.4.17] — 2026-11-01
 ### 變更 Changed
 - **所有中文譯文跟 YouTube 字幕同一套字。** 變數 `--ibt-zh-font`：`"YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", sans-serif`，字重 400。推文、GitHub、LinkedIn、一般網頁、YouTube 標題與留言、以及 X／YouTube 影片字幕都用它。顏色、字級、位置沒改。

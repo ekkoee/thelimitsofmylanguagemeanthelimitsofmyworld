@@ -1,6 +1,18 @@
-import { DEFAULT_SETTINGS, Settings } from './types';
+import { DEFAULT_SETTINGS, LEGACY_DEFAULT_COLOR, Settings } from './types';
 
 const SETTINGS_KEY = 'ibt_settings';
+
+/** True only for the pre-1.4.18 default blue. Empty and any other color are left alone. */
+export function isLegacyDefaultColor(value: string | undefined): boolean {
+  return (value || '').trim().toLowerCase() === LEGACY_DEFAULT_COLOR;
+}
+
+/** '' stays ''. The old default blue becomes '' so the new default is used and video subtitles stay white. */
+export function migrateDefaultColor(value: string | undefined): string {
+  const v = (value || '').trim();
+  if (!v || isLegacyDefaultColor(v)) return '';
+  return v;
+}
 
 /**
  * UI simplification: the site toggles, source/target-language text fields, cache and
@@ -22,19 +34,30 @@ function normalizeSettings(s: Settings): Settings {
     viewMode: s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '',
     // Missing means on. Only an explicit false turns LinkedIn expand-translation off.
     linkedinExpandTranslate: s.linkedinExpandTranslate !== false,
+    transColor: migrateDefaultColor(s.transColor),
+    barColor: migrateDefaultColor(s.barColor),
   };
 }
 
 export async function loadSettings(): Promise<Settings> {
   const raw = await chrome.storage.sync.get(SETTINGS_KEY);
   const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings>;
+  const hadLegacy = isLegacyDefaultColor(stored.transColor) || isLegacyDefaultColor(stored.barColor);
   // deep-ish merge so new default keys appear after upgrades
-  return normalizeSettings({
+  const next = normalizeSettings({
     ...DEFAULT_SETTINGS,
     ...stored,
     sites: { ...DEFAULT_SETTINGS.sites, ...(stored.sites ?? {}) },
     apiKeys: { ...DEFAULT_SETTINGS.apiKeys, ...(stored.apiKeys ?? {}) },
   });
+  // Drop a stored #6c7aff so the new default shows up, without rewriting other fields.
+  if (hadLegacy) {
+    const patched = { ...stored };
+    if (isLegacyDefaultColor(stored.transColor)) patched.transColor = '';
+    if (isLegacyDefaultColor(stored.barColor)) patched.barColor = '';
+    await chrome.storage.sync.set({ [SETTINGS_KEY]: patched });
+  }
+  return next;
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
