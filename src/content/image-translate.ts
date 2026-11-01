@@ -6,8 +6,9 @@ import { applyRootState } from '../utils/dom';
 import { loadSettings } from '../core/storage';
 import { pageFontPx } from './page-font';
 import { belowAnchor, imageDecision, overlayHost } from './image-place';
+import { renderRegions } from './image-inplace';
 import { friendlyTranslateError } from '../core/errors';
-import { IMAGE_JPEG_QUALITY, IMAGE_MAX_EDGE, ImageRegion, isMostlyLatin } from '../providers/gemini-image';
+import { IMAGE_JPEG_QUALITY, IMAGE_MAX_EDGE, ImageRegion, isMostlyLatin, selectInPlace } from '../providers/gemini-image';
 
 const EMPTY = '圖片中沒有可翻譯的文字';
 const LOADING = '圖片翻譯中…';
@@ -110,7 +111,7 @@ async function run(srcUrl: string): Promise<void> {
 async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
   const decision = imageDecision(img as HTMLElement);
   console.log('[IBT] image mode', decision.mode, decision.reason);
-  const shell = mount(img, decision.mode, LOADING);
+  const shell = mountOverlay(img);
   try {
     const settings = await loadSettings();
     applyRootState(settings);
@@ -123,74 +124,102 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
     }) as { ok?: boolean; text?: string; regions?: ImageRegion[]; error?: string };
     if (!shell.isConnected) return;
     if (!resp?.ok) throw new Error(resp?.error || '圖片翻譯失敗');
-    paint(shell, decision.mode, resp.text || '', resp.regions || []);
+    const picked = selectInPlace(resp.regions || []);
+    console.log('[IBT] image place', picked.mode, picked.regions.length);
+    if (picked.mode === 'inplace') {
+      await paintInPlace(shell, img, bytes, picked.regions);
+      return;
+    }
+    const body = (resp.text || '').trim();
+    const shown = !body ? EMPTY : (isMostlyLatin(body) ? FAILED_ZH : body);
+    if (decision.mode === 'below') {
+      shell.remove();
+      const block = mountBelow(img, shown);
+      void block;
+      return;
+    }
+    paintPanel(shell, shown);
   } catch (err) {
-    if (shell.isConnected) paint(shell, decision.mode, friendlyTranslateError(err, 'image'), []);
+    if (!shell.isConnected) return;
+    const shown = friendlyTranslateError(err, 'image');
+    if (decision.mode === 'below') {
+      shell.remove();
+      mountBelow(img, shown);
+      return;
+    }
+    paintPanel(shell, shown);
   }
 }
 
-function mount(img: ImgHit, mode: 'below' | 'overlay', text: string): HTMLElement {
-  const id = tag(img);
-  if (mode === 'below') {
-    const block = document.createElement('div');
-    block.className = 'ibt-block ibt-uni ibt-img';
-    block.dataset.ibtOut = '1';
-    block.dataset.ibtImgFor = id;
-    const host = img.parentElement || document.body;
-    block.style.fontSize = `${pageFontPx(host)}px`;
-    block.style.lineHeight = '1.5';
-    const line = document.createElement('div');
-    line.className = 'ibt-trans';
-    line.textContent = text;
-    block.appendChild(line);
-    const anchor = belowAnchor(img as HTMLElement);
-    anchor.parentElement?.insertBefore(block, anchor.nextSibling);
-    return block;
-  }
+function mountBelow(img: ImgHit, text: string): HTMLElement {
+  const block = document.createElement('div');
+  block.className = 'ibt-block ibt-uni ibt-img';
+  block.dataset.ibtOut = '1';
+  block.dataset.ibtImgFor = tag(img);
+  const host = img.parentElement || document.body;
+  block.style.fontSize = `${pageFontPx(host)}px`;
+  block.style.lineHeight = '1.5';
+  const line = document.createElement('div');
+  line.className = 'ibt-trans';
+  line.textContent = text;
+  block.appendChild(line);
+  const anchor = belowAnchor(img as HTMLElement);
+  anchor.parentElement?.insertBefore(block, anchor.nextSibling);
+  return block;
+}
+
+function mountOverlay(img: ImgHit): HTMLElement {
   const overlay = document.createElement('div');
   overlay.className = 'ibt-img-overlay';
   overlay.dataset.ibtOut = '1';
-  overlay.dataset.ibtImgFor = id;
-  const panel = document.createElement('div');
-  panel.className = 'ibt-img-panel';
-  panel.textContent = text;
+  overlay.dataset.ibtImgFor = tag(img);
+  const loading = document.createElement('div');
+  loading.className = 'ibt-img-loading';
+  loading.textContent = LOADING;
   overlay.appendChild(controls(overlay));
-  overlay.appendChild(panel);
+  overlay.appendChild(loading);
   placeOverlay(img as HTMLElement, overlay);
-  fitOverlay(overlay, panel);
+  watchOverlay(img as HTMLElement, overlay);
   wirePeek(overlay);
   return overlay;
 }
 
-function paint(shell: HTMLElement, mode: 'below' | 'overlay', text: string, regions: ImageRegion[]): void {
-  const placed = regions.filter((r) => r.textZh && r.box);
-  const body = (placed.length ? placed.map((r) => r.textZh).join('\n') : text).trim();
-  const shown = !body ? EMPTY : (isMostlyLatin(body) ? FAILED_ZH : body);
-  if (mode === 'below' || !placed.length) {
-    const line = shell.querySelector('.ibt-trans, .ibt-img-panel') as HTMLElement | null;
-    if (line) line.textContent = shown;
-    if (mode === 'overlay') {
-      const panel = shell.querySelector('.ibt-img-panel') as HTMLElement | null;
-      if (panel) fitOverlay(shell, panel);
-    }
-    return;
+function paintPanel(shell: HTMLElement, text: string): void {
+  shell.querySelector('.ibt-img-loading')?.remove();
+  shell.querySelectorAll('.ibt-img-region').forEach((n) => n.remove());
+  let panel = shell.querySelector('.ibt-img-panel') as HTMLElement | null;
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.className = 'ibt-img-panel';
+    shell.appendChild(panel);
   }
+  panel.textContent = text;
+  fitOverlay(shell, panel);
+}
+
+async function paintInPlace(shell: HTMLElement, img: ImgHit, bytes: Bytes, regions: ImageRegion[]): Promise<void> {
+  shell.querySelector('.ibt-img-loading')?.remove();
   shell.querySelector('.ibt-img-panel')?.remove();
-  for (const region of placed) {
-    const box = document.createElement('div');
-    box.className = 'ibt-img-region';
-    const [x, y, w, h] = region.box as [number, number, number, number];
-    const pad = 0.012;
-    const left = Math.max(0, x - pad);
-    const top = Math.max(0, y - pad);
-    box.style.left = `${left * 100}%`;
-    box.style.top = `${top * 100}%`;
-    box.style.width = `${Math.min(1 - left, w + pad * 2) * 100}%`;
-    box.style.height = `${Math.min(1 - top, h + pad * 2) * 100}%`;
-    box.textContent = region.textZh;
-    shell.appendChild(box);
-    fitOverlay(box, box);
-  }
+  const canvas = await canvasFromBytes(bytes);
+  const space = bytes.via === 'capture' || img.tagName !== 'IMG' ? 'element' : 'image';
+  renderRegions(shell, img as HTMLImageElement, canvas, regions, { space });
+}
+
+function canvasFromBytes(bytes: Bytes): Promise<HTMLCanvasElement | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx || !canvas.width) { resolve(null); return; }
+      ctx.drawImage(image, 0, 0);
+      resolve(canvas);
+    };
+    image.onerror = () => resolve(null);
+    image.src = `data:${bytes.mime};base64,${bytes.data}`;
+  });
 }
 
 function controls(overlay: HTMLElement): HTMLElement {
@@ -240,7 +269,17 @@ function placeOverlay(img: HTMLElement, overlay: HTMLElement): void {
   overlay.style.top = `${ir.top - hr.top + host.scrollTop}px`;
   overlay.style.width = `${ir.width}px`;
   overlay.style.height = `${ir.height}px`;
-  host.appendChild(overlay);
+  if (!overlay.isConnected) host.appendChild(overlay);
+}
+
+function watchOverlay(img: HTMLElement, overlay: HTMLElement): void {
+  const place = () => { if (overlay.isConnected) placeOverlay(img, overlay); };
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(place);
+    ro.observe(img);
+    overlay.addEventListener('DOMNodeRemoved', () => ro.disconnect(), { once: true });
+  }
+  window.addEventListener('scroll', place, true);
 }
 
 function fitOverlay(box: HTMLElement, textEl: HTMLElement): void {

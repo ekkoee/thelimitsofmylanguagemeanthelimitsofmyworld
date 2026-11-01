@@ -267,7 +267,7 @@ async function translateImageMessage(mime: string, data: string) {
     });
     const regions = [];
     for (const region of got.regions) {
-      const textZh = await chineseLine(region.textEn, region.textZh, settings);
+      const textZh = toTraditional(await chineseLine(region.textEn, region.textZh, settings));
       if (!textZh) continue;
       regions.push({ ...region, textZh });
     }
