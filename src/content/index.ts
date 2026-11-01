@@ -9,22 +9,14 @@ import { startYouTube, updateYouTubeSettings } from './youtube';
 import { startXVideo, updateXVideoSettings } from './x-video';
 import { startNetflix, updateNetflixSettings } from './netflix';
 import { isAltA } from './alt-a-key';
-import { startWordPopup, stopWordPopup } from './word-popup';
 import { startImageTranslate } from './image-translate';
 import { Settings } from '../core/types';
 
-// This script auto-runs on X / Reddit / YouTube (declared in the manifest). When the
-// user opts in to "double-click word popup", it's ALSO dynamically registered on all
-// other sites (see core/dblclick.ts) — there detectSite() is null, so only the popup
-// runs. The "translate any page" feature is still injected on demand via Alt+A.
+// This script auto-runs on X / Reddit / YouTube. Whole-page translation on other
+// sites is injected on demand via Alt+A.
 (async function main() {
   startImageTranslate();
   let settings = await loadSettings();
-
-  // Double-click word popup — works on ANY page, gated purely by the setting, and
-  // kept in sync if the user toggles it while the page is open.
-  if (settings.dblClickTranslate) startWordPopup();
-  onSettingsChanged((s) => { if (s.dblClickTranslate) startWordPopup(); else stopWordPopup(); });
 
   const site = detectSite();
   if (!site) return; // non-auto page: nothing below runs, only the word popup above

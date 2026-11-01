@@ -20,11 +20,17 @@ export function migrateDefaultColor(value: string | undefined): string {
  * from the settings UI. Force their values on read so stale stored settings can never
  * leave the extension in a state the user can no longer see or change.
  */
-function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown }): Settings {
+function markerStyle(value: string | undefined): string {
+  if (value === 'tint' || value === 'wavy' || value === 'none' || value === 'bar') return value;
+  return 'bar';
+}
+
+function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; dblClickTranslate?: unknown }): Settings {
   const isGemini = s.provider === 'gemini';
   // The LinkedIn expand toggle was removed. A stored false must not survive on the object.
   const rest = { ...s };
   delete rest.linkedinExpandTranslate;
+  delete rest.dblClickTranslate;
   return {
     ...rest,
     provider: isGemini ? 'gemini' : 'google',
@@ -38,6 +44,8 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown }):
     sites: { x: true, reddit: true, youtube: true, netflix: true },
     // '' is "never chosen". Do not coerce it to 'both' — X video treats unset as Chinese-only.
     viewMode: s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '',
+    transStyle: 'plain',
+    barStyle: markerStyle(s.barStyle),
     transColor: migrateDefaultColor(s.transColor),
     barColor: migrateDefaultColor(s.barColor),
   };

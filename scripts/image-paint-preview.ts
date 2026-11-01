@@ -8,10 +8,13 @@ interface Payload { mode: 'inplace' | 'panel'; regions: ImageRegion[]; text: str
 const payload = (window as unknown as { __ibtPaint?: Payload }).__ibtPaint
   || { mode: 'panel' as const, regions: [], text: '' };
 
-function paint(): void {
+async function paint(): Promise<void> {
   const img = document.getElementById('pic') as HTMLImageElement | null;
   const overlay = document.getElementById('overlay');
   if (!img || !overlay) return;
+  if (!img.naturalWidth) {
+    try { await img.decode(); } catch { /* paint with whatever decoded */ }
+  }
   overlay.style.width = `${img.clientWidth}px`;
   overlay.style.height = `${img.clientHeight}px`;
   const canvas = document.createElement('canvas');
@@ -32,5 +35,5 @@ function paint(): void {
 }
 
 const img = document.getElementById('pic') as HTMLImageElement | null;
-if (img && !img.complete) img.onload = () => paint();
-else paint();
+if (img && !img.complete) img.onload = () => { void paint(); };
+else void paint();

@@ -8,63 +8,54 @@
 </head>
 <body>
   <header>
-    <strong>雙語對照</strong>
+    <h1>雙語對照</h1>
     <label class="switch">
-      <input type="checkbox" id="enabled" />
+      <input type="checkbox" id="enabled" aria-label="啟用翻譯" />
       <span class="slider"></span>
     </label>
   </header>
 
-  <div class="cta">
-    <button id="translatePage">🌐 翻譯這個網頁</button>
-    <div id="ctaHint" class="cta-hint">也可按 Alt+A 循環切換：原文 → 只中文 → 原文+中文</div>
-  </div>
+  <button id="translatePage" type="button">翻譯這個網頁</button>
+  <p id="ctaHint" class="hint">Alt+A 切換原文、中文、對照</p>
 
-  <section>
-    <div class="row">
-      <label for="lang">翻譯成</label>
+  <section class="card">
+    <label class="field">
+      <span>翻譯成</span>
       <select id="lang">
         <option value="zh-TW">繁體中文</option>
         <option value="zh-CN">简体中文</option>
       </select>
-    </div>
-
-    <div class="row">
-      <label for="viewMode">譯文呈現</label>
+    </label>
+    <label class="field">
+      <span>譯文呈現</span>
       <select id="viewMode">
         <option value="both">原文＋中文對照</option>
         <option value="zh">只顯示中文</option>
-        <option value="orig">只顯示原文（關閉譯文）</option>
+        <option value="orig">只顯示原文</option>
       </select>
-    </div>
-
-    <div class="row">
-      <label for="order">字幕順序</label>
+    </label>
+    <label class="field">
+      <span>字幕順序</span>
       <select id="order">
         <option value="zhTop">中文在上</option>
         <option value="enTop">英文在上</option>
       </select>
-    </div>
-
-    <div class="row">
-      <label for="fontScale">字體大小</label>
+    </label>
+    <label class="field">
+      <span>字體大小 <b id="fontScaleVal"></b></span>
       <input type="range" id="fontScale" min="0.8" max="1.6" step="0.05" />
-      <span id="fontScaleVal" class="muted"></span>
-    </div>
-
-    <div class="row">
-      <label for="provider">翻譯引擎</label>
+    </label>
+    <label class="field">
+      <span>翻譯引擎</span>
       <select id="provider">
-        <option value="google">Google 翻譯（免費）</option>
-        <option value="gemini">Gemini（需 API key）</option>
+        <option value="google">Google 翻譯</option>
+        <option value="gemini">Gemini</option>
       </select>
-    </div>
-    <button id="keyHint" class="key-hint" hidden>尚未設定 Gemini API key，點此前往設定 →</button>
+    </label>
+    <button id="keyHint" class="key-hint" type="button" hidden>尚未設定 Gemini 金鑰</button>
   </section>
 
-  <footer>
-    <button id="openOptions">更多設定 →</button>
-  </footer>
+  <button id="openOptions" type="button">設定</button>
   <script src="popup.js"></script>
 </body>
 </html>

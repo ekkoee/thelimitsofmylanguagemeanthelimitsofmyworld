@@ -3,120 +3,105 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="options.css" />
   <link rel="stylesheet" href="bilingual.css" />
+  <link rel="stylesheet" href="options.css" />
   <title>雙語對照 — 設定</title>
 </head>
 <body>
   <main>
-    <h1>雙語對照 · 設定</h1>
+    <header>
+      <h1>雙語對照</h1>
+      <p>設定</p>
+    </header>
 
-    <fieldset>
-      <legend>翻譯引擎</legend>
-      <div class="field">
-        <label for="provider">引擎</label>
+    <section class="card">
+      <h2>翻譯</h2>
+      <label class="field">
+        <span>引擎</span>
         <select id="provider">
-          <option value="google">Google 翻譯（免費，免設定）</option>
-          <option value="gemini">Gemini（譯文更自然，需自備 API key）</option>
+          <option value="google">Google 翻譯</option>
+          <option value="gemini">Gemini</option>
         </select>
-      </div>
-      <small class="hint">Google 翻譯開箱即用、速度快，但偏直譯。Gemini 用 AI 翻譯，語氣和專有名詞處理好很多，需要自己申請免費的 API key。</small>
+      </label>
 
       <div id="geminiBlock" hidden>
-        <div class="field">
-          <label for="key_gemini">Gemini API Key</label>
+        <label class="field">
+          <span>Gemini API Key</span>
           <input type="password" id="key_gemini" placeholder="AIza..." autocomplete="off" />
-        </div>
-        <small class="hint">到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> 免費申請（登入 Google 帳號即可）。金鑰只會傳送給 Google 的 Gemini API。它儲存在瀏覽器的 Chrome 設定中；如果你開啟了 Chrome 同步，會隨你的 Google 帳號同步到其他裝置。</small>
-
-        <div class="field">
-          <label for="model">模型</label>
+        </label>
+        <p class="hint">免費申請：<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></p>
+        <label class="field">
+          <span>模型</span>
           <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
-        </div>
-        <div class="field">
-          <label for="imageModel">圖片翻譯模型</label>
-          <select id="imageModel">
-            <option value="local">本機 OCR（預設）</option>
-            <option value="gemini">高品質（Gemini 看圖）</option>
-          </select>
-        </div>
+        </label>
       </div>
-    </fieldset>
 
-    <fieldset>
-      <legend>外觀（譯文樣式）</legend>
-      <div class="field">
-        <label for="transStyle">譯文樣式</label>
-        <select id="transStyle">
-          <option value="plain">無（純文字）</option>
-          <option value="underline">直線底線</option>
-          <option value="dashed">虛線底線</option>
-          <option value="dotted">點狀底線</option>
-          <option value="wavy">波浪底線</option>
-          <option value="solidBox">實線框線</option>
-          <option value="dashedBox">虛線框線</option>
-          <option value="highlight">醒目提示（黃底）</option>
-          <option value="dim">弱化（變淡）</option>
-          <option value="italic">斜體</option>
-          <option value="bold">粗體</option>
-          <option value="blur">模糊（學習模式 · 滑過才顯示）</option>
+      <label class="field">
+        <span>圖片翻譯</span>
+        <select id="imageModel">
+          <option value="local">本機辨識（免費、不限次數）</option>
+          <option value="gemini">Gemini 看圖（較準，每天約 20 次）</option>
         </select>
-      </div>
-      <div class="field">
-        <label for="transColor">譯文顏色</label>
-        <input type="color" id="transColor" value="#f2d492" />
-        <button id="transColorReset" class="ghost">預設</button>
-        <small class="hint">網頁譯文預設 #f2d492，影片字幕預設白色。按「預設」恢復。</small>
-      </div>
-      <div class="field">
-        <label for="barStyle">左側標記</label>
-        <select id="barStyle">
-          <option value="bar">線條（預設）</option>
-          <option value="thick">粗線條</option>
-          <option value="dashed">虛線</option>
-          <option value="none">無（隱藏）</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="barColor">標記顏色</label>
-        <input type="color" id="barColor" value="#f2d492" />
-        <button id="barColorReset" class="ghost">預設</button>
-      </div>
-      <div class="field">
-        <label>即時預覽</label>
-        <div id="stylePreview" class="preview-box">
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>外觀</h2>
+      <div class="preview">
+        <article class="sheet light">
+          <p class="kicker">亮色頁面</p>
           <div class="ibt-block">
             <div class="ibt-pair">
-              <div class="ibt-orig" style="display:block">Knowledge itself is power.</div>
-              <div class="ibt-trans">知識本身就是力量。</div>
+              <div class="ibt-orig">The quick brown fox jumps over the lazy dog.</div>
+              <div class="ibt-trans">敏捷的棕狐跨越懶狗</div>
             </div>
           </div>
-          <small class="hint" style="margin-top:8px">選「模糊（學習模式）」時，把滑鼠移到中文上才會顯示。</small>
-        </div>
+        </article>
+        <article class="sheet dark">
+          <p class="kicker">深色頁面</p>
+          <div class="ibt-block">
+            <div class="ibt-pair">
+              <div class="ibt-orig">The quick brown fox jumps over the lazy dog.</div>
+              <div class="ibt-trans">敏捷的棕狐跨越懶狗</div>
+            </div>
+          </div>
+        </article>
       </div>
-    </fieldset>
 
-    <fieldset>
-      <legend>進階</legend>
-      <label class="check">
-        <input type="checkbox" id="selectionTranslate" /> 劃詞翻譯
-      </label>
-      <label class="check">
-        <input type="checkbox" id="selectionInstant" /> 選取後立刻顯示譯文
-      </label>
-      <small class="hint">在網頁上選取文字，旁邊出現「譯」。點一下才翻譯；勾選立刻顯示就不用再點。單字會附上簡短字義。預設開啟，不影響輸入框。</small>
-
-      <label class="check">
-        <input type="checkbox" id="dblClickTranslate" /> 雙擊單字翻譯（需授權在所有網站執行）
-      </label>
-      <small class="hint">在任何網頁<b>雙擊單字</b>或<b>反白詞句</b>，會在旁邊浮出小視窗：原文＋🔊朗讀、翻譯，單字還會顯示<b>字典卡</b>（詞性＋釋義）。開啟時會請求「在所有網站執行」的權限，關閉會一併撤除（預設關閉）。</small>
-
-      <div class="field" style="margin-top:14px">
-        <button id="clearCache" class="ghost">清除翻譯快取</button>
-        <span id="cacheMsg" class="muted"></span>
+      <div class="segment" role="radiogroup" aria-label="標記樣式">
+        <label><input type="radio" name="marker" value="tint" />淡底色</label>
+        <label><input type="radio" name="marker" value="bar" />左邊細條</label>
+        <label><input type="radio" name="marker" value="wavy" />波浪底線</label>
+        <label><input type="radio" name="marker" value="none" />無標記</label>
       </div>
-      <small class="hint">翻譯結果會快取在瀏覽器裡，重複看到的內容不會再翻一次。如果譯文出現異常，可以清除快取後重新載入頁面。</small>
-    </fieldset>
+
+      <div class="accent">
+        <span>強調色</span>
+        <div id="swatches" class="swatches"></div>
+        <label class="hex">
+          自訂
+          <input id="accentHex" type="text" maxlength="7" placeholder="#RRGGBB" spellcheck="false" autocomplete="off" />
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>劃詞</h2>
+      <label class="toggle">
+        <span>劃詞翻譯</span>
+        <span class="switch">
+          <input type="checkbox" id="selectionTranslate" />
+          <span class="slider"></span>
+        </span>
+      </label>
+      <label class="toggle">
+        <span>選取後立即顯示譯文</span>
+        <span class="switch">
+          <input type="checkbox" id="selectionInstant" />
+          <span class="slider"></span>
+        </span>
+      </label>
+    </section>
 
     <p id="status" class="status"></p>
   </main>

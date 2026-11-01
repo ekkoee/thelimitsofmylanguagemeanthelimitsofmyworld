@@ -99,6 +99,52 @@ export function medianEdgeColor(canvas: HTMLCanvasElement, box: [number, number,
   return { r: (mid >> 16) & 255, g: (mid >> 8) & 255, b: mid & 255 };
 }
 
+/** Vertical span of pixels that are not the background, inside an OCR box. */
+export function inkBox(
+  canvas: HTMLCanvasElement,
+  box: [number, number, number, number],
+): [number, number, number, number] {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx || !canvas.width || !canvas.height) return box;
+  const W = canvas.width;
+  const H = canvas.height;
+  const x0 = Math.max(0, Math.floor(box[0] * W));
+  const y0 = Math.max(0, Math.floor(box[1] * H));
+  const x1 = Math.min(W, Math.ceil((box[0] + box[2]) * W));
+  const y1 = Math.min(H, Math.ceil((box[1] + box[3]) * H));
+  const iw = x1 - x0;
+  const ih = y1 - y0;
+  if (iw < 2 || ih < 4) return box;
+  const data = ctx.getImageData(x0, y0, iw, ih).data;
+  const lum = (i: number) => 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+  const corners = [0, (iw - 1) * 4, (ih - 1) * iw * 4, ((ih - 1) * iw + (iw - 1)) * 4].map(lum).sort((a, b) => a - b);
+  const bg = corners[1];
+  const step = Math.max(1, Math.floor(iw / 48));
+  const ink: boolean[] = [];
+  for (let y = 0; y < ih; y++) {
+    let dark = 0;
+    let n = 0;
+    for (let x = 0; x < iw; x += step) {
+      n += 1;
+      if (Math.abs(lum((y * iw + x) * 4) - bg) > 40) dark += 1;
+    }
+    ink.push(dark >= 2 && dark / n > 0.12);
+  }
+  let bestA = -1;
+  let bestB = -1;
+  let runA = -1;
+  for (let y = 0; y <= ih; y++) {
+    if (y < ih && ink[y]) {
+      if (runA < 0) runA = y;
+    } else if (runA >= 0) {
+      if (bestA < 0 || y - runA > bestB - bestA) { bestA = runA; bestB = y; }
+      runA = -1;
+    }
+  }
+  if (bestA < 0 || bestB - bestA < 4) return box;
+  return [box[0], (y0 + bestA) / H, box[2], (bestB - bestA) / H];
+}
+
 export function contrastColor(rgb: Rgb): string {
   const y = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
   return y > 160 ? '#1a1a1a' : '#f4f1ea';
@@ -127,7 +173,8 @@ export function renderRegions(
   const eh = overlay.clientHeight || 1;
   for (const region of regions) {
     if (!region.box || !region.textZh) continue;
-    const padded = padBox(region.box, content.w || ew, content.h || eh);
+    const fitted = canvas ? inkBox(canvas, region.box) : region.box;
+    const padded = padBox(fitted, content.w || ew, content.h || eh);
     const left = content.x + padded[0] * content.w;
     const top = content.y + padded[1] * content.h;
     const width = Math.max(8, padded[2] * content.w);
@@ -143,17 +190,23 @@ export function renderRegions(
     node.style.color = contrastColor(bg);
     node.textContent = region.textZh;
     overlay.appendChild(node);
-    fitRegionFont(node);
+    const rawH = Math.max(1, fitted[3] * (content.h || eh));
+    const words = (region.textEn || region.textZh).trim().split(/\s+/).filter(Boolean).length;
+    const lines = region.kind === 'paragraph' ? Math.max(1, Math.round(words / 8)) : 1;
+    fitRegionFont(node, Math.max(1, Math.floor((rawH / lines) * 0.9)));
   }
 }
 
-export function fitRegionFont(el: HTMLElement): void {
-  const max = Math.max(9, Math.floor(el.clientHeight * 0.72));
-  let px = max;
+/** Start at the source glyph height and only shrink so the line fits the box. */
+export function fitRegionFont(el: HTMLElement, capPx?: number): void {
+  const cap = Math.max(1, Math.floor(capPx ?? el.clientHeight));
+  let px = cap;
   el.style.fontSize = `${px}px`;
-  el.style.lineHeight = '1.25';
-  while (px > 9 && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1)) {
+  el.style.lineHeight = '1';
+  let steps = 0;
+  while (px > 1 && steps < 240 && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1)) {
     px -= 1;
     el.style.fontSize = `${px}px`;
+    steps += 1;
   }
 }

@@ -116,7 +116,8 @@ export function shouldSkipImageText(en: string): boolean {
   if (/^https?:\/\/\S+$/i.test(t) || /^[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(t)) return true;
   if (/^(grok|gpt|claude|gemini|qwen)[-\d.a-z]*$/i.test(t)) return true;
   if (/^\d+(\.\d+)?\s*[BMK]\b/i.test(t) && t.length < 14) return true;
-  if (/^[A-Z]{3,5}$/.test(t)) return true;
+  if (/^[A-Z]{2,5}$/.test(t)) return true;
+  if (/^(us|tx|fl|ny|ca|uk|oh|mi|il|pa|nc|ga)$/i.test(t)) return true;
   return false;
 }
 
@@ -180,7 +181,8 @@ export function groupImageRegions(regions: ImageRegion[]): ImageRegion[] {
       prev.kind = 'paragraph';
       continue;
     }
-    out.push({ ...region, kind: isProse(region.textEn) ? 'paragraph' : 'line' });
+    const tall = (region.box?.[3] || 0) > 0.055;
+    out.push({ ...region, kind: isProse(region.textEn) && tall ? 'paragraph' : 'line' });
   }
   return out;
 }

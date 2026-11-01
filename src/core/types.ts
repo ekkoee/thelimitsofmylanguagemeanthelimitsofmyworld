@@ -14,7 +14,7 @@ export interface Settings {
   subtitleOrder: SubtitleOrder; // YouTube subtitle order (both languages shown); default Chinese on top
   transStyle: string;           // visual style of the translated text (underline / box / blur / …)
   transColor: string;           // custom color for translated text ('' = use default)
-  barStyle: string;             // left marker bar: 'bar' | 'thick' | 'dashed' | 'none'
+  barStyle: string;             // page marker: 'bar' | 'tint' | 'wavy' | 'none'
   barColor: string;             // custom color for the left marker bar ('' = use default)
   fontScale: number;            // 0.8 – 1.6
   sourceLang: string;           // BCP-47 source-language code, or 'auto' to detect (default)
@@ -32,7 +32,6 @@ export interface Settings {
   apiKeys: Record<ProviderId, string>;
   ollamaEndpoint: string;
   cacheEnabled: boolean;
-  dblClickTranslate: boolean;   // double-click word popup (needs <all_urls>, off by default)
 }
 
 /** Page-translation text and the default left marker. Video subtitles stay white until a custom color is saved. */
@@ -66,7 +65,6 @@ export const DEFAULT_SETTINGS: Settings = {
   apiKeys: { google: '', microsoft: '', openai: '', gemini: '', ollama: '' },
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,
-  dblClickTranslate: false,    // ← least privilege: opt-in, requests <all_urls> only when enabled
 };
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {

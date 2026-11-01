@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings } from '../core/storage';
+import { loadSettings } from '../core/storage';
 import { cacheKey, getCached, putCached } from '../core/cache';
 import { paraphraseForMT } from '../core/paraphrase';
 import { TaskQueue } from '../core/queue';
@@ -7,7 +7,6 @@ import { segment } from '../core/segmentation';
 import { findTermMatches, lookupGlossary, TermMatch } from '../core/glossary';
 import { toTraditional } from '../core/st2t';
 import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
-import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 import { friendlyTranslateError } from '../core/errors';
 import { echoesEnglish, shouldSkipImageText, translateImageSequential } from '../providers/gemini-image';
@@ -129,8 +128,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
   });
 });
 
-chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); ensureImageMenu(); });
-chrome.runtime.onStartup.addListener(() => { reconcileDblClick(); ensureImageMenu(); });
+chrome.runtime.onInstalled.addListener(() => { loadSettings(); ensureImageMenu(); });
+chrome.runtime.onStartup.addListener(() => { ensureImageMenu(); });
 ensureImageMenu();
 
 function ensureImageMenu(): void {
@@ -160,25 +159,6 @@ async function deliverImageClick(tabId: number, srcUrl: string): Promise<void> {
   } catch (err) {
     console.log('[IBT] image inject failed', err);
   }
-}
-
-// If the user revokes <all_urls> from chrome://extensions, drop the dynamic
-// registration and flip the setting off so state stays consistent (least privilege).
-chrome.permissions.onRemoved.addListener((p) => {
-  if (p.origins?.includes('<all_urls>')) {
-    unregisterDblClick();
-    saveSettings({ dblClickTranslate: false });
-  }
-});
-
-// On install/startup, make the dynamic registration match the saved setting + the
-// permission we actually still hold (the permission persists across restarts, but
-// re-asserting registration is cheap insurance).
-async function reconcileDblClick(): Promise<void> {
-  const s = await loadSettings();
-  if (!s.dblClickTranslate) return;
-  if (await hasAllUrls()) await registerDblClick();
-  else await saveSettings({ dblClickTranslate: false }); // permission gone → setting can't be on
 }
 
 // Alt+A command. Granted activeTab for the tab where it was pressed, so we can

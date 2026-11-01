@@ -1,9 +1,8 @@
 import { loadSettings, saveSettings } from '../../core/storage';
-import { clearPersistentCache } from '../../core/cache';
-import { disableDblClick, registerDblClick, requestAllUrls } from '../../core/dblclick';
 import { DEFAULT_BAR_COLOR, DEFAULT_MODELS, DEFAULT_TRANS_COLOR, ProviderId, Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const SWATCHES = ['#f2d492', '#7aa2ff', '#5cbf8a', '#e0a15a', '#e06a6a', '#b07adf', '#e08ab0'];
 
 function toast(msg: string) {
   const s = $('status');
@@ -34,6 +33,7 @@ async function init() {
   const imageModel = $<HTMLSelectElement>('imageModel');
   imageModel.value = s.imageModel === 'gemini' ? 'gemini' : 'local';
   imageModel.addEventListener('change', () => save({ imageModel: imageModel.value }));
+
   const selectionTranslate = $<HTMLInputElement>('selectionTranslate');
   const selectionInstant = $<HTMLInputElement>('selectionInstant');
   selectionTranslate.checked = s.selectionTranslate !== false;
@@ -42,78 +42,78 @@ async function init() {
   selectionInstant.addEventListener('change', () => save({ selectionInstant: selectionInstant.checked }));
 
   bindKey('key_gemini', s.apiKeys.gemini, 'gemini');
-
-  // appearance: translated-text style + custom color + left marker bar, live preview
-  const transStyle = $<HTMLSelectElement>('transStyle');
-  const transColor = $<HTMLInputElement>('transColor');
-  const barStyle = $<HTMLSelectElement>('barStyle');
-  const barColor = $<HTMLInputElement>('barColor');
-  let appliedColor = s.transColor;
-  let appliedBarColor = s.barColor;
-
-  const syncPreview = () => {
-    const r = document.documentElement;
-    r.setAttribute('data-ibt-style', transStyle.value || 'plain');
-    r.setAttribute('data-ibt-bar', barStyle.value || 'bar');
-    const code = (s.targetLangCode || '').trim();
-    r.setAttribute('data-ibt-lang', code === 'zh-CN' ? 'zh-CN' : 'zh-TW');
-    r.style.setProperty('--ibt-trans-color', appliedColor || DEFAULT_TRANS_COLOR);
-    r.style.setProperty('--ibt-bar-color', appliedBarColor || DEFAULT_BAR_COLOR);
-  };
-
-  transStyle.value = s.transStyle || 'plain';
-  transStyle.addEventListener('change', () => { save({ transStyle: transStyle.value }); syncPreview(); });
-
-  if (s.transColor) transColor.value = s.transColor;
-  transColor.addEventListener('change', () => { appliedColor = transColor.value; save({ transColor: appliedColor }); syncPreview(); });
-  $('transColorReset').addEventListener('click', () => {
-    appliedColor = '';
-    transColor.value = DEFAULT_TRANS_COLOR;
-    save({ transColor: '' });
-    syncPreview();
-  });
-
-  barStyle.value = s.barStyle || 'bar';
-  barStyle.addEventListener('change', () => { save({ barStyle: barStyle.value }); syncPreview(); });
-
-  if (s.barColor) barColor.value = s.barColor;
-  else barColor.value = DEFAULT_BAR_COLOR;
-  barColor.addEventListener('change', () => { appliedBarColor = barColor.value; save({ barColor: appliedBarColor }); syncPreview(); });
-  $('barColorReset').addEventListener('click', () => {
-    appliedBarColor = '';
-    barColor.value = DEFAULT_BAR_COLOR;
-    save({ barColor: '' });
-    syncPreview();
-  });
-
-  syncPreview();
-
-  $('clearCache').addEventListener('click', async () => {
-    await clearPersistentCache();
-    $('cacheMsg').textContent = '已清除';
-    setTimeout(() => ($('cacheMsg').textContent = ''), 1500);
-  });
-
-  bindDblClickToggle(s.dblClickTranslate);
+  bindAppearance(s);
 }
 
-// The double-click popup needs broad host access, so enabling it requests <all_urls>
-// from a user gesture (this checkbox). If the user declines, we revert the toggle and
-// save nothing. Disabling unregisters the script and hands the permission back.
-function bindDblClickToggle(initial: boolean) {
-  const cb = $<HTMLInputElement>('dblClickTranslate');
-  cb.checked = initial;
-  cb.addEventListener('change', async () => {
-    if (cb.checked) {
-      const granted = await requestAllUrls();
-      if (!granted) { cb.checked = false; toast('需要授權才能啟用'); return; }
-      await registerDblClick();
-      await save({ dblClickTranslate: true });
-    } else {
-      await save({ dblClickTranslate: false });
-      await disableDblClick();
+function bindAppearance(s: Settings) {
+  let textColor = s.transColor || '';
+  let barColor = s.barColor || '';
+  const marker = s.barStyle === 'tint' || s.barStyle === 'wavy' || s.barStyle === 'none' || s.barStyle === 'bar'
+    ? s.barStyle
+    : 'bar';
+  const radios = document.querySelectorAll<HTMLInputElement>('input[name="marker"]');
+  const hex = $<HTMLInputElement>('accentHex');
+  const swatches = $('swatches');
+
+  const activeColor = () => (textColor || barColor || DEFAULT_TRANS_COLOR).toLowerCase();
+  const syncPreview = () => {
+    const root = document.documentElement;
+    const picked = document.querySelector<HTMLInputElement>('input[name="marker"]:checked');
+    root.setAttribute('data-ibt-bar', picked?.value || 'bar');
+    root.setAttribute('data-ibt-style', 'plain');
+    root.setAttribute('data-ibt-lang', 'zh-TW');
+    root.style.setProperty('--ibt-trans-color', textColor || DEFAULT_TRANS_COLOR);
+    root.style.setProperty('--ibt-bar-color', barColor || DEFAULT_BAR_COLOR);
+  };
+
+  for (const radio of radios) {
+    radio.checked = radio.value === marker;
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      save({ barStyle: radio.value });
+      syncPreview();
+    });
+  }
+
+  const paintSwatches = () => {
+    swatches.replaceChildren();
+    for (const color of SWATCHES) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'swatch';
+      button.style.background = color;
+      button.setAttribute('aria-label', color);
+      button.setAttribute('aria-checked', color === activeColor() && !hex.value ? 'true' : 'false');
+      button.addEventListener('click', () => {
+        hex.value = '';
+        const stored = color === DEFAULT_TRANS_COLOR ? '' : color;
+        textColor = stored;
+        barColor = stored;
+        save({ transColor: stored, barColor: stored });
+        paintSwatches();
+        syncPreview();
+      });
+      swatches.appendChild(button);
     }
+  };
+
+  if (activeColor() !== DEFAULT_TRANS_COLOR && !SWATCHES.includes(activeColor())) hex.value = activeColor();
+  hex.addEventListener('change', () => {
+    const next = hex.value.trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(next)) {
+      hex.value = activeColor() === DEFAULT_TRANS_COLOR || SWATCHES.includes(activeColor()) ? '' : activeColor();
+      return;
+    }
+    const stored = next.toLowerCase() === DEFAULT_TRANS_COLOR ? '' : next.toLowerCase();
+    textColor = stored;
+    barColor = stored;
+    save({ transColor: stored, barColor: stored });
+    paintSwatches();
+    syncPreview();
   });
+
+  paintSwatches();
+  syncPreview();
 }
 
 function bindKey(id: string, value: string, provider: ProviderId) {

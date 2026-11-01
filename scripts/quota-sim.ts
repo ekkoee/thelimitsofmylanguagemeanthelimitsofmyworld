@@ -190,7 +190,6 @@ const settings = {
   translateOnVisible: true,
   ollamaEndpoint: '',
   cacheEnabled: false,
-  dblClickTranslate: false,
 } as Settings;
 
 function geminiOk(text: string): Response {

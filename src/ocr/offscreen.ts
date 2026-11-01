@@ -1,7 +1,7 @@
 // Local OCR for image translation. Runs in the extension offscreen document so
 // the page stays responsive. Language data is downloaded once, hashed, and cached.
 
-import { OcrToken, tokensToRegions } from './paragraphs';
+import { isOcrNoise, OcrToken, tokensToRegions } from './paragraphs';
 import { ENG_TRAINEDDATA_SHA256, ENG_TRAINEDDATA_URL, OCR_CACHE_KEY, gunzipBytes, sha256Hex } from './traineddata';
 
 interface TessWord {
@@ -17,7 +17,7 @@ interface TessApi {
   createWorker(lang: string, oem: number, opts: Record<string, unknown>): Promise<TessWorker>;
 }
 
-const MIN_CONFIDENCE = 45;
+const MIN_CONFIDENCE = 60;
 let workerPromise: Promise<TessWorker> | null = null;
 let queue: Promise<unknown> = Promise.resolve();
 
@@ -93,7 +93,7 @@ function tokensFromWords(words: TessWord[]): OcrToken[] {
   for (const word of words) {
     const text = (word.text || '').trim();
     const box = word.bbox;
-    if (!text || !box || (word.confidence ?? 0) < MIN_CONFIDENCE) continue;
+    if (!text || !box || isOcrNoise(text) || (word.confidence ?? 0) < MIN_CONFIDENCE) continue;
     const w = box.x1 - box.x0;
     const h = box.y1 - box.y0;
     if (w < 2 || h < 2) continue;
