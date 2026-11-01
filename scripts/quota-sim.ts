@@ -11,6 +11,7 @@ import {
   emptyQuotaState,
   fingerprintKey,
   formatTaipeiHM,
+  migrateQuotaState,
   minuteMessage,
   nextPacificMidnight,
   noteDay,
@@ -191,19 +192,49 @@ const settings = {
   dblClickTranslate: false,
 } as Settings;
 
+function geminiOk(text: string): Response {
+  return new Response(JSON.stringify({
+    candidates: [{ content: { parts: [{ text: JSON.stringify({ t: [text] }) }] } }],
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+}
+
 async function main(): Promise<void> {
+  const legacy = migrateQuotaState({
+    models: {
+      'gemini-3.5-flash': { exhaustedUntil: Date.now() + 1e8, rpm: 0, recent: [], retryAt: 0, hungUntil: 0 },
+    },
+  });
+  check('upgrade drops the 1.4.29 quota blob', legacy.keyId === '' && Object.keys(legacy.models).length === 0);
+
   const idA = await fingerprintKey('key-account-a');
   const idB = await fingerprintKey('key-account-b');
-  let keyed = quotaForKey(emptyQuotaState(), idA);
+  let keyed = quotaForKey({ ...emptyQuotaState(), keyId: idA, models: { 'gemini-3.5-flash': { exhaustedUntil: july + 1e8, rpm: 0, recent: [], retryAt: 0, hungUntil: 0 } } }, idA);
   noteDay(keyed, 'gemini-3.5-flash', day!, july);
   keyed = quotaForKey(keyed, idB);
   check('a new API key does not inherit the old quota', keyed.keyId === idB && !keyed.models['gemini-3.5-flash']);
+  bindQuota({ state: keyed, persist: () => undefined });
+  let freshCalls = 0;
+  globalThis.fetch = async () => {
+    freshCalls += 1;
+    return geminiOk('新金鑰譯文');
+  };
+  const fresh = await geminiProvider.translate(
+    { sentences: ['Hello'], targetLang: settings.targetLang, sourceLang: 'en' },
+    settings,
+  );
+  check('a new key with old exhausted state translates normally', freshCalls === 1 && fresh[0] === '新金鑰譯文');
 
   const spent = emptyQuotaState();
   for (const model of ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite']) {
     noteDay(spent, model, day!, Date.now());
   }
   bindQuota({ state: spent, persist: () => undefined });
+  const probeCalls: string[] = [];
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    probeCalls.push(decodeURIComponent(url.split('/models/')[1].split(':')[0]));
+    return new Response(DAY_BODY, { status: 429, headers: { 'content-type': 'application/json' } });
+  };
   let fellBack = false;
   const batcher = new LlmBatcher({
     pace: async () => undefined,
@@ -219,7 +250,24 @@ async function main(): Promise<void> {
     provider: geminiProvider,
     mode: 'prose',
   });
+  check('exhausted Gemini still makes one real attempt', probeCalls.length === 1 && /lite/i.test(probeCalls[0]));
   check('exhausted Gemini page translation shows the free translation', fellBack && pairs[0]?.t === '免費譯文' && !pairs.some((p) => /免費額度/.test(p.t)));
+
+  const spentOk = emptyQuotaState();
+  for (const model of ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite']) {
+    noteDay(spentOk, model, day!, Date.now());
+  }
+  bindQuota({ state: spentOk, persist: () => undefined });
+  let clearedCalls = 0;
+  globalThis.fetch = async () => {
+    clearedCalls += 1;
+    return geminiOk('譯文');
+  };
+  const cleared = await geminiProvider.translate(
+    { sentences: ['Hello from X'], targetLang: settings.targetLang, sourceLang: 'en' },
+    settings,
+  );
+  check('a successful attempt clears the stored daily flag', clearedCalls === 1 && cleared[0] === '譯文' && (spentOk.models['gemini-3.5-flash-lite']?.exhaustedUntil ?? 1) === 0);
   bindQuota({ state, persist: () => undefined });
 
   globalThis.fetch = fetchImpl;

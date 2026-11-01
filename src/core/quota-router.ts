@@ -255,10 +255,19 @@ export function pickModel(
 }
 
 export function noteSuccess(state: QuotaState, model: string, now: number): void {
+  for (const quota of Object.values(state.models)) quota.exhaustedUntil = 0;
   const m = modelQuota(state, model);
   prune(m, now);
   m.recent.push(now);
+  m.retryAt = 0;
   m.hungUntil = 0;
+}
+
+/** 1.4.29 saved one global quota blob with no key id. It must not block 1.4.30. */
+export function migrateQuotaState(raw: unknown): QuotaState {
+  const parsed = normalizeQuotaState(raw);
+  if (!parsed.keyId) return emptyQuotaState();
+  return parsed;
 }
 
 export function noteDay(state: QuotaState, called: string, parsed: QuotaFailure, now: number): void {

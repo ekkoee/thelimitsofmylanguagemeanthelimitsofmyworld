@@ -1,6 +1,7 @@
 // One Gemini generateContent call at a time, on the best model that still has quota.
 // Image calls give up a silent socket after 15s and keep the whole chain under 20s.
 
+import { QuotaError } from './llm-batcher';
 import {
   IMAGE_BODY_TIMEOUT_MS,
   IMAGE_CHAIN_BUDGET_MS,
@@ -142,13 +143,38 @@ export async function executeGeminiRoute(opts: GeminiRouteOpts): Promise<{ model
   let last: RouteSignal | null = null;
   let minuteSec = 0;
   let force = Boolean(opts.force);
+  let probed = false;
 
   for (let step = 0; step < 8; step++) {
     const t = now();
     if (t >= deadline) break;
     const pick = pickModel(opts.chain, opts.state, t, { ignoreExhausted: force });
     force = false;
-    if (pick.kind === 'day') throw new Error(allExhaustedMessage(pick.resetAt));
+    if (pick.kind === 'day') {
+      if (!probed) {
+        probed = true;
+        const model = cheapestModel(opts.chain);
+        const headerMs = Math.min(headerCap, Math.max(400, deadline - t));
+        log(`[IBT] ${opts.purpose} gemini probe ${new Date(t).toISOString()} model=${model}`);
+        try {
+          const json = await callModel(opts, model, headerMs, bodyCap);
+          noteSuccess(opts.state, model, now());
+          opts.onState?.(opts.state);
+          return { model, json };
+        } catch (err) {
+          if (err instanceof RouteSignal && err.code === 'auth') throw new Error('Gemini 金鑰無效');
+          if (err instanceof RouteSignal) {
+            last = err;
+            if (err.code === 'day') noteDay(opts.state, model, {
+              perDay: true, perMinute: false, quotaValue: 0, retrySec: err.retrySec, dimensionModel: '', calledModel: model,
+            }, now());
+            opts.onState?.(opts.state);
+          }
+          throw new QuotaError('QUOTA_DAY', allExhaustedMessage(pick.resetAt));
+        }
+      }
+      throw new QuotaError('QUOTA_DAY', allExhaustedMessage(pick.resetAt));
+    }
     if (pick.kind === 'none') break;
     if (pick.kind === 'wait') {
       const sec = Math.max(1, Math.ceil(pick.waitMs / 1000));
@@ -188,12 +214,17 @@ export async function executeGeminiRoute(opts: GeminiRouteOpts): Promise<{ model
       throw err;
     }
   }
-  if (minuteSec > 0) throw new Error(minuteMessage(minuteSec));
+  if (minuteSec > 0) throw new QuotaError('QUOTA_MINUTE', minuteMessage(minuteSec));
   if (last?.code === 'timeout') throw new Error(`Gemini 回應逾時（${last.model}）`);
   if (last?.code === 'network') throw new Error('連不到 Gemini，請檢查網路');
   if (last?.code === 'server') throw new Error(`Gemini 服務暫時錯誤（${last.status}）`);
-  if (last?.code === 'day') throw new Error(allExhaustedMessage(soonestReset(opts.state, now())));
+  if (last?.code === 'day') throw new QuotaError('QUOTA_DAY', allExhaustedMessage(soonestReset(opts.state, now())));
   throw new Error(opts.purpose === 'image' ? 'Gemini 沒有回傳圖片譯文' : 'Gemini 沒有回傳譯文');
+}
+
+function cheapestModel(chain: string[]): string {
+  const lites = chain.filter((model) => /lite/i.test(model));
+  return lites[lites.length - 1] || chain[chain.length - 1];
 }
 
 function soonestReset(state: QuotaState, now: number): number {

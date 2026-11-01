@@ -11,7 +11,7 @@ import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblcli
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 import { friendlyTranslateError } from '../core/errors';
 import { echoesEnglish, shouldSkipImageText, translateImageSequential } from '../providers/gemini-image';
-import { bindQuota, emptyQuotaState, fingerprintKey, normalizeQuotaState, quotaForKey, requestGeminiRetry, setQuotaAlign, setQuotaReady, QuotaState } from '../core/quota-router';
+import { bindQuota, emptyQuotaState, fingerprintKey, migrateQuotaState, quotaForKey, requestGeminiRetry, setQuotaAlign, setQuotaReady, QuotaState } from '../core/quota-router';
 
 const queue = new TaskQueue(4);
 
@@ -101,7 +101,9 @@ function bindCurrentQuota(): void {
   bindQuota({ state: quotaState, persist: persistQuota, waitForImage: () => imageGate });
 }
 const quotaReady = chrome.storage.local.get(QUOTA_KEY).then((raw) => {
-  quotaState = normalizeQuotaState(raw?.[QUOTA_KEY]);
+  const saved = raw?.[QUOTA_KEY];
+  quotaState = migrateQuotaState(saved);
+  if (saved && !(saved as { keyId?: string }).keyId) persistQuota();
   bindCurrentQuota();
 }).catch(() => {
   bindCurrentQuota();
@@ -115,6 +117,20 @@ setQuotaAlign(async (key) => {
   quotaState = next;
   persistQuota();
   bindCurrentQuota();
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync' || !changes.ibt_settings) return;
+  const prevBag = changes.ibt_settings.oldValue as { apiKeys?: { gemini?: string } } | undefined;
+  const nextBag = changes.ibt_settings.newValue as { apiKeys?: { gemini?: string } } | undefined;
+  const prev = String(prevBag?.apiKeys?.gemini || '');
+  const nextKey = String(nextBag?.apiKeys?.gemini || '');
+  if (prev.trim() === nextKey.trim()) return;
+  void fingerprintKey(nextKey).then((id) => {
+    quotaState = quotaForKey(quotaState, id);
+    persistQuota();
+    bindCurrentQuota();
+  });
 });
 
 chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); ensureImageMenu(); });
