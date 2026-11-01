@@ -361,10 +361,10 @@ async function translateOcrLines(lines: string[]): Promise<string[]> {
   return out;
 }
 
-async function ocrTranslate(mime: string, data: string): Promise<{ regions: { textEn: string; textZh: string; box?: [number, number, number, number] }[]; ms: number }> {
+async function ocrTranslate(mime: string, data: string): Promise<{ regions: { textEn: string; textZh: string; box?: [number, number, number, number]; glyph?: number }[]; ms: number }> {
   await ensureOffscreen();
   const ocr = await chrome.runtime.sendMessage({ type: 'ibt-offscreen-ocr', mime, data }) as {
-    ok?: boolean; error?: string; ms?: number; regions?: { text: string; box: [number, number, number, number] }[];
+    ok?: boolean; error?: string; ms?: number; regions?: { text: string; box: [number, number, number, number]; glyph?: number }[];
   };
   if (!ocr?.ok) throw new Error(ocr?.error || '本機文字辨識失敗');
   const kept = (ocr.regions || []).filter((region) => region.text && region.box && !shouldSkipImageText(region.text));
@@ -373,7 +373,8 @@ async function ocrTranslate(mime: string, data: string): Promise<{ regions: { te
     textEn: region.text,
     textZh: translated[i] || '',
     box: region.box,
-  })).filter((region) => region.textZh);
+    glyph: region.glyph,
+  })).filter((region) => region.textZh && !echoesEnglish(region.textEn, region.textZh));
   console.log('[IBT] ocr translate', ocr.ms, 'kept', regions.length);
   return { regions, ms: ocr.ms || 0 };
 }

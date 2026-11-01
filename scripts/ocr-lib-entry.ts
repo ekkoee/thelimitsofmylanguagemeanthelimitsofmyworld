@@ -1,1 +1,1 @@
-export { tokensToRegions, rotatedCWBox } from '../src/ocr/paragraphs';
+export { acceptOcrWord, tokensToRegions, rotatedCWBox } from '../src/ocr/paragraphs';

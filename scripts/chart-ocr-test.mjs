@@ -21,7 +21,7 @@ const worker = await createWorker('eng');
 await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' });
 const result = await worker.recognize('/tmp/ibt-chart/chart.png');
 await worker.terminate();
-const words = (result.data.words || []).filter((w) => (w.confidence || 0) >= 60 && w.text && !lib.isOcrNoise(w.text));
+const words = (result.data.words || []).filter((w) => w.text && lib.acceptOcrWord(w.text, w.confidence || 0));
 const tokens = words.map((w) => ({
   text: w.text.trim(),
   x: w.bbox.x0,
@@ -46,6 +46,11 @@ check('Switzerland is its own label', texts.some((t) => /switzerland/i.test(t) &
 check('no symbol junk regions', !texts.some((t) => lib.isOcrNoise(t) || /^[@®o]|\[J/.test(t)));
 check('bare abbreviations stay pixels', !kept.some((r) => /^(US|TX|FL|NY|CA|UK|OH|MI|IL|PA|NC|GA)$/.test(r.text)));
 check('short labels are not chart-wide', kept.filter((r) => r.text.split(/\s+/).length <= 3).every((r) => r.box[2] < 0.42));
+check('EU27 average is one label', texts.some((t) => /eu27 average/i.test(t)));
+check('US average is one label', texts.some((t) => /^us average$/i.test(t)));
+check('legend items are not one label', !texts.some((t) => /states/i.test(t) && /eu27/i.test(t)));
+const title = regions.find((r) => /adoption/i.test(r.text));
+check('title type stays large', title && title.glyph * 857 >= 28);
 
 async function translate(text) {
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-TW&dt=t&q=${encodeURIComponent(text)}`;
@@ -63,11 +68,16 @@ async function translate(text) {
 const painted = [];
 for (const region of kept) {
   const textZh = await translate(region.text);
+  if (lib.echoesEnglish(region.text, textZh)) {
+    console.log('leave pixels', region.text, '->', textZh);
+    continue;
+  }
   painted.push({
     textEn: region.text,
     textZh,
     box: region.box,
     kind: 'line',
+    glyph: region.glyph,
   });
   console.log(`${region.text} -> ${textZh}`);
 }

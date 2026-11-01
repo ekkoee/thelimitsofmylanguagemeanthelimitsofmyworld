@@ -99,6 +99,52 @@ export function medianEdgeColor(canvas: HTMLCanvasElement, box: [number, number,
   return { r: (mid >> 16) & 255, g: (mid >> 8) & 255, b: mid & 255 };
 }
 
+/**
+ * Vertical span of the letters inside a word box.
+ * A narrow blob outside that span (a scatter dot the box happened to include) is left out.
+ */
+export function textBand(
+  canvas: HTMLCanvasElement,
+  box: [number, number, number, number],
+): [number, number, number, number] {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx || !canvas.width || !canvas.height) return box;
+  const W = canvas.width;
+  const H = canvas.height;
+  const x0 = Math.max(0, Math.floor(box[0] * W));
+  const y0 = Math.max(0, Math.floor(box[1] * H));
+  const x1 = Math.min(W, Math.ceil((box[0] + box[2]) * W));
+  const y1 = Math.min(H, Math.ceil((box[1] + box[3]) * H));
+  const iw = x1 - x0;
+  const ih = y1 - y0;
+  if (iw < 8 || ih < 6) return box;
+  const data = ctx.getImageData(x0, y0, iw, ih).data;
+  const lum = (x: number, y: number) => {
+    const i = (y * iw + x) * 4;
+    return 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+  };
+  const step = Math.max(1, Math.floor(iw / 80));
+  let first = -1;
+  let last = -1;
+  const wide = Math.max(8, iw * 0.35);
+  for (let y = 0; y < ih; y++) {
+    let minX = iw;
+    let maxX = -1;
+    for (let x = 0; x < iw; x += step) {
+      if (lum(x, y) < 175) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
+    }
+    if (maxX - minX >= wide) {
+      if (first < 0) first = y;
+      last = y;
+    }
+  }
+  if (first < 0 || last - first < 4) return box;
+  const pad = 2;
+  const ny = y0 + Math.max(0, first - pad);
+  const nb = y0 + Math.min(ih, last + 1 + pad);
+  return [box[0], ny / H, box[2], Math.max(1, nb - ny) / H];
+}
+
 /** Vertical span of pixels that are not the background, inside an OCR box. */
 export function inkBox(
   canvas: HTMLCanvasElement,
@@ -173,11 +219,14 @@ export function renderRegions(
   const eh = overlay.clientHeight || 1;
   for (const region of regions) {
     if (!region.box || !region.textZh) continue;
-    const fitted = canvas ? inkBox(canvas, region.box) : region.box;
-    const padded = padBox(fitted, content.w || ew, content.h || eh);
+    const band = canvas ? textBand(canvas, region.box) : region.box;
+    // A stacked label (US over average) is much taller than one letter band.
+    // Keep every word box. A single loose box keeps only the letter band, not a dot below it.
+    const stacked = region.box[3] > band[3] * 2.2;
+    const padded = coverBox(stacked ? region.box : band, content.w || ew, content.h || eh);
     const left = content.x + padded[0] * content.w;
     const top = content.y + padded[1] * content.h;
-    const width = Math.max(8, padded[2] * content.w);
+    let width = Math.max(8, padded[2] * content.w);
     const height = Math.max(8, padded[3] * content.h);
     const bg = canvas ? medianEdgeColor(canvas, region.box) : { r: 244, g: 241, b: 234 };
     const node = document.createElement('div');
@@ -190,11 +239,36 @@ export function renderRegions(
     node.style.color = contrastColor(bg);
     node.textContent = region.textZh;
     overlay.appendChild(node);
-    const rawH = Math.max(1, fitted[3] * (content.h || eh));
     const words = (region.textEn || region.textZh).trim().split(/\s+/).filter(Boolean).length;
     const lines = region.kind === 'paragraph' ? Math.max(1, Math.round(words / 8)) : 1;
-    fitRegionFont(node, Math.max(1, Math.floor((rawH / lines) * 0.9)));
+    const glyphPx = region.glyph ? region.glyph * (content.h || eh) : 0;
+    const bandPx = band[3] * (content.h || eh);
+    const letterPx = bandPx >= 8 ? bandPx : (glyphPx || region.box[3] * (content.h || eh) / lines);
+    const rawH = glyphPx > 0 ? Math.min(letterPx, glyphPx) : letterPx;
+    const cap = Math.max(1, Math.round(rawH));
+    node.style.fontSize = `${cap}px`;
+    node.style.lineHeight = '1';
+    const room = Math.max(0, (content.x + content.w) - left - 4);
+    if (node.scrollWidth > node.clientWidth + 1 && room > width) {
+      width = Math.min(room, Math.max(width, node.scrollWidth + 2));
+      node.style.width = `${(width / ew) * 100}%`;
+    }
+    fitRegionFont(node, cap);
   }
+}
+
+/** A few pixels around the full word box. Not enough to swallow a neighboring dot. */
+function coverBox(
+  box: [number, number, number, number],
+  imgW: number,
+  imgH: number,
+): [number, number, number, number] {
+  const padPx = 2;
+  const x = Math.max(0, box[0] * imgW - padPx);
+  const y = Math.max(0, box[1] * imgH - padPx);
+  const r = Math.min(imgW, (box[0] + box[2]) * imgW + padPx);
+  const b = Math.min(imgH, (box[1] + box[3]) * imgH + padPx);
+  return [x / imgW, y / imgH, (r - x) / imgW, (b - y) / imgH];
 }
 
 /** Start at the source glyph height and only shrink so the line fits the box. */

@@ -44,5 +44,34 @@ check('noise tokens are dropped', !names.some((t) => t === '@' || t.includes('[J
 check('stacked chart labels are not one box', names.includes('France') && names.includes('Belgium'));
 check('a normal space stays one label', names.includes('US average'));
 
+const legend = lib.tokensToRegions([
+  { text: 'US', x: 44, y: 157, w: 25, h: 16 },
+  { text: 'states', x: 77, y: 158, w: 59, h: 15 },
+  { text: '@EU27', x: 153, y: 155, w: 78, h: 23 },
+  { text: 'Non-EU', x: 277, y: 157, w: 70, h: 16 },
+  { text: 'Europe', x: 356, y: 157, w: 67, h: 21 },
+], 957, 857);
+const legendText = legend.map((r) => r.text);
+check('legend items stay apart', legendText.includes('US states') && legendText.includes('EU27') && legendText.includes('Non-EU Europe'));
+const eu = legend.find((r) => r.text === 'EU27');
+check('a glued legend dot is not part of the text box', eu && eu.box[0] * 957 > 165);
+
+const stacked = lib.tokensToRegions([
+  { text: 'us', x: 564, y: 538, w: 25, h: 16 },
+  { text: 'FL', x: 727, y: 559, w: 30, h: 16 },
+  { text: 'average', x: 539, y: 570, w: 75, h: 16 },
+], 957, 857);
+check('US over average is one label', stacked.some((r) => r.text === 'us average'));
+check('a neighboring abbreviation stays out of that label', stacked.some((r) => r.text === 'FL'));
+
+const title = lib.tokensToRegions([
+  { text: 'Consumer', x: 16, y: 21, w: 146, h: 24 },
+  { text: 'adoption', x: 170, y: 20, w: 123, h: 31 },
+], 957, 857);
+const titleBox = title.find((r) => /Consumer/.test(r.text));
+check('a line covers every word box', titleBox && Math.round(titleBox.box[3] * 857) >= 31);
+check('title type follows the tall glyphs', titleBox && Math.round(titleBox.glyph * 857) >= 30);
+check('a low-confidence word is still a word', lib.acceptOcrWord('average', 0) && !lib.acceptOcrWord('@', 90) && !lib.acceptOcrWord('®Econ', 14));
+
 if (failed) process.exit(1);
 console.log('ocr grouping checks passed');

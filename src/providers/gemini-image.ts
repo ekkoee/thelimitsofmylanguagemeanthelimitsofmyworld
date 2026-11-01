@@ -17,6 +17,8 @@ export interface ImageRegion {
   textZh: string;
   /** [x, y, w, h] as fractions of the source image (0–1). */
   box?: [number, number, number, number];
+  /** Source glyph height as a fraction of the image. The cover box may be taller. */
+  glyph?: number;
   kind?: 'line' | 'paragraph';
 }
 
@@ -178,6 +180,7 @@ export function groupImageRegions(regions: ImageRegion[]): ImageRegion[] {
       prev.box = union(prev.box, region.box);
       prev.textEn = `${prev.textEn} ${region.textEn}`.replace(/\s+/g, ' ').trim();
       prev.textZh = `${prev.textZh}${region.textZh}`;
+      prev.glyph = Math.max(prev.glyph || 0, region.glyph || 0) || undefined;
       prev.kind = 'paragraph';
       continue;
     }
