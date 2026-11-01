@@ -1,4 +1,4 @@
-import { hasTranslatableText } from '../core/segmentation';
+import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
 import { isLinkedInCommentaryControl } from './linkedin';
 import { X_PLAYER_SELECTOR, matchSiteRule } from './selectors';
 
@@ -204,7 +204,62 @@ export function collectUnits(root: HTMLElement): Unit[] {
   };
 
   visit(root);
-  return units;
+  const lang = typeof document === 'undefined'
+    ? 'zh-TW'
+    : (document.documentElement.getAttribute('data-ibt-target') || 'zh-TW');
+  // A leaf can hold several lines separated by <br>. Drop it only when every
+  // line is already the target language, so one English line in a Chinese post
+  // is still translated and the Chinese lines are not.
+  return units.filter((unit) => payloadForUnit(unit.element, unit.text, lang) !== null);
+}
+
+// Lines inside one leaf, split the same way LinkedIn splits a commentary:
+// a <br> or a blank line starts a new line; a single soft wrap does not.
+function breakSeparatedLines(el: HTMLElement): string[] {
+  const lines: string[] = [];
+  let buf = '';
+  const flush = () => {
+    const text = buf.replace(/\s+/g, ' ').trim();
+    buf = '';
+    if (text) lines.push(text);
+  };
+  const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode(n) {
+      if (n.nodeType === 1) {
+        const e = n as HTMLElement;
+        if (e.classList?.contains('ibt-block') || e.dataset?.ibtOut === '1') return NodeFilter.FILTER_REJECT;
+        return e.tagName === 'BR' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let node: Node | null;
+  while ((node = tw.nextNode())) {
+    if (node.nodeName === 'BR') {
+      flush();
+      continue;
+    }
+    const raw = node.nodeValue || '';
+    const parts = raw.split(/\n\s*\n/);
+    for (let i = 0; i < parts.length; i++) {
+      buf += parts[i];
+      if (i < parts.length - 1) flush();
+    }
+  }
+  flush();
+  return lines;
+}
+
+/** What to send for this leaf. null: every line is already in the target language.
+ *  A single run keeps `joined` so sentence splitting is unchanged. A mixed
+ *  <br> post sends only the lines that are not already the target language. */
+export function payloadForUnit(el: HTMLElement, joined: string, lang: string): string | null {
+  const lines = breakSeparatedLines(el);
+  if (lines.length <= 1) return isAlreadyTargetLang(joined, lang) ? null : joined;
+  const foreign = lines.filter((line) => hasTranslatableText(line) && !isAlreadyTargetLang(line, lang));
+  if (!foreign.length) return null;
+  if (foreign.length === lines.length) return joined;
+  return foreign.join('\n');
 }
 
 // Fraction of an element's text that sits inside links.

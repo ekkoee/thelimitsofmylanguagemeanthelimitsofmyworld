@@ -1,6 +1,7 @@
 // LinkedIn feed. Posts are often clamped behind a "see more" / "更多" control.
 // Translating the clamped preview spends a request and then goes stale when the
 // reader expands the post, so expansion itself is what translates that card.
+import { isAlreadyTargetLang } from '../core/segmentation';
 import { renderTranslationAfter } from './engine';
 import { pageFontPx } from './page-font';
 
@@ -204,11 +205,19 @@ export function translateLinkedInCommentary(body: HTMLElement): void {
   const lines = linkedInLines(body);
   const sig = lines.map((l) => l.text).join('\n');
   if (!sig || sig.replace(/\s/g, '').length < 8) return;
-  if (body.dataset.ibtLiSig === sig && (body.querySelector('.ibt-block') || body.nextElementSibling?.classList.contains('ibt-block'))) return;
+  if (body.dataset.ibtLiSig === sig && (
+    body.dataset.ibtLiIdle === '1'
+    || !!body.querySelector('.ibt-block')
+    || !!body.nextElementSibling?.classList.contains('ibt-block')
+  )) return;
   clearLinkedInBlocks(body);
+  delete body.dataset.ibtLiIdle;
   body.dataset.ibtLiSig = sig;
   const font = `${pageFontPx(body)}px`;
+  const lang = document.documentElement.getAttribute('data-ibt-target') || 'zh-TW';
+  let placed = false;
   for (const line of lines) {
+    if (isAlreadyTargetLang(line.text, lang)) continue;
     const block = renderTranslationAfter(line.anchor, line.text);
     if (!block) continue;
     block.classList.add('ibt-uni');
@@ -220,7 +229,9 @@ export function translateLinkedInCommentary(body: HTMLElement): void {
     block.style.flex = '1 0 100%';
     block.style.fontSize = font;
     block.style.lineHeight = '1.5';
+    placed = true;
   }
+  if (!placed) body.dataset.ibtLiIdle = '1';
 }
 
 function translateBody(body: HTMLElement, why: string): void {
@@ -238,6 +249,7 @@ function translateBody(body: HTMLElement, why: string): void {
 function clearBody(body: HTMLElement): void {
   clearLinkedInBlocks(body);
   delete body.dataset.ibtLiSig;
+  delete body.dataset.ibtLiIdle;
 }
 
 function schedule(body: HTMLElement, why: string): void {

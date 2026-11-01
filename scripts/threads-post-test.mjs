@@ -19,7 +19,7 @@ const html = `<!doctype html>
   <span dir="auto" style="display:block">
     <span style="display:inline">Hey </span>
     <div style="display:inline-block"><span style="display:contents"><div style="display:block"><a href="/@meta" role="link" tabindex="0" style="display:inline"><span translate="no">@<!-- -->meta</span></a></div></span></div>
-    <span style="display:inline"> corposlops, keep all mentions of </span>
+    <span style="display:inline"> corpposts, keep all mentions of </span>
     <div style="display:inline-block"><span style="display:contents"><div style="display:block"><a href="/@alexandr" role="link" tabindex="0" style="display:inline"><span translate="no">@<!-- -->alexandr</span></a></div></span></div>
     <span style="display:inline"> including Twitter screenshots out of my feed</span>
     <div style="display:inline-block"><div role="button"><span>翻譯</span></div></div>

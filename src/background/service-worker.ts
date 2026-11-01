@@ -1,5 +1,4 @@
 import { loadSettings } from '../core/storage';
-import { handleSlopCheck } from '../slop/slop-check';
 import { cacheKey, getCached, putCached } from '../core/cache';
 import { paraphraseForMT } from '../core/paraphrase';
 import { TaskQueue } from '../core/queue';
@@ -201,13 +200,6 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
-  if (msg?.type === 'slopCheck') {
-    loadSettings()
-      .then((s) => (s.slopApi ? handleSlopCheck(msg.text, s.slopApiKey) : { ok: false, error: '未開啟線上偵測' }))
-      .then(sendResponse)
-      .catch((err) => sendResponse({ ok: false, error: String((err as Error)?.message ?? err) }));
-    return true;
-  }
   if (msg?.type === 'translate') {
     handleTranslate(msg.text, { title: msg.title, mode: msg.mode })
       .then((pairs) => sendResponse({ ok: true, pairs } satisfies TranslateResponse))

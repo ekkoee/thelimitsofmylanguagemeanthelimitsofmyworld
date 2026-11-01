@@ -167,6 +167,7 @@ export function applyRootState(s: {
   r.style.setProperty('--ibt-font-scale', String(s.fontScale));
   // lang on each translation node. The face itself is --ibt-zh-font for both.
   r.setAttribute('data-ibt-lang', s.targetLangCode === 'zh-CN' ? 'zh-CN' : 'zh-TW');
+  r.setAttribute('data-ibt-target', s.targetLangCode || 'zh-TW');
   // translated-text visual style
   r.setAttribute('data-ibt-style', s.transStyle || 'plain');
   // Empty means the translation inherits the page text. A saved hex is deliberate.

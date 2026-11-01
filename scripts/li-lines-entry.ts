@@ -7,7 +7,7 @@ const chromeObj = {
     lastError: undefined as { message?: string } | undefined,
     sendMessage(msg: { text?: string }, cb: (resp: unknown) => void) {
       const parts = segment(String(msg?.text || ''), 'en');
-      cb({ ok: true, pairs: parts.map((s) => ({ o: s, t: `〔${s}〕` })) });
+      cb({ ok: true, pairs: parts.map((s) => ({ o: s, t: `譯${s}` })) });
     },
   },
 };

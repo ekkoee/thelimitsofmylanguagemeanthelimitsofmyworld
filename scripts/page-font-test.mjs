@@ -24,7 +24,7 @@ body { margin: 0; font-size: 15px; }
 <div id="threads" style="width:320px; font-size:15px">
   <span id="short" data-src style="display:block; font-size:15px">Degen jedi.</span>
   <span id="long" data-src style="display:block; font-size:15px">I actually respect Wang more and more as time goes on. The feeling keeps growing every week that I read another note.</span>
-  <span id="mention" data-src style="display:block; font-size:15px">Hey @meta corposlops, keep all mentions of @alexandr including Twitter screenshots out of my feed</span>
+  <span id="mention" data-src style="display:block; font-size:15px">Hey @meta corpposts, keep all mentions of @alexandr including Twitter screenshots out of my feed</span>
 </div>
 <div id="x" style="font-size:20px">
   <div id="tweet" data-src data-testid="tweetText" style="font-size:20px">A tweet that is one line and must not be shrunk.</div>

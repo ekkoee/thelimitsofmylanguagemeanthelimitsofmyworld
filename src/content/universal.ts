@@ -2,7 +2,7 @@ import { Settings } from '../core/types';
 import { chineseShare, isAlreadyTargetLang, stripNoise } from '../core/segmentation';
 import { renderTranslationAfter } from './engine';
 import { isHeadingElement, isRowFit, pageFontPx } from './page-font';
-import { collectUnits, isInlinePostChrome, isSeeMoreLessControl } from './blocks';
+import { collectUnits, isInlinePostChrome, isSeeMoreLessControl, payloadForUnit } from './blocks';
 import { matchSiteRule } from './selectors';
 import { commentaryRoot, linkedInCollapsed, linkedInHost, translateLinkedInCommentary } from './linkedin';
 
@@ -39,8 +39,8 @@ function judgesByUnitText(host: string): boolean {
 export function chineseSkipReason(
   host: string, unitText: string, shellText: string, targetLangCode: string,
 ): '' | 'target' | 'shell' {
-  if (isAlreadyTargetLang(unitText, targetLangCode)) return 'target';
   if (judgesByUnitText(host)) return '';
+  if (isAlreadyTargetLang(unitText, targetLangCode)) return 'target';
   if (shellIsChinese(shellText, targetLangCode)) return 'shell';
   return '';
 }
@@ -212,7 +212,9 @@ export class UniversalTranslator {
           onLinkedIn ? '' : articleText(node),
           this.settings.targetLangCode,
         );
-        if (reason === 'target') { skippedTarget++; continue; }
+        if (reason === 'target' && payloadForUnit(node, unit.text, this.settings.targetLangCode) == null) {
+          skippedTarget++; continue;
+        }
         if (reason === 'shell') { skippedShell++; continue; }
 
         // Locate any block we already placed for this source — by identity first,
@@ -299,8 +301,10 @@ export class UniversalTranslator {
     // whose text changed — no stale block left behind, no DOM leak).
     const old = this.blockBySource.get(node);
     if (old) { old.remove(); this.blocks.delete(old); }
-    const text = (node as any).__ibtText || (node.textContent || '').replace(/\s+/g, ' ').trim();
-    const sig = (node as any).__ibtSig || fingerprint(text);
+    const raw = (node as any).__ibtText || (node.textContent || '').replace(/\s+/g, ' ').trim();
+    const text = payloadForUnit(node, raw, this.settings.targetLangCode);
+    if (text == null) return;
+    const sig = (node as any).__ibtSig || fingerprint(raw);
     console.log('[IBT] request sent', text.slice(0, 80));
     const block = renderTranslationAfter(node, text, { sig });
     if (block) {

@@ -1,5 +1,5 @@
 import { AlignedPair, Settings, TranslateResponse } from '../core/types';
-import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
+import { hasTranslatableText, isAlreadyTargetLang, sameMeaning } from '../core/segmentation';
 import { el, isProcessed, markProcessed } from '../utils/dom';
 import { sendMessage, isContextGoneError } from '../utils/runtime';
 import { insideXVideo } from './selectors';
@@ -85,14 +85,22 @@ async function translateBlock(text: string, retry = false): Promise<AlignedPair[
   return resp.pairs || [];
 }
 
+function pageTarget(): string {
+  return document.documentElement.getAttribute('data-ibt-target')
+    || document.documentElement.getAttribute('data-ibt-lang')
+    || 'zh-TW';
+}
+
 function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
   setBlockClass(block);
   block.textContent = '';
+  const lang = pageTarget();
   // Our block holds ONLY the translation. The original stays as the page's own
   // text (rich: links/mentions/media intact); the 3-state view shows/hides that
   // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
   for (const p of pairs) {
     if (isPureUrl(p.o) || !hasTranslatableText(p.o)) continue;   // just a URL / @mention → no useful translation
+    if (isAlreadyTargetLang(p.o, lang) || sameMeaning(p.o, p.t, lang)) continue;
     const line = el('div', 'ibt-trans');
     // Same lang as the YouTube Chinese line, so Han fallback picks the same face.
     line.lang = document.documentElement.getAttribute('data-ibt-lang') === 'zh-CN' ? 'zh-CN' : 'zh-TW';
@@ -137,7 +145,7 @@ function adjacentBlock(anchor: Node): HTMLElement | null {
 export function renderTranslationAfter(
   anchor: Node, text: string, opts?: { sig?: string },
 ): HTMLElement | null {
-  if (!hasTranslatableText(text)) return null;
+  if (!hasTranslatableText(text) || isAlreadyTargetLang(text, pageTarget())) return null;
   // The "From @account" chip and the rest of the player overlay are not prose.
   if (insideXVideo(anchor)) return null;
   // Same anchor already has our block (a second scan, or a second video node).
@@ -176,6 +184,7 @@ export function renderTranslationAfter(
     try {
       const pairs = await translateBlock(text, retry);
       fillPairs(block, pairs);
+      if (!block.querySelector('.ibt-trans')) block.remove();
     } catch (err: any) {
       // Extension was reloaded/updated → quiet "refresh" hint, no retry spam.
       if (isContextGoneError(err)) { showReloadHint(block); return; }

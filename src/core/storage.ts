@@ -41,9 +41,12 @@ function instantChosen(stored: object): boolean {
 function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; dblClickTranslate?: unknown; transHighlightSet?: unknown; transColorSet?: unknown; selectionInstantSet?: unknown }): Settings {
   const isGemini = s.provider === 'gemini';
   // The LinkedIn expand toggle was removed. A stored false must not survive on the object.
-  const rest = { ...s };
+  const rest = { ...s } as typeof s & { slopButton?: unknown; slopApi?: unknown; slopApiKey?: unknown };
   delete rest.linkedinExpandTranslate;
   delete rest.dblClickTranslate;
+  delete rest.slopButton;
+  delete rest.slopApi;
+  delete rest.slopApiKey;
   return {
     ...rest,
     provider: isGemini ? 'gemini' : 'google',
@@ -64,16 +67,14 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; db
     transColor: colorChosen(s)
       ? (/^#[0-9a-fA-F]{6}$/.test(s.transColor || '') ? s.transColor : '')
       : migrateDefaultColor(s.transColor),
-    slopButton: s.slopButton === true,
-    slopApi: s.slopApi === true,
-    slopApiKey: typeof s.slopApiKey === 'string' ? s.slopApiKey : '',
   };
 }
 
 export async function loadSettings(): Promise<Settings> {
   const raw = await chrome.storage.sync.get(SETTINGS_KEY);
-  const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings> & { linkedinExpandTranslate?: unknown; transHighlightSet?: boolean; transColorSet?: boolean };
+  const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings> & { linkedinExpandTranslate?: unknown; transHighlightSet?: boolean; transColorSet?: boolean; slopButton?: unknown; slopApi?: unknown; slopApiKey?: unknown };
   const dropLinkedIn = Object.prototype.hasOwnProperty.call(stored, 'linkedinExpandTranslate');
+  const dropSlop = 'slopButton' in stored || 'slopApi' in stored || 'slopApiKey' in stored;
   const needColor = !colorChosen(stored) && isLegacyDefaultColor(stored.transColor);
   const needTint = !highlightChosen(stored);
   // deep-ish merge so new default keys appear after upgrades
@@ -89,9 +90,12 @@ export async function loadSettings(): Promise<Settings> {
   }
   const next = normalizeSettings(merged);
   // Drop a stored #6c7aff so the new default shows up, without rewriting other fields.
-  if (needColor || needTint || dropLinkedIn) {
-    const patched = { ...stored } as Partial<Settings> & { transHighlightSet?: boolean; transColorSet?: boolean; linkedinExpandTranslate?: unknown };
+  if (needColor || needTint || dropLinkedIn || dropSlop) {
+    const patched = { ...stored } as Partial<Settings> & { transHighlightSet?: boolean; transColorSet?: boolean; linkedinExpandTranslate?: unknown; slopButton?: unknown; slopApi?: unknown; slopApiKey?: unknown };
     delete patched.linkedinExpandTranslate;
+    delete patched.slopButton;
+    delete patched.slopApi;
+    delete patched.slopApiKey;
     if (needColor) {
       patched.transColor = '';
       patched.transColorSet = true;
