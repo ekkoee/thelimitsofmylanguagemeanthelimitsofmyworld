@@ -70,16 +70,17 @@
 :root[data-ibt-bar="dashed"] .ibt-block { border-left-style: dashed; }
 :root[data-ibt-bar="none"] .ibt-block { border-left: 0; padding-left: 0; }
 
-/* 淡底色 sits on the inner line so sentences stay separate and wraps still hug. */
+/* 淡底色 sits on the inner line. Vertical padding stays inside the line box so wraps do not overlap. */
 :root[data-ibt-highlight="on"] .ibt-trans {
-  line-height: 2.05;
+  line-height: 1.9;
 }
 :root[data-ibt-highlight="on"] .ibt-trans > span,
 :root[data-ibt-highlight="on"] span.ibt-trans,
 .ibt-highlight .ibt-trans > span,
 .ibt-highlight span.ibt-trans {
   display: inline;
-  padding: 0.43em 0.57em;
+  padding: 0.16em 0.57em;
+  line-height: 1;
   border-radius: 0.25em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
