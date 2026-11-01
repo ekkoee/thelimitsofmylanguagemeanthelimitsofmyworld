@@ -7,6 +7,7 @@ import { scanTwitter } from './twitter';
 import { redditAdapter } from './reddit';
 import { startYouTube, updateYouTubeSettings } from './youtube';
 import { startXVideo, updateXVideoSettings } from './x-video';
+import { startNetflix, updateNetflixSettings } from './netflix';
 import { isAltA } from './alt-a-key';
 import { startWordPopup, stopWordPopup } from './word-popup';
 import { Settings } from '../core/types';
@@ -25,6 +26,16 @@ import { Settings } from '../core/types';
 
   const site = detectSite();
   if (!site) return; // non-auto page: nothing below runs, only the word popup above
+
+  // Netflix video subs only. Alt+A stays with the page translator (alt-a-global),
+  // which skips the player. Browse pages are not an auto-site.
+  if (site === 'netflix') {
+    applyRoot(settings);
+    let live = settings;
+    startNetflix(() => live);
+    onSettingsChanged((s) => { live = s; applyRoot(s); updateNetflixSettings(s); });
+    return;
+  }
 
   applyRoot(settings);
 

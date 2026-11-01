@@ -132,7 +132,8 @@
   z-index: 60;
 }
 .ibt-yt-overlay > div,
-.ibt-x-overlay > div {
+.ibt-x-overlay > div,
+.ibt-nf-overlay > div {
   display: block;
   max-width: 100%;
   padding: 0;
@@ -146,11 +147,41 @@
    caption font-family into that variable and keeps the CJK tail above. */
 .ibt-yt-overlay,
 .ibt-x-overlay,
+.ibt-nf-overlay,
 .ibt-yt-line > span {
   font-family: var(--ibt-zh-font);
 }
 .ibt-yt-overlay .ibt-yt-zh,
-.ibt-x-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-sub-color, #fff); }
+.ibt-x-overlay .ibt-yt-zh,
+.ibt-nf-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-sub-color, #fff); }
+
+/* Netflix watch captions. Same box as YouTube. Position is set from the
+   player each cue (normal window and fullscreen). */
+.ibt-nf-overlay {
+  position: absolute;
+  left: 50%;
+  width: auto;
+  max-width: 90%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 10px;
+  border-radius: 4px;
+  background: rgba(8, 8, 8, 0.75);
+  text-align: center;
+  pointer-events: none;
+  z-index: 4;
+}
+.ibt-nf-overlay > div {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
 
 /* X video bilingual captions. Same single box as YouTube. Position is set from
    the <video> box each frame (inline, expanded, fullscreen). */
@@ -226,6 +257,7 @@ video.ibt-x-hide-cue::cue {
 :root[data-ibt-view="orig"] .ibt-block,
 :root[data-ibt-view="orig"] .ibt-yt-overlay,
 :root[data-ibt-view="orig"] .ibt-x-overlay,
+:root[data-ibt-view="orig"] .ibt-nf-overlay,
 :root[data-ibt-view="orig"] .ibt-yt-line { display: none !important; }
 
 /* zh: hide the original. `.ibt-orig-src` is the source element our block sits
@@ -250,6 +282,7 @@ video.ibt-x-hide-cue::cue {
 
 :root[data-ibt-enabled="false"] .ibt-yt-overlay,
 :root[data-ibt-enabled="false"] .ibt-x-overlay,
+:root[data-ibt-enabled="false"] .ibt-nf-overlay,
 :root[data-ibt-enabled="false"] .ibt-yt-line { display: none !important; }
 
 /* Alt+A universal-mode toast */

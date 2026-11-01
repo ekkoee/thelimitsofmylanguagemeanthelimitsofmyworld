@@ -21,8 +21,11 @@ async function init() {
   };
   const tab = await activeTab();
   const onX = !!tab?.url && /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com)\//i.test(tab.url);
+  // Unset view: X video and a Netflix watch page default to Chinese-only because
+  // the native captions already show the original. Browse pages stay bilingual.
+  const onNfWatch = !!tab?.url && /^https?:\/\/([^/]*\.)?netflix\.com\/watch\/\d+/i.test(tab.url);
   const chosen = s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '';
-  viewMode.value = chosen || (onX ? 'zh' : 'both');
+  viewMode.value = chosen || (onX || onNfWatch ? 'zh' : 'both');
   viewMode.addEventListener('change', async () => {
     const v = viewMode.value;
     if (v !== 'zh' && v !== 'both' && v !== 'orig') return;

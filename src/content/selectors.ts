@@ -123,6 +123,18 @@ export const SITE_RULES: SiteRule[] = [
       '.attributed-text-segment-list__content',
     ].join(','),
   },
+  {
+    // Netflix player chrome and the timed-text layer. Browse titles stay on the
+    // generic page path. The video overlay is drawn separately.
+    match: /(^|\.)netflix\.com$/,
+    exclude: [
+      '.watch-video', '[data-uia="watch-video"]', '.watch-video--player-view',
+      '.player-timedtext', '[data-uia="player-timedtext"]', '[data-uia="player"]',
+      '.NFPlayer', '.nf-player-container', '.AkiraPlayer',
+      '.PlayerControlsNeo__layout', '[data-uia="controls-standard"]',
+      '[data-uia="player-controls"]',
+    ].join(','),
+  },
 ];
 
 export function matchSiteRule(hostname: string): SiteRule | null {

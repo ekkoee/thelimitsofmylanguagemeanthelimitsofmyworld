@@ -2,6 +2,11 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.4.19] — 2026-11-01
+### 新增 Added
+- **Netflix 觀看頁字幕。** `www.netflix.com/watch/…` 讀畫面上的 `.player-timedtext`，把每一句翻成繁體中文，中文行在原生字幕上方，間距跟 X 一樣。預設只顯示我們的中文、原生英文字幕留著。選「原文＋中文」會改由我們畫英文並藏起 Netflix 那一行；選「只顯示原文」就關掉。字用 `--ibt-zh-font`，預設白色，自訂譯文色會跟著變。除錯：`localStorage.setItem('ibt-nf-debug','1')` 後看 `[IBT nf-cap]`。
+- 設定頁沒有各站開關（X／YouTube 也沒有），所以沒有另加 Netflix 開關。瀏覽頁仍走一般 Alt+A，播放器控制列和字幕層不翻。
+
 ## [1.4.18] — 2026-11-01
 ### 變更 Changed
 - **網頁譯文和左側標記的預設色改為 #f2d492。** 設定頁色票、預覽、沒有自訂顏色時的 CSS 變數都是這個顏色。影片字幕預設仍是白色。

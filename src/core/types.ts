@@ -1,7 +1,7 @@
 export type ProviderId = 'google' | 'microsoft' | 'openai' | 'gemini' | 'ollama';
 export type Layout = 'origTop' | 'transTop';
 export type SubtitleOrder = 'zhTop' | 'enTop';   // YouTube movie-mode line order
-export type SiteId = 'x' | 'reddit' | 'youtube';
+export type SiteId = 'x' | 'reddit' | 'youtube' | 'netflix';
 /** Page display. Empty string means the user has not chosen — each surface keeps its own default. */
 export type ViewModeSetting = '' | 'both' | 'zh' | 'orig';
 
@@ -39,7 +39,7 @@ export const LEGACY_DEFAULT_COLOR = '#6c7aff';
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
-  sites: { x: true, reddit: true, youtube: true },
+  sites: { x: true, reddit: true, youtube: true, netflix: true },
   showOriginal: false,
   viewMode: '',
   layout: 'transTop',
