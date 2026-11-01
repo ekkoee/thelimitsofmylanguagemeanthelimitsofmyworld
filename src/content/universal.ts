@@ -1,7 +1,7 @@
 import { Settings } from '../core/types';
 import { chineseShare, isAlreadyTargetLang, stripNoise } from '../core/segmentation';
 import { renderTranslationAfter } from './engine';
-import { collectUnits, isSeeMoreLessControl } from './blocks';
+import { collectUnits, isInlinePostChrome, isSeeMoreLessControl } from './blocks';
 import { matchSiteRule } from './selectors';
 import { linkedInCollapsed, linkedInHost } from './linkedin';
 
@@ -121,7 +121,15 @@ export class UniversalTranslator {
         // New element subtree(s) → scan exactly those, so a feed append costs the size
         // of the new post, not the whole (and growing) document.
         const realAdded = Array.from(r.addedNodes).filter((n) => n.nodeType === 1 && !isOwnNode(n)) as HTMLElement[];
-        if (realAdded.length) { realAdded.forEach((n) => this.dirty.add(n)); sawReal = true; continue; }
+        if (realAdded.length) {
+          realAdded.forEach((n) => {
+            this.dirty.add(n);
+            // Threads inserts「翻譯」into an existing post. Scan the post, not just the widget.
+            if (n.parentElement && isInlinePostChrome(n)) this.dirty.add(n.parentElement);
+          });
+          sawReal = true;
+          continue;
+        }
         // No new elements: a text node added/removed on a real element is an in-place
         // text change → re-evaluate that element. Pure removals / our churn → ignore.
         const textChanged = Array.from(r.addedNodes).some((n) => n.nodeType === 3)

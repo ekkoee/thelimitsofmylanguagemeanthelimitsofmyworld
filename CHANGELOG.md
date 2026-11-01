@@ -2,6 +2,10 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.4.23] — 2026-11-01
+### 修正 Fixed
+- **Threads 短回覆和帶 @ 的貼文也會翻。** 1.4.22 只處理「翻譯」把長文拆開的情況。短句（Cool tweet bruh、Me too.）仍被字數門檻丟掉；@ 連結若自己成塊，句子也會被拆掉。公開頁的 `#scrollview` 還標了 aria-hidden，整欄可見貼文被當成隱藏。現在 Threads 上只要還有至少兩個英文字就翻，純表情、純 @、純網址不翻。GitHub 的短介面文字門檻沒改。
+
 ## [1.4.22] — 2026-11-01
 ### 修正 Fixed
 - **Threads 貼文可以翻譯。** 繁中介面把「翻譯」畫成貼文區塊裡的 inline-block div，整段英文就不再是翻譯單位。現在這個按鈕和 `1/3` 計數留在原位、不進原文。threads.com 和 threads.net 只看貼文自己的文字，不因頁首的「串文」把英文貼文當成已是中文。沒有新增權限。

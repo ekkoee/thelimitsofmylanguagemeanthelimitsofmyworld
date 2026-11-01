@@ -82,7 +82,7 @@ const PROSE_HOME_SEL = [
 ].join(',');
 
 const HIDDEN_SEL = [
-  '[hidden]', '[aria-hidden="true"]',
+  '[hidden]',
   '.sr-only', '.visually-hidden', '.visuallyHidden',
   '.screen-reader-text', '.screenreader', '.screen-reader-only',
 ].join(',');
@@ -153,7 +153,8 @@ export function collectUnits(root: HTMLElement): Unit[] {
     }
     if (el.isContentEditable) return true;
     if (el.classList.contains('ibt-block') || el.dataset.ibtOut === '1') return true; // our own output
-    if (el.getAttribute('aria-hidden') === 'true') return true;
+    // Threads marks the visible feed aria-hidden. A painted box is still on screen.
+    if (el.getAttribute('aria-hidden') === 'true' && !paintedBox(el)) return true;
     // Video-player overlay (source chip, captions, controls). Never a post body.
     if (el.closest(X_PLAYER_SELECTOR)) return true;
     return false;
@@ -169,7 +170,7 @@ export function collectUnits(root: HTMLElement): Unit[] {
       // An inline chrome widget (Facebook「顯示較少」, Threads「翻譯」, a 1/3 counter)
       // is often a div, so it looks like a child block. The sentence in the
       // sibling span would then never become a unit. The widget is not a block.
-      if (isInlinePostChrome(ch)) continue;
+      if (isInlinePostChrome(ch) || isEmbeddedChip(ch, el)) continue;
       const dk = display(ch);
       if (dk === 'none') continue;
       if (dk === 'block') {
@@ -241,9 +242,20 @@ function classBlob(el: Element): string {
   return typeof (el as HTMLElement).className === 'string' ? (el as HTMLElement).className : '';
 }
 
+/** On screen and large enough to read. aria-hidden alone is not enough: Threads
+ *  puts aria-hidden on #scrollview while the feed is the thing you are looking at. */
+function paintedBox(el: HTMLElement): boolean {
+  const cs = getComputedStyle(el);
+  if (cs.visibility === 'hidden' || cs.visibility === 'collapse' || cs.display === 'none') return false;
+  if (Number(cs.opacity) === 0) return false;
+  const r = el.getBoundingClientRect();
+  return r.width >= 8 && r.height >= 8 && r.bottom > 0 && r.right > 0;
+}
+
 /** Screen-reader-only, clipped, or zero-size. Not "scrolled off screen". */
 export function isHiddenFromView(el: HTMLElement): boolean {
   if (el.closest(HIDDEN_SEL)) return true;
+  if (el.getAttribute('aria-hidden') === 'true' && !paintedBox(el)) return true;
   if (/\b(sr-only|visually-hidden|visuallyHidden|screen-reader|screenreader)\b/i.test(classBlob(el))) return true;
   const cs = getComputedStyle(el);
   if (cs.visibility === 'hidden' || cs.visibility === 'collapse' || cs.display === 'none') return true;
@@ -293,6 +305,7 @@ function visibleText(el: HTMLElement): string {
         const e = n as HTMLElement;
         if (HARD_SKIP.has(e.tagName)) return NodeFilter.FILTER_REJECT;
         if (isInlinePostChrome(e)) return NodeFilter.FILTER_REJECT;
+        if (e.getAttribute('aria-hidden') === 'true' && !paintedBox(e)) return NodeFilter.FILTER_REJECT;
         // A control inside the block is chrome. When the block itself is that
         // control (LinkedIn's commentary button), its own text is the post.
         const control = e.closest(CONTROL_SEL);
@@ -315,6 +328,52 @@ function stripTrailingWidgets(s: string): string {
   let t = s.replace(/\s+/g, ' ').trim();
   for (let i = 0; i < 4 && WIDGET_TAIL.test(t); i++) t = t.replace(WIDGET_TAIL, '').trim();
   return t;
+}
+
+/** A mention or other short link inside a longer sentence. Not a title link that is the whole line. */
+function isEmbeddedChip(el: Element, parent: Element): boolean {
+  const role = el.getAttribute('role') || '';
+  if (el.tagName !== 'A' && role !== 'link' && el.tagName !== 'SPAN') return false;
+  const child = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  const all = (parent.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!child || child.length > 40) return false;
+  if (all.length < child.length + 8) return false;
+  return /^[@#]/.test(child) || el.tagName === 'A' || role === 'link';
+}
+
+export function threadsHostName(host: string): boolean {
+  return /(^|\.)threads\.(com|net)$/i.test(host);
+}
+
+/** Real words left after mentions, URLs, emoji, and numbers. Not a bare chip. */
+export function isThreadsReplyText(text: string): boolean {
+  let t = text.replace(/\s+/g, ' ').trim();
+  t = t.replace(/https?:\/\/\S+/gi, ' ').replace(/[@#]\w+/g, ' ');
+  t = t.replace(/\p{Extended_Pictographic}/gu, ' ').replace(/[\uFE0F\u200D]/g, ' ');
+  t = t.replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim();
+  return /[A-Za-z]{2,}/.test(t);
+}
+
+function pageHost(): string {
+  // file:// fixtures set this so a local mock can exercise the Threads rules.
+  try {
+    if (location.protocol === 'file:') {
+      const hooked = document.documentElement?.getAttribute('data-ibt-host');
+      if (hooked) return hooked;
+    }
+  } catch { /* no document yet */ }
+  return location.hostname;
+}
+
+function threadsReply(el: HTMLElement, text: string): boolean {
+  if (!threadsHostName(pageHost()) || !isThreadsReplyText(text)) return false;
+  if (el.closest('header, nav, [role="navigation"], [role="banner"]')) return false;
+  const link = el.closest('a, [role="link"]');
+  if (link) {
+    const lt = (link.textContent || '').replace(/\s+/g, ' ').trim();
+    if (lt === text.trim()) return false;
+  }
+  return true;
 }
 
 function isContentHeading(el: HTMLElement, text: string): boolean {
@@ -345,7 +404,8 @@ function passesGate(el: HTMLElement, text: string): boolean {
   const allowed = siteAllows(el);
   const heading = isContentHeading(el, t);
   const paragraph = isContentParagraph(el);
-  if (isShortLabel(t) && !heading && !paragraph && !allowed) {
+  const social = threadsReply(el, t);
+  if (isShortLabel(t) && !heading && !paragraph && !allowed && !social) {
     // A PR/issue title is often only a few words and is still the row's content.
     const titleLink = !!el.closest('a') && !el.closest(CHROME_SEL) && t.length >= 12 && wordCount(t) >= 3;
     if (!titleLink) return false;
@@ -353,17 +413,17 @@ function passesGate(el: HTMLElement, text: string): boolean {
   if (/^H[1-6]$/.test(el.tagName) && !heading && wordCount(t) < 8 && t.length < 60) return false;
   const inChrome = !!el.closest(CHROME_SEL) && !el.closest(PROSE_HOME_SEL) && !allowed;
   if (inChrome && t.length < 80) return false;
-  if (el.closest('a,[role="link"]') && !el.closest(PROSE_HOME_SEL) && !allowed) {
+  if (el.closest('a,[role="link"]') && !el.closest(PROSE_HOME_SEL) && !allowed && !social) {
     const title = t.length >= 12 && wordCount(t) >= 3 && !el.closest(CHROME_SEL);
     if (!title && (isShortLabel(t) || t.length < 20)) return false;
   }
   // Toolbar leftovers ("Auto Optimized for: Balance") are several short labels
   // glued together. Outside a content block they are still chrome.
   const title = !!el.closest('a') && !el.closest(CHROME_SEL) && t.length >= 12 && wordCount(t) >= 3;
-  if (!el.closest(PROSE_HOME_SEL) && !allowed && !heading && !paragraph && !title) {
+  if (!el.closest(PROSE_HOME_SEL) && !allowed && !heading && !paragraph && !title && !social) {
     if (wordCount(t) < 8 && t.length < 80 && !/[.!?。！？]/.test(t)) return false;
   }
   const density = linkDensity(el);
-  if (density > 0.85 && t.length < 80 && !allowed) return false;
+  if (density > 0.85 && t.length < 80 && !allowed && !social) return false;
   return true;
 }

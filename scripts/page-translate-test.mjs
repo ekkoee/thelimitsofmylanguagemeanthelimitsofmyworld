@@ -26,7 +26,7 @@ execSync(
   'npx esbuild src/core/storage.ts --bundle --platform=node --format=esm --outfile=/tmp/storage.test.mjs --log-level=error',
   { cwd: root, stdio: 'inherit' },
 );
-const { isShortLabel, isShortcutHint, isSeeMoreLessControl } = await import('/tmp/blocks.test.mjs');
+const { isShortLabel, isShortcutHint, isSeeMoreLessControl, isThreadsReplyText, threadsHostName } = await import('/tmp/blocks.test.mjs');
 const { isAltA } = await import('/tmp/alt-a-key.test.mjs');
 const { controlFromElement, linkedInCollapsed, commentaryText } = await import('/tmp/linkedin.test.mjs');
 const { chineseSkipReason } = await import('/tmp/universal.test.mjs');
@@ -70,6 +70,9 @@ if (parseSee) {
   check('查看更多 is a see-more control', isSeeMoreLessControl(more));
   check('See less is a see-less control', isSeeMoreLessControl(see));
   check('a paragraph is not a see-less control', !isSeeMoreLessControl(para));
+check('threads short reply counts', isThreadsReplyText('Cool tweet bruh') && isThreadsReplyText('Me too.') && isThreadsReplyText('Nice 🔥🔥'));
+check('pure mention emoji url do not count', !isThreadsReplyText('@alexandr') && !isThreadsReplyText('🔥🔥') && !isThreadsReplyText('https://x.com/a'));
+check('threads host names', threadsHostName('www.threads.com') && threadsHostName('threads.net') && !threadsHostName('github.com'));
 } else {
   console.log('SKIP see-more control fixtures');
 }
