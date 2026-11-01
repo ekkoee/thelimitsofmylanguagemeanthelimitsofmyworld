@@ -1,4 +1,4 @@
-import { DEFAULT_BAR_COLOR, DEFAULT_TRANS_COLOR } from '../core/types';
+import { DEFAULT_TRANS_COLOR } from '../core/types';
 
 export const NS = 'ibt'; // injected-node class/attribute namespace
 
@@ -111,15 +111,18 @@ export function applyRootState(s: {
   r.setAttribute('data-ibt-lang', s.targetLangCode === 'zh-CN' ? 'zh-CN' : 'zh-TW');
   // translated-text visual style
   r.setAttribute('data-ibt-style', s.transStyle || 'plain');
-  // custom translated-text color (unset → CSS fallback to default)
-  // Page text (tweets, GitHub, LinkedIn) uses the settings blue unless the user saved a color.
-  r.style.setProperty('--ibt-trans-color', s.transColor || DEFAULT_TRANS_COLOR);
-  // Video subtitles (X and YouTube) stay white until that same saved color is set.
-  if (s.transColor) r.style.setProperty('--ibt-sub-color', s.transColor);
-  else r.style.removeProperty('--ibt-sub-color');
-  // left marker bar: style + custom color (user-configurable / hideable)
-  r.setAttribute('data-ibt-bar', s.barStyle || 'bar');
-  r.style.setProperty('--ibt-bar-color', s.barColor || DEFAULT_BAR_COLOR);
+  // Empty means the translation inherits the page text. A saved hex is deliberate.
+  if (s.transColor && s.transColor.toLowerCase() !== DEFAULT_TRANS_COLOR) {
+    r.setAttribute('data-ibt-custom-color', 'on');
+    r.style.setProperty('--ibt-trans-color', s.transColor);
+    r.style.setProperty('--ibt-sub-color', s.transColor);
+  } else {
+    r.removeAttribute('data-ibt-custom-color');
+    r.style.removeProperty('--ibt-trans-color');
+    r.style.removeProperty('--ibt-sub-color');
+  }
+  r.setAttribute('data-ibt-bar', 'none');
+  r.style.removeProperty('--ibt-bar-color');
   r.setAttribute('data-ibt-highlight', s.transHighlight ? 'on' : 'off');
   if (s.highlightColor) r.style.setProperty('--ibt-highlight', s.highlightColor);
   else r.style.removeProperty('--ibt-highlight');

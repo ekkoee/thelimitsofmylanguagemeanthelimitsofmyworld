@@ -2,9 +2,11 @@ import { DEFAULT_SETTINGS, LEGACY_DEFAULT_COLOR, Settings } from './types';
 
 const SETTINGS_KEY = 'ibt_settings';
 
-/** True only for the pre-1.4.18 default blue. Empty and any other color are left alone. */
+/** Retired defaults (old blue, then gold). Empty and any other color stay as the user set them. */
+const RETIRED_TEXT_COLORS = new Set([LEGACY_DEFAULT_COLOR, '#f2d492']);
+
 export function isLegacyDefaultColor(value: string | undefined): boolean {
-  return (value || '').trim().toLowerCase() === LEGACY_DEFAULT_COLOR;
+  return RETIRED_TEXT_COLORS.has((value || '').trim().toLowerCase());
 }
 
 /** '' stays ''. The old default blue becomes '' so the new default is used and video subtitles stay white. */
@@ -20,12 +22,11 @@ export function migrateDefaultColor(value: string | undefined): string {
  * from the settings UI. Force their values on read so stale stored settings can never
  * leave the extension in a state the user can no longer see or change.
  */
-function barStyleOf(value: string | undefined): string {
-  if (value === 'bar' || value === 'thick' || value === 'dashed' || value === 'none') return value;
-  return 'bar';
+function highlightChosen(stored: object): boolean {
+  return Object.prototype.hasOwnProperty.call(stored, 'transHighlightSet');
 }
 
-function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; dblClickTranslate?: unknown }): Settings {
+function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; dblClickTranslate?: unknown; transHighlightSet?: unknown }): Settings {
   const isGemini = s.provider === 'gemini';
   // The LinkedIn expand toggle was removed. A stored false must not survive on the object.
   const rest = { ...s };
@@ -44,32 +45,44 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; db
     sites: { x: true, reddit: true, youtube: true, netflix: true },
     // '' is "never chosen". Do not coerce it to 'both' — X video treats unset as Chinese-only.
     viewMode: s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '',
-    barStyle: barStyleOf(s.barStyle),
-    transHighlight: s.transHighlight === true,
+    barStyle: 'none',
+    barColor: '',
+    transHighlight: highlightChosen(s) ? s.transHighlight === true : true,
     highlightColor: /^#[0-9a-fA-F]{6}$/.test(s.highlightColor || '') ? s.highlightColor : '',
     transColor: migrateDefaultColor(s.transColor),
-    barColor: migrateDefaultColor(s.barColor),
   };
 }
 
 export async function loadSettings(): Promise<Settings> {
   const raw = await chrome.storage.sync.get(SETTINGS_KEY);
-  const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings> & { linkedinExpandTranslate?: unknown };
+  const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings> & { linkedinExpandTranslate?: unknown; transHighlightSet?: boolean };
   const dropLinkedIn = Object.prototype.hasOwnProperty.call(stored, 'linkedinExpandTranslate');
   const hadLegacy = isLegacyDefaultColor(stored.transColor) || isLegacyDefaultColor(stored.barColor);
+  const hadBar = stored.barStyle !== 'none' || !!(stored.barColor && stored.barColor !== '');
+  const needTint = !highlightChosen(stored);
   // deep-ish merge so new default keys appear after upgrades
-  const next = normalizeSettings({
+  const merged = {
     ...DEFAULT_SETTINGS,
     ...stored,
     sites: { ...DEFAULT_SETTINGS.sites, ...(stored.sites ?? {}) },
     apiKeys: { ...DEFAULT_SETTINGS.apiKeys, ...(stored.apiKeys ?? {}) },
-  });
+  } as Settings & { transHighlightSet?: boolean; linkedinExpandTranslate?: unknown };
+  if (needTint) {
+    merged.transHighlight = true;
+    merged.transHighlightSet = true;
+  }
+  const next = normalizeSettings(merged);
   // Drop a stored #6c7aff so the new default shows up, without rewriting other fields.
-  if (hadLegacy || dropLinkedIn) {
-    const patched = { ...stored };
+  if (hadLegacy || hadBar || needTint || dropLinkedIn) {
+    const patched = { ...stored } as Partial<Settings> & { transHighlightSet?: boolean; linkedinExpandTranslate?: unknown };
     delete patched.linkedinExpandTranslate;
     if (isLegacyDefaultColor(stored.transColor)) patched.transColor = '';
-    if (isLegacyDefaultColor(stored.barColor)) patched.barColor = '';
+    patched.barStyle = 'none';
+    patched.barColor = '';
+    if (needTint) {
+      patched.transHighlight = true;
+      patched.transHighlightSet = true;
+    }
     await chrome.storage.sync.set({ [SETTINGS_KEY]: patched });
   }
   return next;

@@ -3,8 +3,6 @@
 
 :root {
   --ibt-font-scale: 1;
-  /* Settings-page default. A saved color overwrites this from chrome.storage. */
-  --ibt-trans-color: #f2d492;
   /* One family for every Chinese translation: YouTube captions, X video subs,
      tweets, GitHub, LinkedIn, and other page text. The first eight names are
      YouTube's .ytp-caption-segment stack (weight 400). "YouTube Noto" and
@@ -19,8 +17,8 @@
 
 .ibt-block {
   margin: 4px 0 8px;
-  padding: 1px 0 1px 10px;
-  border-left: 3px solid var(--ibt-bar-color, #f2d492);
+  padding: 0;
+  border: 0;
   font-size: calc(0.98rem * var(--ibt-font-scale));
   line-height: 1.5;
   color: inherit;
@@ -61,21 +59,7 @@
   line-height: 1.5;
 }
 
-/* Left marker bar — user-configurable in options (style + color + hide). */
-:root[data-ibt-bar="thick"] .ibt-block { border-left-width: 6px; }
-:root[data-ibt-bar="dashed"] .ibt-block { border-left-style: dashed; }
-:root[data-ibt-bar="none"] .ibt-block { border-left: 0; padding-left: 0; }
-
-/* Optional 淡底色. Text color stays as it is. Each line's tint ends at the last glyph. */
-:root[data-ibt-highlight="on"] .ibt-pair { display: block; }
-:root[data-ibt-show-original="true"][data-ibt-highlight="on"] .ibt-pair {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-:root[data-ibt-show-original="true"][data-ibt-layout="transTop"][data-ibt-highlight="on"] .ibt-pair {
-  flex-direction: column-reverse;
-}
+/* 淡底色. Text color stays inherited. Each line's tint ends at the last glyph. */
 :root[data-ibt-highlight="on"] .ibt-trans,
 .ibt-highlight .ibt-trans {
   display: inline;
@@ -86,7 +70,7 @@
   border-radius: 0.2em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  background: color-mix(in srgb, var(--ibt-highlight, #ffecaa) 35%, transparent);
+  background: rgba(250, 235, 180, 0.45);
 }
 :root[data-ibt-highlight="on"] .ibt-trans[data-ibt-on="dark"],
 .ibt-highlight .ibt-trans[data-ibt-on="dark"] {
@@ -101,7 +85,8 @@
 .ibt-orig { display: none; opacity: 0.55; font-size: 0.9em; }
 :root[data-ibt-show-original="true"] .ibt-orig { display: block; }
 
-.ibt-trans { color: var(--ibt-trans-color); }
+.ibt-trans { color: inherit; }
+:root[data-ibt-custom-color="on"] .ibt-trans { color: var(--ibt-trans-color); }
 .ibt-trans.ibt-flow { white-space: pre-line; }
 .ibt-trans .ibt-chip {
   color: inherit;
@@ -122,8 +107,21 @@
 .ibt-block.ibt-heading .ibt-trans,
 .ibt-block[slot="title"] .ibt-trans { font-weight: 600; }
 
-/* When showing original too, allow flipping order (translation above original) */
+/* When showing original too, allow flipping order (translation above original).
+   A flex item blockifies an inline chip and stretches it, so the tint stays on
+   a block pair and the chip can hug each line. */
 :root[data-ibt-layout="transTop"] .ibt-pair { flex-direction: column-reverse; }
+:root[data-ibt-highlight="on"] .ibt-pair,
+:root[data-ibt-highlight="on"][data-ibt-layout="transTop"] .ibt-pair { display: block; }
+:root[data-ibt-show-original="true"][data-ibt-highlight="on"] .ibt-pair,
+:root[data-ibt-show-original="true"][data-ibt-highlight="on"][data-ibt-layout="transTop"] .ibt-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+:root[data-ibt-show-original="true"][data-ibt-highlight="on"][data-ibt-layout="transTop"] .ibt-pair {
+  flex-direction: column-reverse;
+}
 
 /* global toggle — hide every translation when the extension is disabled.
    (display:none !important is needed to override .ibt-block / .ibt-uni's display.) */
@@ -149,7 +147,7 @@
   padding: 26px 10px 10px;
   overflow: auto;
   background: rgba(8, 8, 8, 0.96);
-  color: var(--ibt-trans-color, #f2d492);
+  color: #f5f5f5;
   font-family: var(--ibt-zh-font);
   font-weight: 400;
 }
@@ -179,7 +177,7 @@
   padding: 4px 8px;
   border-radius: 4px;
   background: rgba(8, 8, 8, 0.82);
-  color: var(--ibt-trans-color, #f2d492);
+  color: #f5f5f5;
   font-family: var(--ibt-zh-font);
   font-size: 13px;
 }
@@ -220,9 +218,9 @@
   border: 0;
   border-radius: 16px;
   background: #1c1b19;
-  color: var(--ibt-trans-color, #f2d492);
+  color: #fff;
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(28, 27, 25, 0.22), 0 0 0 1px rgba(242, 212, 146, 0.45);
+  box-shadow: 0 8px 20px rgba(28, 27, 25, 0.22), 0 0 0 1px rgba(108, 122, 255, 0.55);
   animation: ibt-sel-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .ibt-sel-btn:hover { transform: scale(1.05); }
@@ -292,9 +290,10 @@
 .ibt-sel-dark .ibt-sel-copy:hover,
 .ibt-sel-dark .ibt-sel-speak:hover { background: rgba(246, 243, 236, 0.08); }
 .ibt-sel-pin[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--ibt-trans-color, #f2d492) 55%, transparent);
-  color: #3f3218;
+  background: rgba(108, 122, 255, 0.28);
+  color: #2c3480;
 }
+.ibt-sel-dark .ibt-sel-pin[aria-pressed="true"] { color: #e4e7ff; }
 .ibt-sel-orig {
   color: #6f6a62;
   font-family: Georgia, "Times New Roman", serif;
@@ -306,16 +305,16 @@
   margin-top: 8px;
   padding: 8px 10px;
   border-radius: 10px;
-  border-left: 3px solid var(--ibt-trans-color, #f2d492);
-  background: color-mix(in srgb, var(--ibt-trans-color, #f2d492) 28%, transparent);
-  color: #3f3218;
+  border: 0;
+  background: rgba(250, 235, 180, 0.45);
+  color: #241f18;
   font-size: 15px;
   font-weight: 400;
   line-height: 1.55;
 }
 .ibt-sel-dark .ibt-sel-body {
-  background: color-mix(in srgb, var(--ibt-trans-color, #f2d492) 16%, transparent);
-  color: var(--ibt-trans-color, #f2d492);
+  background: rgba(255, 255, 255, 0.12);
+  color: #f6f3ec;
 }
 .ibt-sel-dict { margin-top: 6px; color: #5c564c; font-size: 12px; line-height: 1.45; }
 .ibt-sel-dark .ibt-sel-dict { color: #ddd6c8; }

@@ -21,11 +21,11 @@
     </aside>
 
     <main>
-      <article class="reader" id="reader" data-tone="light">
+      <article class="reader" id="reader">
         <label class="reader-dark"><input type="checkbox" id="readerDark" /> 暗頁</label>
         <p class="reader-en">The quiet page keeps its own color. The translation follows in the same measure.</p>
         <div class="ibt-block">
-          <div class="ibt-trans" id="readerZh" data-ibt-on="light">安靜的頁面保留自己的顏色。譯文跟在後面，字級不變。</div>
+          <div class="ibt-trans" id="readerZh">安靜的頁面保留自己的顏色。譯文跟在後面，字級不變。</div>
         </div>
       </article>
 
@@ -80,28 +80,9 @@
       <section data-panel="look">
         <p class="eyebrow">外觀</p>
         <h2>譯文長什麼樣子</h2>
-        <div class="split">
-          <label class="field">
-            <span>譯文顏色</span>
-            <input type="color" id="transColor" value="#f2d492" aria-label="譯文顏色" />
-          </label>
-          <label class="field">
-            <span>左側標記</span>
-            <select id="barStyle">
-              <option value="bar">線條</option>
-              <option value="thick">粗線條</option>
-              <option value="dashed">虛線</option>
-              <option value="none">無</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>標記顏色</span>
-            <input type="color" id="barColor" value="#f2d492" aria-label="標記顏色" />
-          </label>
-        </div>
         <label class="toggle">
           <span>淡底色</span>
-          <span class="switch"><input type="checkbox" id="transHighlight" /><span class="slider"></span></span>
+          <span class="switch"><input type="checkbox" id="transHighlight" checked /><span class="slider"></span></span>
         </label>
         <div class="tint-live">
           <div class="tone-light">

@@ -65,6 +65,13 @@ section + section { margin-top: 36px; }
   background: #fff;
   color: #243044;
 }
+@media (prefers-color-scheme: dark) {
+  .reader:not([data-tone="light"]) {
+    background: #171a24;
+    color: #e7e9f2;
+    border-color: #2c3142;
+  }
+}
 .reader[data-tone="dark"] {
   background: #171a24;
   color: #e7e9f2;
@@ -92,7 +99,7 @@ section + section { margin-top: 36px; }
   margin: 8px 0 10px;
   font: 16px/1.55 Georgia, "Iowan Old Style", serif;
 }
-.reader .ibt-block { max-width: 34em; margin: 0; }
+.reader .ibt-block { max-width: 34em; margin: 0; padding: 0; border: 0; line-height: 1.35; }
 
 .eyebrow {
   margin: 0;
@@ -105,7 +112,23 @@ section + section { margin-top: 36px; }
   background-clip: text;
   color: transparent;
 }
-h2 { margin: 2px 0 16px; font-size: 20px; font-weight: 650; letter-spacing: 0; }
+h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 16px;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+h2::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(135deg, #6e89f5, #7983f4);
+  flex: none;
+}
 .field { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; }
 .field > span { font-size: 13px; color: var(--muted); }
 .key-label { display: flex; justify-content: space-between; gap: 12px; max-width: 460px; }

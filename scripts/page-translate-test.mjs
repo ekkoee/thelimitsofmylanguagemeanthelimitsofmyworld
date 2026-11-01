@@ -99,6 +99,7 @@ check('jhenghei comes after the latin stack', tailed.indexOf('Microsoft JhengHei
 check('noto tc does not jump ahead of jhenghei', tailed.indexOf('Noto Sans TC') > tailed.indexOf('Microsoft JhengHei'));
 check('cjk tail is not doubled', withCjkTail(tailed) === tailed);
 check('old blue default migrates to unset', migrateDefaultColor('#6c7aff') === '' && migrateDefaultColor('#6C7AFF') === '');
+check('old gold default migrates to unset', migrateDefaultColor('#f2d492') === '' && migrateDefaultColor('#F2D492') === '');
 check('empty color stays unset', migrateDefaultColor('') === '' && migrateDefaultColor(undefined) === '');
 check('custom color is kept', migrateDefaultColor('#112233') === '#112233');
 

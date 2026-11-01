@@ -13,11 +13,13 @@ export interface Settings {
   layout: Layout;
   subtitleOrder: SubtitleOrder; // YouTube subtitle order (both languages shown); default Chinese on top
   transStyle: string;           // visual style of the translated text (underline / box / blur / …)
-  transColor: string;           // custom color for translated text ('' = use default)
-  barStyle: string;             // left marker bar: 'bar' | 'thick' | 'dashed' | 'none'
-  barColor: string;             // custom color for the left marker bar ('' = use default)
-  /** Optional translucent chip behind the translated words. Default off. Does not change the text color. */
+  transColor: string;           // '' = inherit the page text. A saved hex is a deliberate custom color.
+  barStyle: string;             // always 'none'; the left bar was removed
+  barColor: string;             // unused; kept so old stored settings still parse
+  /** Translucent chip behind the translated words. On unless the user turned it off. */
   transHighlight: boolean;
+  /** Set once the user toggles 淡底色, so the 1.4.36 default-on migration does not undo them. */
+  transHighlightSet?: boolean;
   /** Light-page chip color. '' uses the pale cream. Dark pages stay a white wash. */
   highlightColor: string;
   fontScale: number;            // 0.8 – 1.6
@@ -38,9 +40,9 @@ export interface Settings {
   cacheEnabled: boolean;
 }
 
-/** Page-translation text and the default left marker. Video subtitles stay white until a custom color is saved. */
+/** Retired page-text default. Stored copies migrate back to inherit. Video subtitles stay white until a custom color is saved. */
 export const DEFAULT_TRANS_COLOR = '#f2d492';
-/** Left marker is its own setting. Its default matches the page-text default. */
+/** Retired with the left bar. */
 export const DEFAULT_BAR_COLOR = '#f2d492';
 /** Stored before 1.4.18 when the picker saved the old blue default. Treated as "never customized". */
 export const LEGACY_DEFAULT_COLOR = '#6c7aff';
@@ -54,9 +56,9 @@ export const DEFAULT_SETTINGS: Settings = {
   subtitleOrder: 'zhTop',
   transStyle: 'plain',
   transColor: '',
-  barStyle: 'bar',
+  barStyle: 'none',
   barColor: '',
-  transHighlight: false,
+  transHighlight: true,
   highlightColor: '',
   fontScale: 1,
   sourceLang: 'auto',          // ← detect any source language (Korean/Japanese/…)

@@ -6,36 +6,31 @@ const root = new URL('..', import.meta.url).pathname;
 mkdirSync('/opt/cursor/artifacts', { recursive: true });
 mkdirSync('/tmp/ibt-ui134', { recursive: true });
 const css = readFileSync(`${root}src/styles/bilingual.css`, 'utf8');
-const demo = `<!doctype html><meta charset="utf-8"><style>${css}
-body { margin: 0; background: #e5e7eb; font: 14px/1.5 "Segoe UI", sans-serif; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
-.panel { padding: 16px 18px 20px; }
-.light { background: #fff; color: #1f2937; }
-.dark { background: #141414; color: #f3f4f6; }
-h2 { margin: 0 0 12px; font-size: 12px; font-weight: 650; color: #6c7aff; }
-.src { margin: 0 0 6px; font: 15px/1.5 Georgia, serif; }
-.narrow { max-width: 220px; }
-.ibt-block { margin: 0; }
-</style>
-<div class="grid">
-  <section class="panel light"><h2>亮色 · 預設</h2>
-    <p class="src">The quick brown fox jumps over the lazy dog.</p>
-    <div class="ibt-block narrow"><div class="ibt-trans" data-ibt-on="light">敏捷的棕狐跨越懶狗，然後在河邊停下來。</div></div>
-  </section>
-  <section class="panel light ibt-highlight"><h2>亮色 · 半透明底色</h2>
-    <p class="src">The quick brown fox jumps over the lazy dog.</p>
-    <div class="ibt-block narrow"><div class="ibt-trans" data-ibt-on="light">敏捷的棕狐跨越懶狗，然後在河邊停下來。</div></div>
-  </section>
-  <section class="panel dark"><h2>深色 · 預設</h2>
-    <p class="src">The quick brown fox jumps over the lazy dog.</p>
-    <div class="ibt-block narrow"><div class="ibt-trans" data-ibt-on="dark">敏捷的棕狐跨越懶狗，然後在河邊停下來。</div></div>
-  </section>
-  <section class="panel dark ibt-highlight"><h2>深色 · 半透明底色</h2>
-    <p class="src">The quick brown fox jumps over the lazy dog.</p>
-    <div class="ibt-block narrow"><div class="ibt-trans" data-ibt-on="dark">敏捷的棕狐跨越懶狗，然後在河邊停下來。</div></div>
-  </section>
-</div>`;
-writeFileSync('/tmp/ibt-ui134/highlight.html', demo);
+function article(tone, highlight) {
+  const dark = tone === 'dark';
+  const on = dark ? 'dark' : 'light';
+  const bg = dark ? '#161616' : '#f7f7f5';
+  const ink = dark ? '#e6e6e6' : '#1c1c1c';
+  const flag = highlight ? 'data-ibt-highlight="on"' : 'data-ibt-highlight="off"';
+  return `<!doctype html><html ${flag}><meta charset="utf-8"><style>${css}
+html, body { margin: 0; background: ${bg}; color: ${ink}; }
+article { max-width: 640px; margin: 0 auto; padding: 48px 28px 64px; }
+h1 { margin: 0 0 18px; font: 600 28px/1.3 Georgia, serif; }
+.src { margin: 18px 0 0; font: 17px/1.6 Georgia, serif; }
+.ibt-block { margin: 2px 0 0; }
+</style><body>
+<article>
+  <h1>${dark ? 'Night shift at the depot' : 'Morning light on the workbench'}</h1>
+  <p class="src">The quiet page keeps its own color. A translation sits under each paragraph and uses that same ink, whether or not a tint is painted behind the words.</p>
+  <div class="ibt-block"><div class="ibt-trans" data-ibt-on="${on}">安靜的頁面保留自己的字色。每一段下面的譯文用同樣的墨水，底色開或關都不改字的顏色。</div></div>
+  <p class="src">On a long line the tint has to stop at the last glyph. It must not stretch into a bar across the column, and the next wrapped line starts its own chip.</p>
+  <div class="ibt-block"><div class="ibt-trans" data-ibt-on="${on}">長句的底色必須停在最後一個字。它不該拉成橫跨整欄的色條，換行後的下一行要自己一塊貼著文字的底。</div></div>
+</article></body></html>`;
+}
+writeFileSync('/tmp/ibt-ui134/page-light-on.html', article('light', true));
+writeFileSync('/tmp/ibt-ui134/page-light-off.html', article('light', false));
+writeFileSync('/tmp/ibt-ui134/page-dark-on.html', article('dark', true));
+writeFileSync('/tmp/ibt-ui134/page-dark-off.html', article('dark', false));
 
 const port = 9377;
 const proc = spawn('/opt/google/chrome/chrome', [
@@ -61,7 +56,7 @@ function rpc(method, params = {}) {
 await rpc('Page.enable');
 await rpc('Runtime.enable');
 await rpc('Page.addScriptToEvaluateOnNewDocument', { source: `window.chrome = {
-  runtime: { getManifest: () => ({ version: '1.4.35' }), openOptionsPage() {}, sendMessage: async () => ({}) },
+  runtime: { getManifest: () => ({ version: '1.4.36' }), openOptionsPage() {}, sendMessage: async () => ({}) },
   storage: { sync: { get: async () => ({}), set: async () => {} }, onChanged: { addListener() {} } },
   tabs: { query: async () => [{ id: 1, url: 'https://example.com/story' }] },
   scripting: { executeScript: async () => {}, insertCSS: async () => {} },
@@ -70,14 +65,66 @@ async function shot(file, w, h) {
   await rpc('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 2, mobile: false });
   const res = await rpc('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
   writeFileSync(file, Buffer.from(res.data, 'base64'));
-  console.log('wrote', file);
+  console.log('wrote', file, w, h);
+}
+async function shotFit(file, w) {
+  await rpc('Emulation.setDeviceMetricsOverride', { width: w, height: 120, deviceScaleFactor: 2, mobile: false });
+  const sized = await rpc('Runtime.evaluate', {
+    expression: 'Math.ceil(Math.max(document.body.scrollHeight, document.body.offsetHeight))',
+    returnByValue: true,
+  });
+  const h = sized?.result?.value || 120;
+  await shot(file, w, h);
+  return h;
 }
 async function scheme(value) {
   await rpc('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value }] });
 }
-await rpc('Page.navigate', { url: pathToFileURL('/tmp/ibt-ui134/highlight.html').href });
-await new Promise((r) => setTimeout(r, 300));
-await shot('/opt/cursor/artifacts/highlight-layers.png', 980, 560);
+const pages = [
+  ['page-light-on.html', '/opt/cursor/artifacts/page-light-tint-on.png', true],
+  ['page-light-off.html', '/opt/cursor/artifacts/page-light-tint-off.png', false],
+  ['page-dark-on.html', '/opt/cursor/artifacts/page-dark-tint-on.png', true],
+  ['page-dark-off.html', '/opt/cursor/artifacts/page-dark-tint-off.png', false],
+];
+for (const [name, file, tint] of pages) {
+  await rpc('Page.navigate', { url: pathToFileURL(`/tmp/ibt-ui134/${name}`).href });
+  await new Promise((r) => setTimeout(r, 250));
+  const measured = await rpc('Runtime.evaluate', { expression: `(() => {
+    const zh = document.querySelectorAll('.ibt-trans');
+    const src = document.querySelector('.src');
+    const srcColor = getComputedStyle(src).color;
+    return [...zh].map((el) => {
+      const rects = [...el.getClientRects()];
+      const block = el.parentElement.getBoundingClientRect().width;
+      const bg = getComputedStyle(el).backgroundColor;
+      return {
+        color: getComputedStyle(el).color,
+        srcColor,
+        bg,
+        lines: rects.length,
+        last: Math.round(rects.at(-1).width),
+        block: Math.round(block),
+        border: getComputedStyle(el.parentElement).borderLeftWidth,
+      };
+    });
+  })()`, returnByValue: true });
+  const rows = measured?.result?.value || [];
+  console.log(name, JSON.stringify(rows));
+  const bad = rows.length < 2 || rows.some((row) => {
+    if (row.color !== row.srcColor) return true;
+    if (row.border !== '0px') return true;
+    if (tint && (row.lines < 2 || row.last > row.block * 0.92)) return true;
+    if (tint && name.includes('light') && !row.bg.includes('250, 235, 180')) return true;
+    if (tint && name.includes('dark') && !row.bg.includes('255, 255, 255')) return true;
+    if (!tint && row.bg !== 'rgba(0, 0, 0, 0)') return true;
+    return false;
+  });
+  if (bad) {
+    console.error('page tint check failed', name);
+    process.exitCode = 1;
+  }
+  await shotFit(file, 760);
+}
 
 const dist = pathToFileURL(`${root}dist/`).href;
 async function openExt(name) {
@@ -86,37 +133,38 @@ async function openExt(name) {
 }
 await scheme('light');
 await openExt('options.html');
-await shot('/opt/cursor/artifacts/options-light.png', 980, 1280);
-const measured = await rpc('Runtime.evaluate', { expression: `(() => {
-  const box = document.getElementById('transHighlight');
-  box.checked = true;
-  box.dispatchEvent(new Event('change'));
+const preview = await rpc('Runtime.evaluate', { expression: `(() => {
   const light = document.querySelector('.tone-light .ibt-trans');
   const dark = document.querySelector('.tone-dark .ibt-trans');
+  const hero = document.getElementById('readerZh');
   const size = (el) => {
     const a = el.getBoundingClientRect();
     const b = el.parentElement.getBoundingClientRect();
-    return { text: Math.round(a.width), row: Math.round(b.width) };
+    return { text: Math.round(a.width), row: Math.round(b.width), bg: getComputedStyle(el).backgroundColor };
   };
-  return { light: size(light), dark: size(dark) };
+  const gone = ['transColor', 'barStyle', 'barColor'].filter((id) => document.getElementById(id));
+  return { light: size(light), dark: size(dark), hero: size(hero), gone, checked: document.getElementById('transHighlight').checked };
 })()`, returnByValue: true });
-const widths = measured?.result?.value;
-console.log('tint widths', JSON.stringify(widths));
-if (!widths || widths.light.text > widths.light.row * 0.75 || widths.dark.text > widths.dark.row * 0.75) {
-  console.error('tint still fills the row');
+const widths = preview?.result?.value;
+console.log('options preview', JSON.stringify(widths));
+if (!widths || widths.gone.length || !widths.checked
+  || widths.light.text > widths.light.row * 0.75
+  || widths.dark.text > widths.dark.row * 0.75
+  || !widths.light.bg.includes('250, 235, 180')
+  || !String(widths.dark.bg).includes('255, 255, 255')) {
+  console.error('options tint preview failed');
   process.exitCode = 1;
 }
-await new Promise((r) => setTimeout(r, 200));
-await shot('/opt/cursor/artifacts/options-tint-preview.png', 980, 1280);
+await shotFit('/opt/cursor/artifacts/options-light.png', 980);
 await scheme('dark');
 await openExt('options.html');
-await shot('/opt/cursor/artifacts/options-dark.png', 980, 1280);
+await shotFit('/opt/cursor/artifacts/options-dark.png', 980);
 await scheme('light');
 await openExt('popup.html');
-await shot('/opt/cursor/artifacts/popup-light.png', 360, 560);
+await shotFit('/opt/cursor/artifacts/popup-light.png', 320);
 await scheme('dark');
 await openExt('popup.html');
-await shot('/opt/cursor/artifacts/popup-dark.png', 360, 560);
+await shotFit('/opt/cursor/artifacts/popup-dark.png', 320);
 ws.close();
 proc.kill();
 console.log('shots done');

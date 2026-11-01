@@ -1,8 +1,7 @@
 import { loadSettings, saveSettings } from '../../core/storage';
-import { DEFAULT_BAR_COLOR, DEFAULT_MODELS, DEFAULT_TRANS_COLOR, ProviderId, Settings } from '../../core/types';
+import { DEFAULT_MODELS, ProviderId, Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const CREAM = '#ffecaa';
 
 async function init() {
   const s = await loadSettings();
@@ -11,11 +10,17 @@ async function init() {
 
   const reader = $('reader');
   const readerZh = $('readerZh');
-  $<HTMLInputElement>('readerDark').addEventListener('change', (event) => {
-    const dark = (event.target as HTMLInputElement).checked;
-    reader.dataset.tone = dark ? 'dark' : 'light';
+  const readerDark = $<HTMLInputElement>('readerDark');
+  const themeDark = window.matchMedia('(prefers-color-scheme: dark)');
+  const applyReader = (): void => {
+    const dark = readerDark.checked || themeDark.matches;
+    if (readerDark.checked) reader.dataset.tone = 'dark';
+    else delete reader.dataset.tone;
     readerZh.dataset.ibtOn = dark ? 'dark' : 'light';
-  });
+  };
+  readerDark.addEventListener('change', applyReader);
+  themeDark.addEventListener('change', applyReader);
+  applyReader();
 
   const lang = $<HTMLSelectElement>('lang');
   lang.value = s.targetLangCode === 'zh-CN' ? 'zh-CN' : 'zh-TW';
@@ -69,48 +74,16 @@ async function init() {
 }
 
 function bindAppearance(s: Settings) {
-  let textColor = s.transColor || '';
-  let barColor = s.barColor || '';
-  let chip = s.highlightColor || '';
-  const transColor = $<HTMLInputElement>('transColor');
-  const barColorInput = $<HTMLInputElement>('barColor');
-  const barStyle = $<HTMLSelectElement>('barStyle');
   const highlight = $<HTMLInputElement>('transHighlight');
-
   const syncPreview = () => {
-    const root = document.documentElement;
-    root.setAttribute('data-ibt-style', 'plain');
-    root.setAttribute('data-ibt-bar', barStyle.value || 'bar');
-    root.setAttribute('data-ibt-highlight', highlight.checked ? 'on' : 'off');
-    root.setAttribute('data-ibt-lang', 'zh-TW');
-    root.style.setProperty('--ibt-trans-color', textColor || DEFAULT_TRANS_COLOR);
-    root.style.setProperty('--ibt-bar-color', barColor || DEFAULT_BAR_COLOR);
-    if (chip) root.style.setProperty('--ibt-highlight', chip);
-    else root.style.setProperty('--ibt-highlight', CREAM);
+    document.documentElement.setAttribute('data-ibt-highlight', highlight.checked ? 'on' : 'off');
+    document.documentElement.setAttribute('data-ibt-lang', 'zh-TW');
   };
-
-  const asDefault = (value: string, fallback: string) => value.toLowerCase() === fallback.toLowerCase() ? '' : value;
-
-  transColor.value = textColor || DEFAULT_TRANS_COLOR;
-  transColor.addEventListener('input', () => {
-    textColor = asDefault(transColor.value, DEFAULT_TRANS_COLOR);
-    syncPreview();
-  });
-  transColor.addEventListener('change', () => save({ transColor: textColor }));
-
-  barStyle.value = s.barStyle === 'thick' || s.barStyle === 'dashed' || s.barStyle === 'none' ? s.barStyle : 'bar';
-  barStyle.addEventListener('change', () => { save({ barStyle: barStyle.value }); syncPreview(); });
-
-  barColorInput.value = barColor || DEFAULT_BAR_COLOR;
-  barColorInput.addEventListener('input', () => {
-    barColor = asDefault(barColorInput.value, DEFAULT_BAR_COLOR);
-    syncPreview();
-  });
-  barColorInput.addEventListener('change', () => save({ barColor }));
-
   highlight.checked = s.transHighlight === true;
-  highlight.addEventListener('change', () => { save({ transHighlight: highlight.checked }); syncPreview(); });
-
+  highlight.addEventListener('change', () => {
+    save({ transHighlight: highlight.checked, transHighlightSet: true });
+    syncPreview();
+  });
   syncPreview();
 }
 
