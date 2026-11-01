@@ -11,7 +11,7 @@ import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblcli
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 import { friendlyTranslateError } from '../core/errors';
 import { echoesEnglish, shouldSkipImageText, translateImageSequential } from '../providers/gemini-image';
-import { bindQuota, emptyQuotaState, fingerprintKey, migrateQuotaState, quotaForKey, requestGeminiRetry, setQuotaAlign, setQuotaReady, QuotaState } from '../core/quota-router';
+import { bindQuota, emptyQuotaState, fingerprintKey, migrateQuotaState, quotaForKey, setQuotaAlign, setQuotaReady, QuotaState } from '../core/quota-router';
 
 const queue = new TaskQueue(4);
 
@@ -45,14 +45,10 @@ function withImageLock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 function paceLLM(): Promise<void> {
-  // An image call is one vision request. Page translation waits so it does not
-  // spend the same per-minute quota in parallel.
-  const afterImage = imageGate;
   if (Date.now() > llmCalmAt) llmSpacing = LLM_SPACING_FAST_MS;
   const wait = llmSpacing - (Date.now() - lastLLMStart);
   lastLLMStart = Date.now() + Math.max(0, wait);
-  const paced = wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)) : Promise.resolve();
-  return afterImage.then(() => paced);
+  return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)) : Promise.resolve();
 }
 /** True for metered LLM providers (everything except the free MT endpoints). */
 function isMetered(p: { id: string }): boolean {
@@ -90,7 +86,7 @@ const llmBatcher = new LlmBatcher({
     });
     return pairs;
   })))),
-}, { windowMs: 200, maxSentences: 30, maxChars: 5000 });
+}, { windowMs: 60, maxSentences: 10, maxChars: 1600 });
 
 const QUOTA_KEY = 'ibt_quota';
 let quotaState: QuotaState = emptyQuotaState();
@@ -98,7 +94,7 @@ function persistQuota(): void {
   void chrome.storage.local.set({ [QUOTA_KEY]: quotaState });
 }
 function bindCurrentQuota(): void {
-  bindQuota({ state: quotaState, persist: persistQuota, waitForImage: () => imageGate });
+  bindQuota({ state: quotaState, persist: persistQuota });
 }
 const quotaReady = chrome.storage.local.get(QUOTA_KEY).then((raw) => {
   const saved = raw?.[QUOTA_KEY];
@@ -143,22 +139,16 @@ function ensureImageMenu(): void {
     title: '翻譯這張圖片',
     contexts: ['image'],
   }, () => void chrome.runtime.lastError);
-  chrome.contextMenus.create({
-    id: 'ibt-translate-manga',
-    title: '翻譯這張圖片（漫畫模式）',
-    contexts: ['image'],
-  }, () => void chrome.runtime.lastError);
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab?.id) return;
-  const manga = info.menuItemId === 'ibt-translate-manga';
-  if (info.menuItemId !== 'ibt-translate-image' && !manga) return;
-  void deliverImageClick(tab.id, info.srcUrl || '', manga);
+  if (info.menuItemId !== 'ibt-translate-image') return;
+  void deliverImageClick(tab.id, info.srcUrl || '');
 });
 
-async function deliverImageClick(tabId: number, srcUrl: string, manga = false): Promise<void> {
-  const send = () => chrome.tabs.sendMessage(tabId, { type: 'ibt-image', srcUrl, manga });
+async function deliverImageClick(tabId: number, srcUrl: string): Promise<void> {
+  const send = () => chrome.tabs.sendMessage(tabId, { type: 'ibt-image', srcUrl });
   try {
     await send();
     return;
@@ -230,7 +220,6 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 
 chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
   if (msg?.type === 'translate') {
-    if (msg.retry) requestGeminiRetry();
     handleTranslate(msg.text, { title: msg.title, mode: msg.mode })
       .then((pairs) => sendResponse({ ok: true, pairs } satisfies TranslateResponse))
       .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'page') } satisfies TranslateResponse));
@@ -258,7 +247,7 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
     return true;
   }
   if (msg?.type === 'ibt-ocr-translate') {
-    ocrTranslate(msg.mime, msg.data, Boolean(msg.manga))
+    ocrTranslate(msg.mime, msg.data)
       .then((result) => sendResponse({ ok: true, ...result }))
       .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'image') }));
     return true;
@@ -362,8 +351,7 @@ async function translateOcrLines(lines: string[]): Promise<string[]> {
   if (!lines.length) return [];
   const settings = await loadSettings();
   const provider = getProvider(settings.provider);
-  if (provider.translate) {
-    if (isMetered(provider)) await paceLLM();
+    if (provider.translate) {
     const raw = await provider.translate({
       sentences: lines,
       targetLang: settings.targetLang,
@@ -393,9 +381,9 @@ async function translateOcrLines(lines: string[]): Promise<string[]> {
   return out;
 }
 
-async function ocrTranslate(mime: string, data: string, manga: boolean): Promise<{ regions: { textEn: string; textZh: string; box?: [number, number, number, number] }[]; ms: number }> {
+async function ocrTranslate(mime: string, data: string): Promise<{ regions: { textEn: string; textZh: string; box?: [number, number, number, number] }[]; ms: number }> {
   await ensureOffscreen();
-  const ocr = await chrome.runtime.sendMessage({ type: 'ibt-offscreen-ocr', mime, data, manga }) as {
+  const ocr = await chrome.runtime.sendMessage({ type: 'ibt-offscreen-ocr', mime, data }) as {
     ok?: boolean; error?: string; ms?: number; regions?: { text: string; box: [number, number, number, number] }[];
   };
   if (!ocr?.ok) throw new Error(ocr?.error || '本機文字辨識失敗');

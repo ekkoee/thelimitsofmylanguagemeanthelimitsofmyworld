@@ -27,17 +27,5 @@ const regions = lib.tokensToRegions([
 check('two stacked lines become one paragraph', regions.some((r) => r.text === 'The model writes code'));
 check('a later label stays separate', regions.some((r) => r.text === 'US'));
 
-const pixels = new Uint8ClampedArray(80 * 60 * 4);
-pixels.fill(20);
-for (let y = 10; y < 40; y++) {
-  for (let x = 10; x < 60; x++) {
-    const i = (y * 80 + x) * 4;
-    pixels[i] = pixels[i + 1] = pixels[i + 2] = 250;
-    pixels[i + 3] = 255;
-  }
-}
-const bubbles = lib.findSpeechBubbles(pixels, 80, 60, 1);
-check('a white blob is a speech bubble', bubbles.length === 1 && bubbles[0].w > 40);
-
 if (failed) process.exit(1);
 console.log('ocr grouping checks passed');

@@ -39,22 +39,9 @@ export interface BatcherDeps {
   onBatchFallback: (items: BatchRequest[], sentences: string[][]) => Promise<AlignedPair[][]>;
 }
 
-export class QuotaError extends Error {
-  readonly code: 'QUOTA_DAY' | 'QUOTA_MINUTE';
-  constructor(code: 'QUOTA_DAY' | 'QUOTA_MINUTE', message: string) {
-    super(message);
-    this.name = 'QuotaError';
-    this.code = code;
-  }
-}
-
 export function isQuotaError(err: unknown): boolean {
-  const code = (err as { code?: string })?.code;
-  if (code === 'QUOTA_DAY' || code === 'QUOTA_MINUTE') return true;
   const msg = String((err as { message?: unknown })?.message ?? err);
-  return /\b(403|429)\b/.test(msg)
-    || /quota|rate.?limit|resource.exhausted|too many requests/i.test(msg)
-    || /免費額度|請求太頻繁/.test(msg);
+  return /\b(403|429)\b/.test(msg) || /quota|rate.?limit|resource.exhausted|too many requests/i.test(msg);
 }
 
 // The LLM returned something we can't use (malformed JSON, safety block with no

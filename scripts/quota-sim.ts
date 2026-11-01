@@ -88,7 +88,8 @@ check('timeouts and budgets match the image limits', IMAGE_HEADER_TIMEOUT_MS ===
 check('minute message is specific', minuteMessage(10) === '請求太頻繁，10 秒後自動重試' && !minuteMessage(10).includes('請稍後再試'));
 const dayMsg = allExhaustedMessage(nextPacificMidnight(july));
 check('all-day message names the reset and stops there', dayMsg === 'Gemini 免費額度已用完，將於 15:00 重置');
-check('a Gemini quota message is a page-translation fallback, not a tweet error', isQuotaError(new Error(dayMsg)));
+check('a Gemini 429 is still a page fallback', isQuotaError(new Error('Gemini 429: quota')));
+check('the generic no-response line is not a quota error', !isQuotaError(new Error('Gemini 沒有回傳譯文')));
 
 const LITE_DAY = JSON.stringify({
   error: {
@@ -250,7 +251,7 @@ async function main(): Promise<void> {
     provider: geminiProvider,
     mode: 'prose',
   });
-  check('exhausted Gemini still makes one real attempt', probeCalls.length === 1 && /lite/i.test(probeCalls[0]));
+  check('exhausted Gemini still makes one real attempt', probeCalls.length === 1);
   check('exhausted Gemini page translation shows the free translation', fellBack && pairs[0]?.t === '免費譯文' && !pairs.some((p) => /免費額度/.test(p.t)));
 
   const spentOk = emptyQuotaState();
@@ -267,22 +268,28 @@ async function main(): Promise<void> {
     { sentences: ['Hello from X'], targetLang: settings.targetLang, sourceLang: 'en' },
     settings,
   );
-  check('a successful attempt clears the stored daily flag', clearedCalls === 1 && cleared[0] === '譯文' && (spentOk.models['gemini-3.5-flash-lite']?.exhaustedUntil ?? 1) === 0);
+  check('a page success does not clear image quota flags', clearedCalls === 1 && cleared[0] === '譯文' && (spentOk.models['gemini-3.5-flash']?.exhaustedUntil ?? 0) > 0);
   bindQuota({ state, persist: () => undefined });
 
   globalThis.fetch = fetchImpl;
-  let pageSlow = 0;
+  let pageOk = 0;
+  let page429 = 0;
   for (let i = 0; i < 25; i++) {
     const t0 = Date.now();
-    const out = await geminiProvider.translate(
-      { sentences: [`Sentence ${i} from a long X thread about shipping software.`], targetLang: settings.targetLang, sourceLang: 'en' },
-      settings,
-    );
-    if (Date.now() - t0 > 3000) pageSlow += 1;
-    if (!out[0] || !out[0].includes('譯')) throw new Error(`page ${i} empty`);
+    try {
+      const out = await geminiProvider.translate(
+        { sentences: [`Sentence ${i} from a long X thread about shipping software.`], targetLang: settings.targetLang, sourceLang: 'en' },
+        settings,
+      );
+      if (Date.now() - t0 > 3000) throw new Error('slow');
+      if (!out[0] || !out[0].includes('譯')) throw new Error(`page ${i} empty`);
+      pageOk += 1;
+    } catch (err) {
+      if (!isQuotaError(err)) throw err;
+      page429 += 1;
+    }
   }
-  check('25 page calls stayed under 3s each', pageSlow === 0);
-  check('page translation stopped calling the daily-capped model', limits['gemini-3.5-flash'].dayUsed === 20);
+  check('page calls its own model until the server returns 429', pageOk === 20 && page429 === 5);
   const beforeImages = calls.length;
 
   let imageOk = 0;

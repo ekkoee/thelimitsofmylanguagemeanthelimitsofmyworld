@@ -1,7 +1,5 @@
 import { Settings } from '../core/types';
-import { TranslateInput, TranslationProvider, buildSystemPrompt, coerceTranslations } from './base';
-import { executeGeminiRoute } from '../core/gemini-route';
-import { pageModelChain, quotaBindingReady, alignQuotaKey, consumeGeminiRetry } from '../core/quota-router';
+import { TranslateInput, TranslationProvider, buildSystemPrompt, coerceTranslations, fetchWithRetry } from './base';
 
 /** Gemini 3 family model ids support thinkingLevel (v3 API shape). */
 function isGemini3(model: string): boolean {
@@ -13,21 +11,15 @@ export const geminiProvider: TranslationProvider = {
   async translate(input: TranslateInput, settings: Settings): Promise<string[]> {
     const key = settings.apiKeys.gemini?.trim();
     if (!key) throw new Error('NO_API_KEY:gemini');
-    await alignQuotaKey(key);
-    const bound = await quotaBindingReady();
-    if (bound?.waitForImage) await bound.waitForImage();
-    const state = bound?.state ?? { keyId: '', models: {}, switchedFrom: '', switchedTo: '' };
-    const prompt = buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode });
+    const model = settings.model || 'gemini-3.5-flash-lite';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+
     const t0 = performance.now();
-    const routed = await executeGeminiRoute({
-      key,
-      chain: pageModelChain(settings.model),
-      purpose: 'page',
-      state,
-      onState: () => bound?.persist(),
-      force: consumeGeminiRetry(),
-      buildBody: (model) => ({
-        systemInstruction: { parts: [{ text: prompt }] },
+    const res = await fetchWithRetry(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode }) }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify({ sentences: input.sentences }) }] }],
         generationConfig: {
           temperature: 0.2,
@@ -41,8 +33,9 @@ export const geminiProvider: TranslationProvider = {
           ...(isGemini3(model) ? { thinkingConfig: { thinkingLevel: 'minimal' } } : {}),
         },
       }),
-    });
-    const data = routed.json as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number }; candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    }, { label: 'gemini', maxRetries: 1, noRetry429: true });
+    if (!res.ok) throw new Error(`Gemini ${res.status}: ${await safeBody(res)}`);
+    const data = await res.json();
     // Timing log for diagnosing latency: ms/sent/tokens. If `ms` is large but
     // `out` is small, time went to pacing/queue, not the model. `think` > 0
     // would mean thinking is not actually disabled.
@@ -54,3 +47,7 @@ export const geminiProvider: TranslationProvider = {
     return coerceTranslations(content, input.sentences.length);
   },
 };
+
+async function safeBody(res: Response): Promise<string> {
+  try { return (await res.text()).slice(0, 300); } catch { return ''; }
+}

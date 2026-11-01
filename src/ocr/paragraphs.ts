@@ -95,7 +95,7 @@ function overlapRatio(a: PixelRect, b: PixelRect): number {
 
 /**
  * Lines that share a left edge and a small gap become one paragraph.
- * `bubbles` (manga) each become a single region covering that bubble.
+ * Optional `bubbles` each become one region covering that rectangle.
  */
 export function tokensToRegions(
   tokens: OcrToken[],

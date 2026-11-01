@@ -1,7 +1,6 @@
 // One Gemini generateContent call at a time, on the best model that still has quota.
 // Image calls give up a silent socket after 15s and keep the whole chain under 20s.
 
-import { QuotaError } from './llm-batcher';
 import {
   IMAGE_BODY_TIMEOUT_MS,
   IMAGE_CHAIN_BUDGET_MS,
@@ -170,10 +169,10 @@ export async function executeGeminiRoute(opts: GeminiRouteOpts): Promise<{ model
             }, now());
             opts.onState?.(opts.state);
           }
-          throw new QuotaError('QUOTA_DAY', allExhaustedMessage(pick.resetAt));
+          throw new Error(allExhaustedMessage(pick.resetAt));
         }
       }
-      throw new QuotaError('QUOTA_DAY', allExhaustedMessage(pick.resetAt));
+      throw new Error(allExhaustedMessage(pick.resetAt));
     }
     if (pick.kind === 'none') break;
     if (pick.kind === 'wait') {
@@ -214,11 +213,11 @@ export async function executeGeminiRoute(opts: GeminiRouteOpts): Promise<{ model
       throw err;
     }
   }
-  if (minuteSec > 0) throw new QuotaError('QUOTA_MINUTE', minuteMessage(minuteSec));
+  if (minuteSec > 0) throw new Error(minuteMessage(minuteSec));
   if (last?.code === 'timeout') throw new Error(`Gemini 回應逾時（${last.model}）`);
   if (last?.code === 'network') throw new Error('連不到 Gemini，請檢查網路');
   if (last?.code === 'server') throw new Error(`Gemini 服務暫時錯誤（${last.status}）`);
-  if (last?.code === 'day') throw new QuotaError('QUOTA_DAY', allExhaustedMessage(soonestReset(opts.state, now())));
+  if (last?.code === 'day') throw new Error(allExhaustedMessage(soonestReset(opts.state, now())));
   throw new Error(opts.purpose === 'image' ? 'Gemini 沒有回傳圖片譯文' : 'Gemini 沒有回傳譯文');
 }
 

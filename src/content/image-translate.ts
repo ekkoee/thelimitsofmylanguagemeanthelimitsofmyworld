@@ -31,7 +31,7 @@ export function startImageTranslate(): void {
   listening = true;
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== 'ibt-image') return;
-    void run(String(msg.srcUrl || ''), Boolean(msg.manga))
+    void run(String(msg.srcUrl || ''))
       .then(() => sendResponse({ ok: true }))
       .catch((err) => {
         console.log('[IBT] image translate failed', err);
@@ -91,7 +91,7 @@ function tag(img: ImgHit): string {
   return (img as HTMLElement).dataset.ibtImg || '';
 }
 
-async function run(srcUrl: string, manga = false): Promise<void> {
+async function run(srcUrl: string): Promise<void> {
   const img = findImage(srcUrl);
   if (!img) {
     console.log('[IBT] image target not found', srcUrl);
@@ -103,12 +103,12 @@ async function run(srcUrl: string, manga = false): Promise<void> {
   const pending = inflight.get(key);
   if (pending) return pending;
 
-  const job = runOne(img, srcUrl, manga);
+  const job = runOne(img, srcUrl);
   if (key) inflight.set(key, job);
   try { await job; } finally { if (key) inflight.delete(key); }
 }
 
-async function runOne(img: ImgHit, srcUrl: string, manga = false): Promise<void> {
+async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
   const decision = imageDecision(img as HTMLElement);
   console.log('[IBT] image mode', decision.mode, decision.reason);
   const shell = mountOverlay(img);
@@ -119,7 +119,7 @@ async function runOne(img: ImgHit, srcUrl: string, manga = false): Promise<void>
     if (!shell.isConnected) return;
     if (!bytes) throw new Error('無法讀取這張圖片');
     console.log('[IBT] image encoded', bytes.via, bytes.mime, bytes.data.length, new Date().toISOString());
-    if (!manga && settings.imageModel === 'gemini') {
+    if (settings.imageModel === 'gemini') {
       const resp = await chrome.runtime.sendMessage({
         type: 'ibt-translate-image', mime: bytes.mime, data: bytes.data,
       }) as { ok?: boolean; text?: string; regions?: ImageRegion[]; error?: string };
@@ -140,7 +140,7 @@ async function runOne(img: ImgHit, srcUrl: string, manga = false): Promise<void>
       console.log('[IBT] vision unavailable, local ocr', (resp?.error || '').slice(0, 120));
     }
     const ocr = await chrome.runtime.sendMessage({
-      type: 'ibt-ocr-translate', mime: bytes.mime, data: bytes.data, manga,
+      type: 'ibt-ocr-translate', mime: bytes.mime, data: bytes.data,
     }) as { ok?: boolean; regions?: ImageRegion[]; error?: string; ms?: number };
     if (!shell.isConnected) return;
     if (!ocr?.ok) throw new Error(ocr?.error || '本機文字辨識失敗');

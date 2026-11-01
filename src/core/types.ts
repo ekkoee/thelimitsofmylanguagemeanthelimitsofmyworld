@@ -143,7 +143,6 @@ export interface OcrTranslateMessage {
   type: 'ibt-ocr-translate';
   mime: string;
   data: string;
-  manga?: boolean;
 }
 
 export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage | FetchImageMessage | CaptureTabMessage | TranslateImageMessage | OcrTranslateMessage;

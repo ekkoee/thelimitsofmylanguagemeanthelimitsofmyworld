@@ -328,7 +328,6 @@ export function quotaStatusText(state: QuotaState, now = Date.now()): string {
 export interface QuotaBinding {
   state: QuotaState;
   persist: () => void;
-  waitForImage?: () => Promise<void>;
 }
 
 let binding: QuotaBinding | null = null;
