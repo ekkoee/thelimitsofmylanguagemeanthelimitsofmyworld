@@ -67,6 +67,17 @@ export function belowAnchor(img: HTMLElement): HTMLElement {
   return node;
 }
 
+/**
+ * Right-click on tweet text, an avatar, or an emoji must not start image
+ * translation. A real photo tile is large and is not inside the text node.
+ */
+export function shouldSkipImageTarget(info: { width: number; height: number; inTweetText: boolean; inTweetPhoto: boolean }): boolean {
+  if (info.inTweetPhoto && info.width >= 80 && info.height >= 80) return false;
+  if (info.inTweetText) return true;
+  if (info.width < 80 || info.height < 80) return true;
+  return false;
+}
+
 /** Positioned box the overlay is attached to, so it scrolls with the image. */
 export function overlayHost(img: HTMLElement): HTMLElement {
   let el: HTMLElement | null = img.parentElement;

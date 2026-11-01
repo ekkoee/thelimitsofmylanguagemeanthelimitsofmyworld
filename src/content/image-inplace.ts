@@ -196,6 +196,18 @@ export function contrastColor(rgb: Rgb): string {
   return y > 160 ? '#1a1a1a' : '#f4f1ea';
 }
 
+/** A saturated red fill reads as an error. Image patches stay on the neutral panel. */
+export function neutralFill(rgb: Rgb): Rgb {
+  const max = Math.max(rgb.r, rgb.g, rgb.b);
+  const min = Math.min(rgb.r, rgb.g, rgb.b);
+  const sat = max === 0 ? 0 : (max - min) / max;
+  const y = 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+  if (rgb.r > rgb.g + 28 && rgb.r > rgb.b + 28 && sat > 0.22) {
+    return y > 150 ? { r: 244, g: 246, b: 251 } : { r: 21, g: 24, b: 36 };
+  }
+  return rgb;
+}
+
 export function cssColor(rgb: Rgb): string {
   return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
 }
@@ -228,7 +240,7 @@ export function renderRegions(
     const top = content.y + padded[1] * content.h;
     let width = Math.max(8, padded[2] * content.w);
     const height = Math.max(8, padded[3] * content.h);
-    const bg = canvas ? medianEdgeColor(canvas, region.box) : { r: 244, g: 241, b: 234 };
+    const bg = neutralFill(canvas ? medianEdgeColor(canvas, region.box) : { r: 244, g: 241, b: 234 });
     const node = document.createElement('div');
     node.className = region.kind === 'paragraph' ? 'ibt-img-region ibt-img-paragraph' : 'ibt-img-region';
     node.style.left = `${(left / ew) * 100}%`;

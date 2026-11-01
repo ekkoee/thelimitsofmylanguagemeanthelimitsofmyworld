@@ -106,7 +106,7 @@ function ensureSplitWatcher(): void {
 // consecutive breaks) is a paragraph boundary. Each returned Line is one whole
 // paragraph; the Google endpoint still returns per-sentence [zh, src] pairs, so
 // fillPairs keeps sentence-level interleaving WITHIN the paragraph.
-function splitParagraphs(tt: HTMLElement): Line[] {
+function splitParagraphs(tt: HTMLElement, targetLang: string): Line[] {
   // Phase 1: build the sequence of PHYSICAL lines (same break logic as before),
   // but KEEP empty lines — they're what marks a paragraph boundary. Each line
   // records the anchor of its terminating break: the <br>, the text node ending
@@ -125,6 +125,11 @@ function splitParagraphs(tt: HTMLElement): Line[] {
     acceptNode(n) {
       if (n.nodeType === 1) {
         if (isIbt(n)) return NodeFilter.FILTER_REJECT;            // skip our own nodes
+        // X's own translation, or a previous Chinese block, is already readable.
+        if (n !== tt) {
+          const own = ((n as HTMLElement).innerText || '').replace(/\s+/g, ' ').trim();
+          if (own.length >= 12 && isAlreadyTargetLang(own, targetLang)) return NodeFilter.FILTER_REJECT;
+        }
         return n.nodeName === 'BR' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       }
       return NodeFilter.FILTER_ACCEPT;                            // text node
@@ -246,7 +251,7 @@ export function scanTwitter(s: Settings): void {
     (tt as JobbedElement).__ibtJobs = [];
     tt.setAttribute(SPLIT, sig);
     try {
-      const lines = splitParagraphs(tt);
+      const lines = splitParagraphs(tt, s.targetLangCode);
       if (lines.length <= 1) {
         const text = tt.innerText?.trim() ?? '';
         if (text && hasTranslatableText(text) && !isAlreadyTargetLang(text, s.targetLangCode)) deferX(tt, s, () => renderTranslationAfter(tt, text));

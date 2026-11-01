@@ -5,7 +5,7 @@
 import { applyRootState } from '../utils/dom';
 import { loadSettings } from '../core/storage';
 import { pageFontPx } from './page-font';
-import { belowAnchor, imageDecision, overlayHost } from './image-place';
+import { belowAnchor, imageDecision, shouldSkipImageTarget } from './image-place';
 import { renderRegions } from './image-inplace';
 import { friendlyTranslateError } from '../core/errors';
 import { IMAGE_JPEG_QUALITY, IMAGE_MAX_EDGE, ImageRegion, isMostlyLatin, selectInPlace } from '../providers/gemini-image';
@@ -109,7 +109,18 @@ async function run(srcUrl: string): Promise<void> {
 }
 
 async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
-  const decision = imageDecision(img as HTMLElement);
+  const el = img as HTMLElement;
+  const rect = el.getBoundingClientRect();
+  if (shouldSkipImageTarget({
+    width: rect.width,
+    height: rect.height,
+    inTweetText: !!el.closest('[data-testid="tweetText"], [data-testid="UserDescription"]'),
+    inTweetPhoto: !!el.closest('[data-testid="tweetPhoto"]'),
+  })) {
+    console.log('[IBT] image skipped, not a content picture');
+    return;
+  }
+  const decision = imageDecision(el);
   console.log('[IBT] image mode', decision.mode, decision.reason);
   const shell = mountOverlay(img);
   try {
@@ -133,7 +144,7 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
         }
         const body = (resp.text || '').trim();
         const shown = !body ? EMPTY : (isMostlyLatin(body) ? FAILED_ZH : body);
-        if (decision.mode === 'below') { shell.remove(); mountBelow(img, shown); return; }
+        if (decision.mode === 'below' && !el.closest('article')) { shell.remove(); mountBelow(img, shown); return; }
         paintPanel(shell, shown);
         return;
       }
@@ -151,12 +162,12 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
       return;
     }
     const ocrShown = (ocr.regions || []).map((r) => r.textZh).filter(Boolean).join('\n') || EMPTY;
-    if (decision.mode === 'below') { shell.remove(); mountBelow(img, ocrShown); return; }
+    if (decision.mode === 'below' && !el.closest('article')) { shell.remove(); mountBelow(img, ocrShown); return; }
     paintPanel(shell, ocrShown);
   } catch (err) {
     if (!shell.isConnected) return;
     const shown = friendlyTranslateError(err, 'image');
-    if (decision.mode === 'below') {
+    if (decision.mode === 'below' && !el.closest('article')) {
       shell.remove();
       mountBelow(img, shown);
       return;
@@ -167,14 +178,14 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
 
 function mountBelow(img: ImgHit, text: string): HTMLElement {
   const block = document.createElement('div');
-  block.className = 'ibt-block ibt-uni ibt-img';
+  block.className = 'ibt-img-block';
   block.dataset.ibtOut = '1';
   block.dataset.ibtImgFor = tag(img);
   const host = img.parentElement || document.body;
   block.style.fontSize = `${pageFontPx(host)}px`;
   block.style.lineHeight = '1.5';
   const line = document.createElement('div');
-  line.className = 'ibt-trans';
+  line.className = 'ibt-img-caption';
   line.textContent = text;
   block.appendChild(line);
   const anchor = belowAnchor(img as HTMLElement);
@@ -276,14 +287,18 @@ function wirePeek(overlay: HTMLElement): void {
 }
 
 function placeOverlay(img: HTMLElement, overlay: HTMLElement): void {
-  const host = overlayHost(img);
-  const hr = host.getBoundingClientRect();
+  // Fixed to the image's own rectangle. A positioned tweet article also holds
+  // the text, and an overlay attached there paints a second translation on it.
   const ir = img.getBoundingClientRect();
-  overlay.style.left = `${ir.left - hr.left + host.scrollLeft}px`;
-  overlay.style.top = `${ir.top - hr.top + host.scrollTop}px`;
-  overlay.style.width = `${ir.width}px`;
-  overlay.style.height = `${ir.height}px`;
-  if (!overlay.isConnected) host.appendChild(overlay);
+  overlay.style.position = 'fixed';
+  overlay.style.left = `${ir.left}px`;
+  overlay.style.top = `${ir.top}px`;
+  overlay.style.width = `${Math.max(0, ir.width)}px`;
+  overlay.style.height = `${Math.max(0, ir.height)}px`;
+  overlay.style.right = 'auto';
+  overlay.style.bottom = 'auto';
+  overlay.style.zIndex = '2147483000';
+  if (!overlay.isConnected) document.documentElement.appendChild(overlay);
 }
 
 function watchOverlay(img: HTMLElement, overlay: HTMLElement): void {

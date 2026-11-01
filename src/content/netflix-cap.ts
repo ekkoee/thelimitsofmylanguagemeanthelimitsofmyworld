@@ -41,14 +41,14 @@ export function isNetflixWatch(url: string): boolean {
   }
 }
 
-/** Same rule as X: native captions already show the original, so unset means Chinese only. */
+/** Same rule as X: one stacked caption unless the viewer picked original-only. */
 export function nfVideoView(explicit: string | undefined | null): 'zh' | 'both' | 'orig' {
   return xVideoView(explicit);
 }
 
-/** Bilingual draws English in our box, so Netflix's own line has to hide or it shows twice. */
+/** Our box replaces the native line in every view except 只顯示原文. */
 export function nfHidesNative(explicit: string | undefined | null): boolean {
-  return nfVideoView(explicit) === 'both';
+  return nfVideoView(explicit) !== 'orig';
 }
 
 /** Player chrome that sometimes sits near the picture but is not a caption line. */

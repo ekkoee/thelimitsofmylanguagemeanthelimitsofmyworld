@@ -34,6 +34,9 @@ export function friendlyTranslateError(err: unknown, kind: 'page' | 'image' = 'p
   if (/failed to fetch|networkerror|network request failed|econn|enotfound|連不到/i.test(msg)) {
     return '連不到 Gemini，請檢查網路';
   }
+  if (/\b(Google|Microsoft)\b/.test(msg) && /\b(429|403)\b/.test(msg)) {
+    return '免費翻譯暫時忙碌，請稍後按「重試」，或到設定改用 Gemini。';
+  }
   if (/\b429\b|quota|rate.?limit|resource.exhausted|too many requests/i.test(msg)) {
     const parsed = parseQuotaFailure(msg, '');
     if (parsed?.perDay || /PerDay/i.test(msg)) return allExhaustedMessage(nextPacificMidnight(Date.now()));

@@ -60,9 +60,9 @@ check('a too-low rect does not pull onto the caption', low.branch === 'reserve' 
 
 check('watch url', cap.isNetflixWatch('https://www.netflix.com/watch/81234567?trackId=1'));
 check('browse is not watch', !cap.isNetflixWatch('https://www.netflix.com/browse'));
-check('unset view is chinese only', cap.nfVideoView('') === 'zh');
-check('explicit bilingual wins', cap.nfVideoView('both') === 'both' && cap.nfHidesNative('both'));
-check('chinese only keeps native', cap.nfVideoView('zh') === 'zh' && !cap.nfHidesNative('zh'));
+check('unset view is bilingual', cap.nfVideoView('') === 'both');
+check('explicit bilingual hides native', cap.nfVideoView('both') === 'both' && cap.nfHidesNative('both'));
+check('chinese only still hides the native track', cap.nfVideoView('zh') === 'zh' && cap.nfHidesNative('zh'));
 check('original hides ours', cap.nfVideoView('orig') === 'orig');
 check('skip intro is chrome', cap.isNetflixChromeCue('Skip Intro'));
 

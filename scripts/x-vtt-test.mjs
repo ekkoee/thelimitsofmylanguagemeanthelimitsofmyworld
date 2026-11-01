@@ -82,8 +82,8 @@ check('quote-tweet source is not a caption', !isXCaptionText('From AmericaAmeric
 check('centered line is a caption', isXCaptionText('such as USDC, USDT, BTC, E, BNB', centered, picture));
 check('corner clock is not a caption', !isXCaptionText('0:42 / 3:10', { left: 430, top: 270, width: 110, height: 22, right: 540, bottom: 292 }, picture));
 
-// No stored choice → X video is Chinese-only. An explicit pick wins, including bilingual.
-check('x video default is chinese only', xVideoView(undefined) === 'zh' && xVideoView('') === 'zh');
+// No stored choice → one bilingual caption. An explicit pick still wins.
+check('x video default is bilingual', xVideoView(undefined) === 'both' && xVideoView('') === 'both');
 check('explicit bilingual wins', xVideoView('both') === 'both');
 check('explicit chinese wins', xVideoView('zh') === 'zh');
 check('explicit original wins', xVideoView('orig') === 'orig');

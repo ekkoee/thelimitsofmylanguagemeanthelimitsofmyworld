@@ -78,11 +78,15 @@
 .ibt-highlight span.ibt-trans {
   display: inline;
   padding: 0.03em 0.3em;
-  border-radius: 0.3em;
+  border-radius: 0.38em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+  text-spacing-trim: trim-both;
+  font-feature-settings: "halt" 1, "chws" 1;
   background: color-mix(in srgb, currentColor 14%, transparent);
 }
+.ibt-punct-lead { margin-inline-start: -0.5em; }
+.ibt-punct-tail { margin-inline-end: -0.5em; }
 :root[data-ibt-highlight="on"] .ibt-trans[data-ibt-on="light"] > span,
 :root[data-ibt-highlight="on"] span.ibt-trans[data-ibt-on="light"],
 .ibt-highlight .ibt-trans[data-ibt-on="light"] > span,
@@ -157,17 +161,24 @@
 /* loading / error states */
 .ibt-block.ibt-loading { opacity: 0.7; }
 .ibt-loading-dot { font-size: 0.85em; opacity: 0.7; }
-.ibt-block.ibt-error { border-left-color: rgba(220, 80, 80, 0.7); }
+.ibt-block.ibt-error { border-left: 0; }
 .ibt-error-msg { font-size: 0.85em; opacity: 0.85; }
 /* Image translation. Below uses .ibt-block. Overlay covers the image and does not
    take space in the flow. Hover or hold 「原文」 to see the picture again. */
 .ibt-img-overlay {
-  position: absolute;
-  z-index: 5;
+  position: fixed;
+  z-index: 2147483000;
   box-sizing: border-box;
   pointer-events: auto;
   overflow: hidden;
+  border-radius: 12px;
 }
+.ibt-img-block {
+  margin: 8px 0;
+  font-family: var(--ibt-zh-font);
+  line-height: 1.5;
+}
+.ibt-img-caption { color: inherit; }
 .ibt-img-panel {
   box-sizing: border-box;
   height: 100%;
@@ -210,22 +221,26 @@
 }
 .ibt-img-bar {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 8px;
+  right: 8px;
   z-index: 4;
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 .ibt-img-x,
 .ibt-img-peek {
-  font: 12px/1 sans-serif;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.55);
+  height: 28px;
+  padding: 0 10px;
   border: 0;
-  border-radius: 4px;
-  padding: 3px 6px;
+  border-radius: 8px;
+  background: #1b1f2e;
+  color: #e8eaf2;
+  font: 500 12px/1 system-ui, -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  box-shadow: inset 0 0 0 1px rgba(232, 234, 242, 0.12);
   cursor: pointer;
 }
+.ibt-img-x:hover,
+.ibt-img-peek:hover { box-shadow: inset 0 0 0 1px #6c7aff; }
 .ibt-img-overlay.is-peek .ibt-img-panel,
 .ibt-img-overlay.is-peek .ibt-img-region { opacity: 0; }
 

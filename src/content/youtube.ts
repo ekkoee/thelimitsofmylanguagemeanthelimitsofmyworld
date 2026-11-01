@@ -3,6 +3,7 @@ import { SELECTORS, queryFirst } from './selectors';
 import { onUrlChange } from '../utils/observer';
 import { el } from '../utils/dom';
 import { extensionAlive, isContextGoneError, sendMessage } from '../utils/runtime';
+import { xCaptionFontPx } from './x-vtt';
 
 const ROOT_FLAG = 'data-ibt-yt';
 const SETTLE_MS = 180;
@@ -343,7 +344,33 @@ class TrackCaptions {
       if (t && this.zhEl && this.zhEl.textContent !== t) this.setZh(t);
     }
     this.flag(this.everShown); // hide native only once we've shown a cue
+    if (idx >= 0) this.place();
   };
+
+  /** One box on the video picture, not on the player's letterbox. */
+  private place(): void {
+    const v = this.video();
+    if (!v || !this.overlay) return;
+    const vr = v.getBoundingClientRect();
+    if (vr.width < 20 || vr.height < 20) return;
+    const fixed = document.fullscreenElement === v;
+    const pr = this.player.getBoundingClientRect();
+    const parentBottom = fixed ? window.innerHeight : pr.bottom;
+    const letterbox = Math.max(0, parentBottom - vr.bottom);
+    const bottom = Math.round(letterbox + Math.max(8, Math.min(28, vr.height * 0.04)));
+    const center = (vr.left + vr.width / 2) - (fixed ? 0 : pr.left);
+    const size = xCaptionFontPx(vr.width, vr.height, this.settings.fontScale || 1);
+    const s = this.overlay.style;
+    s.setProperty('position', fixed ? 'fixed' : 'absolute', 'important');
+    s.setProperty('left', `${Math.round(center)}px`, 'important');
+    s.setProperty('bottom', `${bottom}px`, 'important');
+    s.setProperty('transform', 'translateX(-50%)', 'important');
+    s.setProperty('right', 'auto', 'important');
+    s.setProperty('top', 'auto', 'important');
+    s.setProperty('max-width', `${Math.round(vr.width * 0.9)}px`, 'important');
+    if (this.zhEl) this.zhEl.style.fontSize = `${size}px`;
+    if (this.enEl) this.enEl.style.fontSize = `${size}px`;
+  }
 
   private findCue(ms: number): number {
     const c = this.cues;
@@ -428,7 +455,11 @@ class TrackCaptions {
   }
 
   private applyFont(): void {
-    const base = Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
+    const v = this.video();
+    const vr = v?.getBoundingClientRect();
+    const base = vr && vr.width > 20
+      ? xCaptionFontPx(vr.width, vr.height, 1)
+      : Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
     const size = Math.round(base * this.settings.fontScale);
     if (this.enEl) this.enEl.style.fontSize = `${size}px`;
     if (this.zhEl) {

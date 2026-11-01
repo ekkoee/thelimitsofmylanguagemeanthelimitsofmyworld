@@ -331,19 +331,11 @@ async function ensureOffscreen(): Promise<void> {
 async function translateOcrLines(lines: string[]): Promise<string[]> {
   if (!lines.length) return [];
   const settings = await loadSettings();
-  const provider = getProvider(settings.provider);
-    if (provider.translate) {
-    const raw = await provider.translate({
-      sentences: lines,
-      targetLang: settings.targetLang,
-      sourceLang: settings.sourceLang,
-      mode: 'prose',
-    }, settings);
-    return raw.map((line) => toTraditional(line || ''));
-  }
+  // Image text never enters the page Gemini batcher. The free engines only.
+  const free = { ...settings, provider: 'google' as const, model: '' };
   const numbered = lines.map((line, i) => `(${i}) ${line}`).join('\n');
   try {
-    const pairs = await withFreeFallback(settings, async (p) => (p.translateBlock ? p.translateBlock(numbered, settings) : []));
+    const pairs = await withFreeFallback(free, async (p) => (p.translateBlock ? p.translateBlock(numbered, free) : []));
     const text = toTraditional(pairs.map((p) => p.t).join(''));
     const found = new Map<number, string>();
     for (const line of text.split(/\n/)) {
@@ -356,7 +348,7 @@ async function translateOcrLines(lines: string[]): Promise<string[]> {
   }
   const out: string[] = [];
   for (const line of lines) {
-    const pairs = await withFreeFallback(settings, async (p) => (p.translateBlock ? p.translateBlock(line, settings) : []));
+    const pairs = await withFreeFallback(free, async (p) => (p.translateBlock ? p.translateBlock(line, free) : []));
     out.push(toTraditional(pairs.map((p) => p.t).join('').trim()));
   }
   return out;

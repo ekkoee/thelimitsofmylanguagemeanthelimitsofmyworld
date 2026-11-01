@@ -123,14 +123,19 @@ export function isXCaptionText(text: string, node: Rect, video: Rect): boolean {
 }
 
 /**
- * What an X video draws. Native CC already shows the original, so the default
- * (no explicit choice yet) is Chinese only. YouTube and the rest of the page
- * do not use this — they stay bilingual until the user picks otherwise.
- * An explicit 'both' / 'zh' / 'orig' always wins over that default.
+ * What a video draws. Chinese and English share one caption box (order comes
+ * from 影片字幕順序). An explicit 只顯示中文 / 只顯示原文 still wins.
+ * Unset stays bilingual so the native line can be hidden instead of leaving
+ * a second caption under ours.
  */
 export function xVideoView(explicit: string | undefined | null): 'zh' | 'both' | 'orig' {
   if (explicit === 'zh' || explicit === 'both' || explicit === 'orig') return explicit;
-  return 'zh';
+  return 'both';
+}
+
+/** Our box is on screen, so the player's own text track must not also show. */
+export function hidesNativeCaption(explicit: string | undefined | null): boolean {
+  return xVideoView(explicit) !== 'orig';
 }
 
 /**

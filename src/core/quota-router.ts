@@ -115,7 +115,9 @@ export function imageModelChain(opts?: { model?: string; imageModel?: string }):
   const chosen = (opts?.imageModel || '').trim();
   const lite = 'gemini-2.5-flash-lite';
   const flash = 'gemini-2.5-flash';
-  if (!chosen || chosen.toLowerCase() === 'auto') return [lite, flash];
+  // The options value "gemini" means "use vision", not the model id "gemini".
+  if (!chosen || chosen === 'local' || chosen === 'gemini' || chosen.toLowerCase() === 'auto') return [lite, flash];
+  if (!/^gemini-/i.test(chosen)) return [lite, flash];
   return dedupe([chosen, lite, flash]);
 }
 

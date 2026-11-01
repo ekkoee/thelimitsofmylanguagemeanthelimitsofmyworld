@@ -12,7 +12,7 @@
 import { Settings, TranslateBatchResponse, TranslateResponse } from '../core/types';
 import { sendMessage } from '../utils/runtime';
 import { el } from '../utils/dom';
-import { Rect, XCue, X_CAPTION_GAP, captionTextMatches, cueLineCount, isXCaptionText, mediaIdFromUrl, nativeCueFontPx, nativeCueReservePx, overlayBottomAbove, overlayBottomClearingCue, overlayUsedWidth, xCaptionBox, xCaptionFontPx, xVideoView } from './x-vtt';
+import { Rect, XCue, captionTextMatches, hidesNativeCaption, isXCaptionText, mediaIdFromUrl, overlayUsedWidth, xCaptionBox, xCaptionFontPx, xVideoView } from './x-vtt';
 
 const CHUNK = 12;
 let settingsRef: () => Settings = () => ({} as Settings);
@@ -312,22 +312,17 @@ function hideAll(): void {
   for (const [, b] of bounds) { clearNative(b); hide(b); }
 }
 
-function chineseOnly(): boolean {
-  return xVideoView(settingsRef().viewMode) === 'zh';
-}
-
 function normCue(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
 /**
- * Bilingual mode draws English itself. Hide X's native line — the DOM node and
- * the browser's ::cue rendering — so English is not on screen twice.
- * Chinese-only leaves the native line up.
+ * Our box already contains the caption, so hide X's native line — the DOM node
+ * and the browser's ::cue — in every view except 只顯示原文.
  */
 function syncNative(b: Bound, text: string, node: HTMLElement | null): void {
   clearNative(b);
-  if (xVideoView(settingsRef().viewMode) !== 'both' || !text) return;
+  if (!hidesNativeCaption(settingsRef().viewMode) || !text) return;
   b.video.classList.add('ibt-x-hide-cue');
   const player = b.player?.isConnected ? b.player : playerOf(b.video);
   // Captions sometimes sit in videoComponent, just outside videoPlayer.
@@ -412,42 +407,10 @@ function place(b: Bound, native?: HTMLElement | null, cueText?: string): void {
   const cr = cap ? cap.getBoundingClientRect() : null;
   const capVisible = !!cr && usableCaptionRect(cr, vr);
   const cue = (cueText ?? b.lastText ?? '').trim();
-  // Inline timeline captions are often ::cue, or text inside the mute-button
-  // cluster, so the element box is missing. Measure glyphs; if that fails and
-  // CC is on, reserve the cue's line height so we still clear it by 6px.
-  const root = (video.closest('[data-testid="videoComponent"]') as HTMLElement) || player;
-  const measured = chineseOnly()
-    ? (measureCueRect(root, video, cue) || (capVisible && cr ? toRect(cr) : null))
-    : (capVisible && cr ? toRect(cr) : null);
   let bottom: number;
   let center: number;
-  let branch = 'bottom-margin';
-  if (chineseOnly() && cue) {
-    // Always clear a band at the bottom of the picture. A measured rect may
-    // only be the cue's baseline (inline ::cue), which would pull us down onto
-    // the English. The band is the minimum; a higher measured top still wins.
-    const controls = controlOverlap(player, video);
-    const font = Math.max(nativeCueFontPx(vr.height), xCaptionFontPx(vr.width, vr.height, settingsRef().fontScale || 1));
-    let lines = cueLineCount(cue, measureTextWidth(cue, font), Math.max(40, vr.width * 0.9));
-    if (measured && measured.height > font) lines = Math.max(lines, Math.round(measured.height / font));
-    const reserve = nativeCueReservePx(font, lines);
-    const letterbox = fixed ? Math.max(0, window.innerHeight - vr.bottom) : Math.max(0, pr.bottom - vr.bottom);
-    bottom = overlayBottomClearingCue(letterbox, controls, reserve);
-    center = (vr.left + vr.width / 2) - (fixed ? 0 : pr.left);
-    branch = 'reserve';
-    if (measured && measured.top < vr.bottom - 4) {
-      const fromRect = fixed
-        ? (window.innerHeight - measured.top + X_CAPTION_GAP)
-        : overlayBottomAbove(pr.bottom, measured.top);
-      if (fromRect > bottom) {
-        bottom = fromRect;
-        center = (measured.left + measured.width / 2) - (fixed ? 0 : pr.left);
-        branch = 'measured';
-      }
-    }
-    xCapLog({ branch, bottom: Math.round(bottom), lines, font, reserve, measured, cue: cue.slice(0, 80), fixed, letterbox, controls });
-  } else if (capVisible && cr) {
-    // Bilingual box replaces the native line, so its bottom matches that line.
+  if (capVisible && cr) {
+    // One box occupies the native caption's own slot. The native line is hidden.
     bottom = fixed ? (window.innerHeight - cr.bottom) : (pr.bottom - cr.bottom);
     center = (cr.left + cr.width / 2) - (fixed ? 0 : pr.left);
   } else {
@@ -456,6 +419,7 @@ function place(b: Bound, native?: HTMLElement | null, cueText?: string): void {
     const box = xCaptionBox(toRect(vr), ref, controls);
     bottom = box.bottom;
     center = fixed ? vr.left + vr.width / 2 : box.center;
+    xCapLog({ bottom: Math.round(bottom), cue: cue.slice(0, 80), fixed });
   }
   const maxW = Math.max(80, Math.round(vr.width * 0.9));
   const size = xCaptionFontPx(vr.width, vr.height, settingsRef().fontScale || 1);
@@ -537,69 +501,6 @@ function usableCaptionRect(r: DOMRect, video: DOMRect): boolean {
   return r.width > 8 && r.height > 4 && r.height < video.height * 0.45
     && r.bottom > video.top && r.top < video.bottom + 24
     && r.top > video.top + video.height * 0.35;
-}
-
-/** Glyph box of the cue, including text that shares a container with the mute button. */
-function measureCueRect(root: HTMLElement, video: HTMLVideoElement, cue: string): Rect | null {
-  const cueN = normCue(cue);
-  if (cueN.length < 8) return null;
-  const vr = video.getBoundingClientRect();
-  let best: Rect | null = null;
-  let bestW = 0;
-  const consider = (r: DOMRect | Rect) => {
-    if (!usableCaptionRect(r as DOMRect, vr) && !(r.width > 8 && r.height > 4 && r.height < vr.height * 0.45 && r.bottom > vr.top + vr.height * 0.45 && r.top < vr.bottom + 24)) return;
-    if (r.width > bestW) {
-      best = { left: r.left, top: r.top, width: r.width, height: r.height, bottom: r.bottom, right: r.right };
-      bestW = r.width;
-    }
-  };
-  root.querySelectorAll('span, div, p').forEach((node) => {
-    const n = node as HTMLElement;
-    if (n.closest('.ibt-x-overlay, .ibt-block')) return;
-    const t = normCue(n.textContent || '');
-    if (!captionTextMatches(t, cueN) || t.length < cueN.length - 2) return;
-    const glyphs = rangeOfCue(n, cueN);
-    if (glyphs) consider(glyphs);
-    else if (!n.querySelector('button, [role="button"]')) consider(n.getBoundingClientRect());
-  });
-  return best;
-}
-
-function rangeOfCue(root: HTMLElement, cueN: string): DOMRect | null {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let left = Infinity;
-  let top = Infinity;
-  let right = -Infinity;
-  let bottom = -Infinity;
-  let any = false;
-  let node: Node | null;
-  while ((node = walker.nextNode())) {
-    if (node.parentElement?.closest('.ibt-x-overlay, .ibt-block')) continue;
-    const raw = normCue(node.nodeValue || '');
-    if (raw.length < 2 || !cueN.includes(raw)) continue;
-    const range = document.createRange();
-    range.selectNodeContents(node);
-    for (const r of range.getClientRects()) {
-      if (r.width < 1 || r.height < 1) continue;
-      any = true;
-      left = Math.min(left, r.left);
-      top = Math.min(top, r.top);
-      right = Math.max(right, r.right);
-      bottom = Math.max(bottom, r.bottom);
-    }
-  }
-  if (!any) return null;
-  return new DOMRect(left, top, right - left, bottom - top);
-}
-
-function measureTextWidth(text: string, fontPx: number): number {
-  const probe = document.createElement('div');
-  probe.textContent = text.replace(/\n/g, ' ');
-  probe.style.cssText = `position:absolute;left:0;top:0;visibility:hidden;white-space:nowrap;width:auto;padding:0;margin:0;font-size:${fontPx}px;font-family:Arial,sans-serif`;
-  (document.body || document.documentElement).appendChild(probe);
-  const w = probe.offsetWidth;
-  probe.remove();
-  return w;
 }
 
 function placeAll(): void {

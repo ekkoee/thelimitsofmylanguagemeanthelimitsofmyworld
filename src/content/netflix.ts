@@ -2,7 +2,7 @@
 //
 // Netflix draws the current cue as DOM under .player-timedtext. There is no
 // subtitle file to intercept. We watch that layer, translate the cue through
-// the same pipeline as X, and draw Chinese just above the native line.
+// the same pipeline as X, and draw Chinese and English in one box in the native slot.
 //
 // The real player was not available (no account). Selectors are the long-lived
 // public ones, with class/data fallbacks. Set localStorage ibt-nf-debug=1 for
@@ -11,10 +11,10 @@ import { Settings, TranslateResponse } from '../core/types';
 import { sendMessage } from '../utils/runtime';
 import { el } from '../utils/dom';
 import { onUrlChange } from '../utils/observer';
-import { Rect, overlayUsedWidth, xCaptionFontPx } from './x-vtt';
+import { overlayUsedWidth, xCaptionFontPx } from './x-vtt';
 import {
   NF_CUE_SELECTOR, NF_PLAYER_SELECTOR, NF_TIMED_SELECTOR,
-  isNetflixWatch, nfHidesNative, nfOverlayBottom, nfVideoView, readNetflixCue,
+  isNetflixWatch, nfHidesNative, nfVideoView, readNetflixCue,
 } from './netflix-cap';
 
 const DEBOUNCE_MS = 140;
@@ -259,43 +259,32 @@ function place(): void {
   const cr = cap?.getBoundingClientRect();
   const cue = lastCue;
   const font = xCaptionFontPx(vr.width, vr.height, settingsRef().fontScale || 1);
-  const textWidth = measureWidth(cue.replace(/\n/g, ' '), font);
-  const videoRect: Rect = { left: vr.left, top: vr.top, width: vr.width, height: vr.height, bottom: vr.bottom, right: vr.right };
-  const layout = nfOverlayBottom({
-    video: videoRect,
-    parentBottom: fixed ? window.innerHeight : pr.bottom,
-    captionTop: cr && cr.height > 4 ? cr.top : null,
-    captionHeight: cr?.height,
-    cue,
-    textWidth,
-    fontScale: settingsRef().fontScale || 1,
-    fixed,
-    viewportHeight: window.innerHeight,
-  });
   const center = (vr.left + vr.width / 2) - (fixed ? 0 : pr.left);
   const maxW = Math.max(80, Math.round(vr.width * 0.9));
+  // Same slot as the native cue. With no text track (burned into the picture),
+  // sit at the bottom of the video instead of floating a line above it.
+  const bottom = cr && cr.height > 4
+    ? (fixed ? window.innerHeight - cr.bottom : pr.bottom - cr.bottom)
+    : Math.round((fixed ? Math.max(0, window.innerHeight - vr.bottom) : Math.max(0, pr.bottom - vr.bottom)) + Math.max(8, Math.min(24, vr.height * 0.04)));
   const s = overlay.style;
   s.setProperty('position', fixed ? 'fixed' : 'absolute', 'important');
   s.setProperty('left', `${Math.round(center)}px`, 'important');
-  s.setProperty('bottom', `${layout.bottom}px`, 'important');
+  s.setProperty('bottom', `${Math.round(bottom)}px`, 'important');
   s.setProperty('transform', 'translateX(-50%)', 'important');
   s.setProperty('margin', '0', 'important');
   s.setProperty('right', 'auto', 'important');
   s.setProperty('top', 'auto', 'important');
   s.setProperty('z-index', '4', 'important');
-  s.setProperty('font-size', `${layout.fontPx}px`, 'important');
+  s.setProperty('font-size', `${font}px`, 'important');
   s.setProperty('max-width', `${maxW}px`, 'important');
-  const key = `${cue}\n${zhEl?.textContent}\n${layout.fontPx}\n${maxW}`;
+  const key = `${cue}\n${zhEl?.textContent}\n${font}\n${maxW}`;
   if (key !== layoutKey && zhEl && enEl) {
     layoutKey = key;
-    const textW = Math.max(measureWidth(zhEl.textContent || '', layout.fontPx), measureWidth(enEl.textContent || '', layout.fontPx));
+    const textW = Math.max(measureWidth(zhEl.textContent || '', font), measureWidth(enEl.textContent || '', font));
     const used = textW > 0 ? overlayUsedWidth(textW, 20, maxW) : maxW;
     s.setProperty('width', `${used}px`, 'important');
   }
-  nfLog({
-    branch: layout.branch, bottom: layout.bottom, lines: layout.lines,
-    font: layout.fontPx, reserve: layout.reserve, fixed, cue: cue.slice(0, 80),
-  });
+  nfLog({ bottom: Math.round(bottom), font, fixed, cue: cue.slice(0, 80) });
 }
 
 function measureWidth(text: string, fontPx: number): number {
