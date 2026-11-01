@@ -66,11 +66,23 @@
 :root[data-ibt-bar="dashed"] .ibt-block { border-left-style: dashed; }
 :root[data-ibt-bar="none"] .ibt-block { border-left: 0; padding-left: 0; }
 
-/* Optional highlight. Text color is untouched. The chip is only as wide as the words. */
+/* Optional 淡底色. Text color stays as it is. Each line's tint ends at the last glyph. */
+:root[data-ibt-highlight="on"] .ibt-pair { display: block; }
+:root[data-ibt-show-original="true"][data-ibt-highlight="on"] .ibt-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+:root[data-ibt-show-original="true"][data-ibt-layout="transTop"][data-ibt-highlight="on"] .ibt-pair {
+  flex-direction: column-reverse;
+}
 :root[data-ibt-highlight="on"] .ibt-trans,
 .ibt-highlight .ibt-trans {
   display: inline;
-  padding: 0 0.18em;
+  width: auto;
+  max-width: 100%;
+  align-self: flex-start;
+  padding: 0 0.15em;
   border-radius: 0.2em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -78,7 +90,7 @@
 }
 :root[data-ibt-highlight="on"] .ibt-trans[data-ibt-on="dark"],
 .ibt-highlight .ibt-trans[data-ibt-on="dark"] {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .ibt-pair { display: flex; flex-direction: column; gap: 1px; margin: 1px 0; }

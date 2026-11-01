@@ -8,123 +8,127 @@
   <title>雙語對照 — 設定</title>
 </head>
 <body>
-  <div class="shell">
-    <header class="top">
-      <img src="icons/icon48.png" width="40" height="40" alt="" />
-      <div class="brand">
-        <h1>雙語對照</h1>
-        <p>網頁與 YouTube 字幕 <span id="version"></span></p>
+  <div class="app">
+    <aside>
+      <div class="mark">
+        <img src="icons/icon48.png" width="44" height="44" alt="" />
+        <div>
+          <strong>雙語對照</strong>
+          <em id="version"></em>
+        </div>
       </div>
       <a class="ext" href="https://github.com/ekkoee/thelimitsofmylanguagemeanthelimitsofmyworld" target="_blank" rel="noopener">原始碼</a>
-    </header>
+    </aside>
 
-    <div class="tabs" role="tablist">
-      <button type="button" class="on" data-tab="general">一般</button>
-      <button type="button" data-tab="look">外觀</button>
-      <button type="button" data-tab="advanced">進階</button>
-    </div>
+    <main>
+      <article class="reader" id="reader" data-tone="light">
+        <label class="reader-dark"><input type="checkbox" id="readerDark" /> 暗頁</label>
+        <p class="reader-en">The quiet page keeps its own color. The translation follows in the same measure.</p>
+        <div class="ibt-block">
+          <div class="ibt-trans" id="readerZh" data-ibt-on="light">安靜的頁面保留自己的顏色。譯文跟在後面，字級不變。</div>
+        </div>
+      </article>
 
-    <section data-panel="general">
-      <h2>翻譯引擎</h2>
-      <label class="field">
-        <span>引擎</span>
-        <select id="provider">
-          <option value="google">Google 翻譯</option>
-          <option value="gemini">Gemini</option>
-        </select>
-      </label>
-      <div id="geminiBlock" hidden>
+      <section data-panel="general">
+        <p class="eyebrow">一般</p>
+        <h2>怎麼翻譯</h2>
         <label class="field">
-          <span>Gemini API Key</span>
-          <input type="password" id="key_gemini" placeholder="AIza..." autocomplete="off" />
+          <span>引擎</span>
+          <select id="provider">
+            <option value="google">Google 翻譯</option>
+            <option value="gemini">Gemini</option>
+          </select>
         </label>
-        <p class="hint">免費申請：<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></p>
+        <div id="geminiBlock" hidden>
+          <label class="field">
+            <span class="key-label">Gemini API Key <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">取得金鑰</a></span>
+            <input type="password" id="key_gemini" placeholder="貼上 AIza…" autocomplete="off" spellcheck="false" />
+          </label>
+          <p id="keyNote" class="hint"></p>
+          <label class="field">
+            <span>模型</span>
+            <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
+          </label>
+        </div>
         <label class="field">
-          <span>模型</span>
-          <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
-        </label>
-      </div>
-      <label class="field">
-        <span>圖片翻譯</span>
-        <select id="imageModel">
-          <option value="local">本機辨識（免費、不限次數）</option>
-          <option value="gemini">Gemini 看圖（較準，每天約 20 次）</option>
-        </select>
-      </label>
-    </section>
-
-    <section data-panel="look" hidden>
-      <h2>譯文</h2>
-      <div class="colors">
-        <label class="field">
-          <span>譯文顏色</span>
-          <span class="color-line">
-            <input type="color" id="transColor" value="#f2d492" />
-            <button type="button" id="transColorReset" class="text-btn">預設</button>
-          </span>
-        </label>
-        <label class="field">
-          <span>左側標記</span>
-          <select id="barStyle">
-            <option value="bar">線條</option>
-            <option value="thick">粗線條</option>
-            <option value="dashed">虛線</option>
-            <option value="none">無</option>
+          <span>圖片翻譯</span>
+          <select id="imageModel">
+            <option value="local">本機辨識（免費、不限次數）</option>
+            <option value="gemini">Gemini 看圖（較準，每天約 20 次）</option>
           </select>
         </label>
         <label class="field">
-          <span>標記顏色</span>
-          <span class="color-line">
-            <input type="color" id="barColor" value="#f2d492" />
-            <button type="button" id="barColorReset" class="text-btn">預設</button>
-          </span>
+          <span>翻譯成</span>
+          <select id="lang">
+            <option value="zh-TW">繁體中文</option>
+            <option value="zh-CN">简体中文</option>
+          </select>
         </label>
-      </div>
+        <label class="field">
+          <span>字幕順序</span>
+          <select id="order">
+            <option value="zhTop">中文在上</option>
+            <option value="enTop">英文在上</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>字體大小 <b id="fontScaleVal"></b></span>
+          <input type="range" id="fontScale" min="0.8" max="1.6" step="0.05" />
+        </label>
+      </section>
 
-      <h2>譯文底色</h2>
-      <label class="field">
-        <span>底色</span>
-        <select id="transHighlight">
-          <option value="off">無</option>
-          <option value="on">半透明底色</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>亮色頁面的底色</span>
-        <span class="color-line">
-          <input type="color" id="highlightColor" value="#ffecaa" />
-          <button type="button" id="highlightColorReset" class="text-btn">預設</button>
-        </span>
-      </label>
-      <p class="hint">只加在譯文後面，不改字色。深色頁面用淡白。</p>
+      <section data-panel="look">
+        <p class="eyebrow">外觀</p>
+        <h2>譯文長什麼樣子</h2>
+        <div class="split">
+          <label class="field">
+            <span>譯文顏色</span>
+            <input type="color" id="transColor" value="#f2d492" aria-label="譯文顏色" />
+          </label>
+          <label class="field">
+            <span>左側標記</span>
+            <select id="barStyle">
+              <option value="bar">線條</option>
+              <option value="thick">粗線條</option>
+              <option value="dashed">虛線</option>
+              <option value="none">無</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>標記顏色</span>
+            <input type="color" id="barColor" value="#f2d492" aria-label="標記顏色" />
+          </label>
+        </div>
+        <label class="toggle">
+          <span>淡底色</span>
+          <span class="switch"><input type="checkbox" id="transHighlight" /><span class="slider"></span></span>
+        </label>
+        <div class="tint-live">
+          <div class="tone-light">
+            <p>The quick brown fox jumps over the lazy dog.</p>
+            <p class="line"><span class="ibt-trans" data-ibt-on="light">敏捷的棕狐跨越懶狗</span></p>
+          </div>
+          <div class="tone-dark">
+            <p>The quick brown fox jumps over the lazy dog.</p>
+            <p class="line"><span class="ibt-trans" data-ibt-on="dark">敏捷的棕狐跨越懶狗</span></p>
+          </div>
+        </div>
+      </section>
 
-      <div class="demos">
-        <article class="demo light">
-          <p class="kicker">亮色頁面</p>
-          <p class="src">The quick brown fox jumps over the lazy dog.</p>
-          <div class="ibt-block"><div class="ibt-trans" data-ibt-on="light">敏捷的棕狐跨越懶狗</div></div>
-        </article>
-        <article class="demo dark">
-          <p class="kicker">深色頁面</p>
-          <p class="src">The quick brown fox jumps over the lazy dog.</p>
-          <div class="ibt-block"><div class="ibt-trans" data-ibt-on="dark">敏捷的棕狐跨越懶狗</div></div>
-        </article>
-      </div>
-    </section>
-
-    <section data-panel="advanced" hidden>
-      <h2>劃詞</h2>
-      <label class="toggle">
-        <span>劃詞翻譯</span>
-        <span class="switch"><input type="checkbox" id="selectionTranslate" /><span class="slider"></span></span>
-      </label>
-      <label class="toggle">
-        <span>選取後立即顯示譯文</span>
-        <span class="switch"><input type="checkbox" id="selectionInstant" /><span class="slider"></span></span>
-      </label>
-    </section>
+      <section data-panel="advanced">
+        <p class="eyebrow">進階</p>
+        <h2>劃詞</h2>
+        <label class="toggle">
+          <span>劃詞翻譯</span>
+          <span class="switch"><input type="checkbox" id="selectionTranslate" /><span class="slider"></span></span>
+        </label>
+        <label class="toggle">
+          <span>選取後立即顯示譯文</span>
+          <span class="switch"><input type="checkbox" id="selectionInstant" /><span class="slider"></span></span>
+        </label>
+      </section>
+    </main>
   </div>
-  <p id="status" class="status"></p>
   <script src="options.js"></script>
 </body>
 </html>

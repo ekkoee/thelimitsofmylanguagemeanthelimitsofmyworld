@@ -61,7 +61,7 @@ function rpc(method, params = {}) {
 await rpc('Page.enable');
 await rpc('Runtime.enable');
 await rpc('Page.addScriptToEvaluateOnNewDocument', { source: `window.chrome = {
-  runtime: { getManifest: () => ({ version: '1.4.34' }), openOptionsPage() {}, sendMessage: async () => ({}) },
+  runtime: { getManifest: () => ({ version: '1.4.35' }), openOptionsPage() {}, sendMessage: async () => ({}) },
   storage: { sync: { get: async () => ({}), set: async () => {} }, onChanged: { addListener() {} } },
   tabs: { query: async () => [{ id: 1, url: 'https://example.com/story' }] },
   scripting: { executeScript: async () => {}, insertCSS: async () => {} },
@@ -84,27 +84,33 @@ async function openExt(name) {
   await rpc('Page.navigate', { url: `${dist}${name}` });
   await new Promise((r) => setTimeout(r, 450));
 }
-async function tab(name) {
-  await rpc('Runtime.evaluate', { expression: `document.querySelector('[data-tab="${name}"]')?.click()` });
-  await new Promise((r) => setTimeout(r, 150));
-}
 await scheme('light');
 await openExt('options.html');
-await shot('/opt/cursor/artifacts/options-general-light.png', 860, 780);
-await tab('look');
-await shot('/opt/cursor/artifacts/options-look-light.png', 860, 980);
-await rpc('Runtime.evaluate', { expression: `document.getElementById('transHighlight').value='on'; document.getElementById('transHighlight').dispatchEvent(new Event('change'));` });
-await new Promise((r) => setTimeout(r, 150));
-await shot('/opt/cursor/artifacts/options-look-highlight-light.png', 860, 980);
-await tab('advanced');
-await shot('/opt/cursor/artifacts/options-advanced-light.png', 860, 640);
+await shot('/opt/cursor/artifacts/options-light.png', 980, 1280);
+const measured = await rpc('Runtime.evaluate', { expression: `(() => {
+  const box = document.getElementById('transHighlight');
+  box.checked = true;
+  box.dispatchEvent(new Event('change'));
+  const light = document.querySelector('.tone-light .ibt-trans');
+  const dark = document.querySelector('.tone-dark .ibt-trans');
+  const size = (el) => {
+    const a = el.getBoundingClientRect();
+    const b = el.parentElement.getBoundingClientRect();
+    return { text: Math.round(a.width), row: Math.round(b.width) };
+  };
+  return { light: size(light), dark: size(dark) };
+})()`, returnByValue: true });
+const widths = measured?.result?.value;
+console.log('tint widths', JSON.stringify(widths));
+if (!widths || widths.light.text > widths.light.row * 0.75 || widths.dark.text > widths.dark.row * 0.75) {
+  console.error('tint still fills the row');
+  process.exitCode = 1;
+}
+await new Promise((r) => setTimeout(r, 200));
+await shot('/opt/cursor/artifacts/options-tint-preview.png', 980, 1280);
 await scheme('dark');
 await openExt('options.html');
-await shot('/opt/cursor/artifacts/options-general-dark.png', 860, 780);
-await tab('look');
-await shot('/opt/cursor/artifacts/options-look-dark.png', 860, 980);
-await tab('advanced');
-await shot('/opt/cursor/artifacts/options-advanced-dark.png', 860, 640);
+await shot('/opt/cursor/artifacts/options-dark.png', 980, 1280);
 await scheme('light');
 await openExt('popup.html');
 await shot('/opt/cursor/artifacts/popup-light.png', 360, 560);

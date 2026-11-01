@@ -19,42 +19,14 @@
   <button id="translatePage" type="button">翻譯這個網頁</button>
   <p id="ctaHint" class="hint">Alt+A 切換原文、中文、對照</p>
 
-  <section class="card">
-    <label class="field">
-      <span>翻譯成</span>
-      <select id="lang">
-        <option value="zh-TW">繁體中文</option>
-        <option value="zh-CN">简体中文</option>
-      </select>
-    </label>
-    <label class="field">
-      <span>譯文呈現</span>
-      <select id="viewMode">
-        <option value="both">原文＋中文對照</option>
-        <option value="zh">只顯示中文</option>
-        <option value="orig">只顯示原文</option>
-      </select>
-    </label>
-    <label class="field">
-      <span>字幕順序</span>
-      <select id="order">
-        <option value="zhTop">中文在上</option>
-        <option value="enTop">英文在上</option>
-      </select>
-    </label>
-    <label class="field range">
-      <span>字體大小 <b id="fontScaleVal"></b></span>
-      <input type="range" id="fontScale" min="0.8" max="1.6" step="0.05" />
-    </label>
-    <label class="field">
-      <span>翻譯引擎</span>
-      <select id="provider">
-        <option value="google">Google 翻譯</option>
-        <option value="gemini">Gemini</option>
-      </select>
-    </label>
-    <button id="keyHint" class="key-hint" type="button" hidden>尚未設定 Gemini 金鑰</button>
-  </section>
+  <label class="field">
+    <span>譯文呈現</span>
+    <select id="viewMode">
+      <option value="both">原文＋中文對照</option>
+      <option value="zh">只顯示中文</option>
+      <option value="orig">只顯示原文</option>
+    </select>
+  </label>
 
   <button id="openOptions" type="button">設定</button>
   <script src="popup.js"></script>

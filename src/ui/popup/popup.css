@@ -24,7 +24,9 @@ body {
   width: 320px;
   margin: 0;
   padding: 14px;
-  background: var(--page);
+  background:
+    linear-gradient(180deg, #8ea2ff, #6c7aff) 0 0 / 100% 3px no-repeat,
+    var(--page);
   color: var(--ink);
   font: 13px/1.4 var(--font);
 }
@@ -47,16 +49,7 @@ h1 { flex: 1; margin: 0; font-size: 15px; font-weight: 650; }
 #translatePage:disabled { opacity: 0.55; }
 .hint { margin: 8px 0 12px; color: var(--muted); font-size: 12px; text-align: center; }
 
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--card);
-}
-.field { display: flex; flex-direction: column; gap: 4px; }
+.field { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .field > span { color: var(--muted); font-size: 12px; }
 .field > span b { color: var(--ink); font-weight: 600; }
 select {
@@ -73,18 +66,19 @@ select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px
 input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0 0; }
 
 #openOptions {
+  display: block;
   width: 100%;
-  height: 32px;
-  margin-top: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
   background: transparent;
-  color: var(--ink);
+  color: var(--accent);
   font: inherit;
+  font-size: 12px;
+  text-align: center;
   cursor: pointer;
 }
-#openOptions:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
-#openOptions:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#openOptions:hover { text-decoration: underline; }
 
 .switch { position: relative; width: 36px; height: 20px; }
 .switch input { opacity: 0; width: 0; height: 0; }

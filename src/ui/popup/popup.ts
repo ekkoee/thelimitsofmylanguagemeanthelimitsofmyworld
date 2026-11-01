@@ -1,5 +1,4 @@
 import { loadSettings, saveSettings } from '../../core/storage';
-import { Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -41,42 +40,10 @@ async function init() {
     } catch { /* not scriptable */ }
   });
 
-  // language: keep the free-engine code and the LLM-prompt name in sync
-  const lang = $<HTMLSelectElement>('lang');
-  lang.value = s.targetLangCode === 'zh-CN' ? 'zh-CN' : 'zh-TW';
-  lang.addEventListener('change', () => {
-    const code = lang.value;
-    const name = code === 'zh-CN' ? 'Simplified Chinese (zh-CN)' : 'Traditional Chinese (zh-TW)';
-    saveSettings({ targetLangCode: code, targetLang: name });
-  });
-
-  bindSelect('order', s.subtitleOrder, (v) => ({
-    subtitleOrder: v as Settings['subtitleOrder'],
-    // keep the Twitter/Reddit side-by-side order in sync with the same choice
-    layout: (v === 'enTop' ? 'origTop' : 'transTop') as Settings['layout'],
-  }));
-  const provider = $<HTMLSelectElement>('provider');
-  const keyHint = $<HTMLButtonElement>('keyHint');
-  const refreshKeyHint = async (): Promise<void> => {
-    const cur = await loadSettings();
-    keyHint.hidden = !(cur.provider === 'gemini' && !(cur.apiKeys.gemini || '').trim());
-  };
-  provider.value = s.provider;
-  provider.addEventListener('change', async () => {
-    await saveSettings({ provider: provider.value as Settings['provider'] });
-    await refreshKeyHint();
-  });
-  keyHint.addEventListener('click', () => chrome.runtime.openOptionsPage());
-  await refreshKeyHint();
-
-  const font = $<HTMLInputElement>('fontScale');
-  const fontVal = $('fontScaleVal');
-  font.value = String(s.fontScale);
-  fontVal.textContent = `${s.fontScale.toFixed(2)}×`;
-  font.addEventListener('input', () => { fontVal.textContent = `${Number(font.value).toFixed(2)}×`; });
-  font.addEventListener('change', () => saveSettings({ fontScale: Number(font.value) }));
-
-  $('openOptions').addEventListener('click', () => chrome.runtime.openOptionsPage());
+  const open = $('openOptions');
+  const needsKey = s.provider === 'gemini' && !(s.apiKeys.gemini || '').trim();
+  open.textContent = needsKey ? '貼上 Gemini 金鑰' : '設定';
+  open.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
   // "翻譯這個網頁" — works even if the Alt+A shortcut isn't bound.
   const AUTO_SITE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
@@ -107,12 +74,6 @@ async function init() {
       (hint as HTMLElement).style.color = '#e06c6c';
     }
   });
-}
-
-function bindSelect(id: string, value: string, patch: (v: string) => Partial<Settings>) {
-  const sel = $<HTMLSelectElement>(id);
-  sel.value = value;
-  sel.addEventListener('change', () => saveSettings(patch(sel.value)));
 }
 
 init();
