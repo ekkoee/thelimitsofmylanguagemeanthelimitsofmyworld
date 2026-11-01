@@ -1,10 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "雙語對照翻譯 — 網頁與 YouTube 字幕",
-  "version": "1.4.3",
-  "description": "免費網頁雙語對照：原文一行、譯文一行。支援任何網頁（Alt+A）、X、Reddit 與 YouTube 雙語字幕。預設免費引擎、免 API 金鑰，繁簡中文皆可。",
+  "default_locale": "zh_TW",
+  "name": "__MSG_extName__",
+  "version": "1.5.0",
+  "description": "__MSG_extDescription__",
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
@@ -12,6 +14,7 @@
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
@@ -24,27 +27,34 @@
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
-  ],
-  "optional_host_permissions": [
-    "<all_urls>"
+    "scripting",
+    "contextMenus",
+    "offscreen"
   ],
   "host_permissions": [
     "https://x.com/*",
     "https://twitter.com/*",
     "https://www.reddit.com/*",
     "https://www.youtube.com/*",
+    "https://www.netflix.com/*",
+    "https://netflix.com/*",
     "https://translate.googleapis.com/*",
     "https://edge.microsoft.com/*",
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "https://cdn.jsdelivr.net/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "content_scripts": [
     {
       "matches": [
         "https://x.com/*",
         "https://twitter.com/*",
         "https://www.reddit.com/*",
-        "https://www.youtube.com/*"
+        "https://www.youtube.com/*",
+        "https://www.netflix.com/*",
+        "https://netflix.com/*"
       ],
       "js": [
         "content.js"
@@ -68,13 +78,41 @@
     },
     {
       "matches": [
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ],
+      "js": [
+        "x-main.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": [
         "http://*/*",
         "https://*/*"
       ],
       "js": [
         "alt-a-global.js"
       ],
-      "run_at": "document_start"
+      "css": [
+        "bilingual.css"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "alt-a-page.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "commands": {

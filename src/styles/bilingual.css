@@ -1,12 +1,24 @@
 /* Injected on X / Reddit / YouTube. Namespaced with .ibt- to avoid collisions.
    Colors inherit from the host page so it adapts to light/dark automatically. */
 
-:root { --ibt-font-scale: 1; }
+:root {
+  --ibt-font-scale: 1;
+  /* One family for every Chinese translation: YouTube captions, X video subs,
+     tweets, GitHub, LinkedIn, and other page text. The first eight names are
+     YouTube's .ytp-caption-segment stack (weight 400). "YouTube Noto" and
+     Roboto are Latin webfonts YouTube loads only on youtube.com; they have no
+     CJK, so Han walks past them. "Arial Unicode Ms" is next, and YouTube uses
+     it when Office left it installed. Otherwise Han lands on the same face
+     Chrome's zh-TW sans-serif uses on Windows: Microsoft JhengHei. PingFang TC
+     is that face on macOS. Noto Sans TC is only after those, so a Windows
+     machine that also has Noto still draws JhengHei, matching the caption. */
+  --ibt-zh-font: "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", sans-serif;
+}
 
 .ibt-block {
   margin: 4px 0 8px;
-  padding: 1px 0 1px 10px;
-  border-left: 3px solid var(--ibt-bar-color, rgba(108, 122, 255, 0.55));
+  padding: 0;
+  border: 0;
   font-size: calc(0.98rem * var(--ibt-font-scale));
   line-height: 1.5;
   color: inherit;
@@ -19,19 +31,84 @@
 .ibt-block.ibt-uni {
   display: block;
   width: 100%;
+  max-width: 100%;
   flex-basis: 100%;
   grid-column: 1 / -1;
   box-sizing: border-box;
   contain: layout;
+  position: static;
+  overflow-wrap: break-word;
   /* match the source element's size (set per-block in universal.ts) so a heading's
      translation reads as a heading; falls back to the default body size. */
   font-size: calc(var(--ibt-src-fs, 0.98rem) * var(--ibt-font-scale));
 }
+/* List-row titles (a PR title, a commit subject). A smaller muted line under the
+   title, inside the row. Not a full-width flex track and not position:absolute. */
+.ibt-block.ibt-uni.ibt-fit {
+  width: auto;
+  max-width: 100%;
+  flex: 0 0 auto;
+  flex-basis: auto;
+  grid-column: auto;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  contain: none;
+  position: static;
+  white-space: normal;
+  line-height: 1.5;
+}
 
-/* Left marker bar — user-configurable in options (style + color + hide). */
+/* Left marker. Off unless the user picks one. Default text color stays inherited. */
+:root[data-ibt-bar="bar"] .ibt-block,
+:root[data-ibt-bar="thick"] .ibt-block,
+:root[data-ibt-bar="dashed"] .ibt-block {
+  padding: 1px 0 1px 10px;
+  border-left: 3px solid var(--ibt-bar-color, #6c7aff);
+}
 :root[data-ibt-bar="thick"] .ibt-block { border-left-width: 6px; }
 :root[data-ibt-bar="dashed"] .ibt-block { border-left-style: dashed; }
 :root[data-ibt-bar="none"] .ibt-block { border-left: 0; padding-left: 0; }
+
+/* 淡底色. One span holds every glyph, including 「 。 …….
+   A little extra line-height keeps the equal padding from touching the next line. */
+:root[data-ibt-highlight="on"] .ibt-trans,
+.ibt-highlight .ibt-trans {
+  line-height: 1.65;
+}
+:root[data-ibt-highlight="on"] .ibt-trans > span,
+:root[data-ibt-highlight="on"] span.ibt-trans,
+.ibt-highlight .ibt-trans > span,
+.ibt-highlight span.ibt-trans {
+  display: inline;
+  padding: 0.16em 0.18em;
+  border-radius: 0.36em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  text-spacing-trim: trim-both;
+  font-feature-settings: "halt" 1, "chws" 1;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+:root[data-ibt-highlight="on"] .ibt-trans[data-ibt-on="light"] > span,
+:root[data-ibt-highlight="on"] span.ibt-trans[data-ibt-on="light"],
+.ibt-highlight .ibt-trans[data-ibt-on="light"] > span,
+.ibt-highlight span.ibt-trans[data-ibt-on="light"] {
+  background: rgba(255, 236, 170, 0.35);
+}
+:root[data-ibt-highlight="on"][data-ibt-tint="blue"] .ibt-trans > span { background: rgba(70, 120, 210, 0.4); }
+:root[data-ibt-highlight="on"][data-ibt-tint="blue"] .ibt-trans[data-ibt-on="light"] > span { background: rgba(186, 214, 255, 0.85); }
+:root[data-ibt-highlight="on"][data-ibt-tint="green"] .ibt-trans > span { background: rgba(40, 150, 90, 0.42); }
+:root[data-ibt-highlight="on"][data-ibt-tint="green"] .ibt-trans[data-ibt-on="light"] > span { background: rgba(186, 230, 196, 0.9); }
+:root[data-ibt-highlight="on"][data-ibt-tint="amber"] .ibt-trans > span { background: rgba(190, 130, 30, 0.42); }
+:root[data-ibt-highlight="on"][data-ibt-tint="amber"] .ibt-trans[data-ibt-on="light"] > span { background: rgba(255, 224, 160, 0.9); }
+:root[data-ibt-highlight="on"][data-ibt-tint="orange"] .ibt-trans > span { background: rgba(200, 90, 30, 0.42); }
+:root[data-ibt-highlight="on"][data-ibt-tint="orange"] .ibt-trans[data-ibt-on="light"] > span { background: rgba(255, 206, 170, 0.9); }
+:root[data-ibt-highlight="on"][data-ibt-tint="red"] .ibt-trans > span { background: rgba(190, 60, 60, 0.42); }
+:root[data-ibt-highlight="on"][data-ibt-tint="red"] .ibt-trans[data-ibt-on="light"] > span { background: rgba(255, 196, 196, 0.9); }
+:root[data-ibt-highlight="on"][data-ibt-tint="violet"] .ibt-trans > span { background: rgba(130, 80, 210, 0.42); }
+:root[data-ibt-highlight="on"][data-ibt-tint="violet"] .ibt-trans[data-ibt-on="light"] > span { background: rgba(220, 200, 255, 0.9); }
+:root[data-ibt-highlight="on"][data-ibt-tint="custom"] .ibt-trans > span { background: var(--ibt-tint-dark, rgba(255, 255, 255, 0.16)); }
+:root[data-ibt-highlight="on"][data-ibt-tint="custom"] .ibt-trans[data-ibt-on="light"] > span { background: var(--ibt-tint-light, rgba(255, 236, 170, 0.35)); }
 
 .ibt-pair { display: flex; flex-direction: column; gap: 1px; margin: 1px 0; }
 
@@ -41,14 +118,69 @@
 .ibt-orig { display: none; opacity: 0.55; font-size: 0.9em; }
 :root[data-ibt-show-original="true"] .ibt-orig { display: block; }
 
-.ibt-trans { color: var(--ibt-trans-color, #7188f5); }
+.ibt-trans { color: inherit; }
+/* Korean is written with spaces. Break there, and only split a token that
+   cannot fit. Chinese stays on the browser default (a break between characters). */
+.ibt-block:lang(ko),
+.ibt-trans:lang(ko),
+.ibt-yt-zh:lang(ko),
+.ibt-yt-line:lang(ko),
+.ibt-yt-line:lang(ko) > span,
+.ibt-sel-body:lang(ko),
+.ibt-sel-ex-zh:lang(ko),
+.ibt-img-caption:lang(ko),
+[data-preview="trans"]:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+/* Japanese keeps the default word-break and follows kinsoku. */
+.ibt-block:lang(ja),
+.ibt-trans:lang(ja),
+.ibt-yt-zh:lang(ja),
+.ibt-yt-line:lang(ja),
+.ibt-yt-line:lang(ja) > span,
+.ibt-sel-body:lang(ja),
+.ibt-sel-ex-zh:lang(ja),
+.ibt-img-caption:lang(ja),
+[data-preview="trans"]:lang(ja) {
+  line-break: strict;
+}
+:root[data-ibt-custom-color="on"] .ibt-trans { color: var(--ibt-trans-color); }
+.ibt-trans.ibt-flow { white-space: pre-line; }
+.ibt-trans .ibt-chip {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+/* Beat a host `.markdown-body *` / tweet font without !important. Weight 400
+   is the caption weight; the title (600) and the bold style (700) stay more
+   specific, so they still win. */
+.ibt-block .ibt-trans {
+  font-family: var(--ibt-zh-font);
+  font-weight: 400;
+}
 
-/* The title's translation block is projected into the title slot — give it a
-   touch more size/weight so it reads like the headline it translates. */
-.ibt-block[slot="title"] .ibt-trans { font-size: 1.25em; font-weight: 600; }
+/* Headings match the source heading's size (set on the block). Weight only —
+   a second size multiplier would draw the Chinese larger than the heading. */
+.ibt-block.ibt-heading .ibt-trans,
+.ibt-block[slot="title"] .ibt-trans { font-weight: 600; }
 
-/* When showing original too, allow flipping order (translation above original) */
+/* When showing original too, allow flipping order (translation above original).
+   A flex item blockifies an inline chip and stretches it, so the tint stays on
+   a block pair and the chip can hug each line. */
 :root[data-ibt-layout="transTop"] .ibt-pair { flex-direction: column-reverse; }
+:root[data-ibt-highlight="on"] .ibt-pair,
+:root[data-ibt-highlight="on"][data-ibt-layout="transTop"] .ibt-pair { display: block; }
+:root[data-ibt-show-original="true"][data-ibt-highlight="on"] .ibt-pair,
+:root[data-ibt-show-original="true"][data-ibt-highlight="on"][data-ibt-layout="transTop"] .ibt-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+:root[data-ibt-show-original="true"][data-ibt-highlight="on"][data-ibt-layout="transTop"] .ibt-pair {
+  flex-direction: column-reverse;
+}
 
 /* global toggle — hide every translation when the extension is disabled.
    (display:none !important is needed to override .ibt-block / .ibt-uni's display.) */
@@ -57,8 +189,254 @@
 /* loading / error states */
 .ibt-block.ibt-loading { opacity: 0.7; }
 .ibt-loading-dot { font-size: 0.85em; opacity: 0.7; }
-.ibt-block.ibt-error { border-left-color: rgba(220, 80, 80, 0.7); }
+.ibt-block.ibt-error { border-left: 0; }
 .ibt-error-msg { font-size: 0.85em; opacity: 0.85; }
+/* Image translation. Below uses .ibt-block. Overlay covers the image and does not
+   take space in the flow. Hover or hold 「原文」 to see the picture again. */
+.ibt-img-overlay {
+  position: fixed;
+  z-index: 2147483000;
+  box-sizing: border-box;
+  pointer-events: auto;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.ibt-img-block {
+  margin: 8px 0;
+  font-family: var(--ibt-zh-font);
+  line-height: 1.5;
+}
+.ibt-img-caption { color: inherit; }
+.ibt-img-panel {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 26px 10px 10px;
+  overflow: auto;
+  background: rgba(8, 8, 8, 0.96);
+  color: #f5f5f5;
+  font-family: var(--ibt-zh-font);
+  font-weight: 400;
+}
+.ibt-img-region {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: 0 1px;
+  white-space: nowrap;
+  font-family: var(--ibt-zh-font);
+  font-weight: 400;
+  line-height: 1;
+}
+.ibt-img-region.ibt-img-paragraph {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ibt-img-loading {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 2;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(8, 8, 8, 0.82);
+  color: #f5f5f5;
+  font-family: var(--ibt-zh-font);
+  font-size: 13px;
+}
+.ibt-img-bar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: flex;
+  gap: 6px;
+}
+.ibt-img-x,
+.ibt-img-peek {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #1b1f2e;
+  color: #e8eaf2;
+  font: 500 12px/1 system-ui, -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  box-shadow: inset 0 0 0 1px rgba(232, 234, 242, 0.12);
+  cursor: pointer;
+}
+.ibt-img-x:hover,
+.ibt-img-peek:hover { box-shadow: inset 0 0 0 1px #6c7aff; }
+.ibt-img-overlay.is-peek .ibt-img-panel,
+.ibt-img-overlay.is-peek .ibt-img-region { opacity: 0; }
+
+.ibt-sel-btn,
+.ibt-sel-card {
+  position: fixed;
+  z-index: 2147483646;
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+.ibt-sel-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: #151824;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(16, 20, 40, 0.22);
+  animation: ibt-sel-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ibt-sel-btn:hover { transform: scale(1.05); }
+.ibt-sel-card {
+  width: max-content;
+  min-width: 240px;
+  max-width: 360px;
+  max-height: min(440px, 72vh);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 12px 14px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  color: #1a1d29;
+  box-shadow: 0 1px 2px rgba(16, 20, 40, 0.06), 0 12px 32px rgba(16, 20, 40, 0.12);
+  animation: ibt-sel-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: 20% 0;
+}
+.ibt-sel-card.ibt-sel-dark {
+  background: #151824;
+  color: #e8eaf2;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.46);
+}
+.ibt-sel-card::-webkit-scrollbar { width: 6px; height: 6px; }
+.ibt-sel-card::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.ibt-sel-card::-webkit-scrollbar-track { background: transparent; }
+.ibt-sel-card::-webkit-scrollbar-thumb {
+  background: rgba(154, 163, 184, 0.4);
+  border-radius: 99px;
+}
+.ibt-sel-card::-webkit-scrollbar-thumb:hover { background: rgba(154, 163, 184, 0.72); }
+@supports not selector(::-webkit-scrollbar) {
+  .ibt-sel-card {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(154, 163, 184, 0.45) transparent;
+  }
+}
+.ibt-sel-card.ibt-sel-drag { animation: none; }
+@keyframes ibt-sel-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.ibt-sel-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  cursor: grab;
+  user-select: none;
+}
+.ibt-sel-card.ibt-sel-drag .ibt-sel-head { cursor: grabbing; }
+.ibt-sel-grip { display: inline-flex; flex: none; width: 16px; height: 16px; color: #8b93a7; }
+.ibt-sel-grip svg { display: block; }
+.ibt-sel-head .ibt-sel-copy { margin-left: auto; width: 28px; height: 28px; padding: 0; justify-content: center; }
+.ibt-sel-save { margin-left: 0; }
+.ibt-sel-save,
+.ibt-sel-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7287;
+  cursor: pointer;
+}
+.ibt-sel-copy,
+.ibt-sel-speak {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #6b7287;
+  cursor: pointer;
+  font: 13px/1 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  padding: 6px;
+}
+.ibt-sel-copy svg,
+.ibt-sel-speak svg,
+.ibt-sel-save svg,
+.ibt-sel-x svg { flex: none; display: block; }
+.ibt-sel-dark .ibt-sel-grip,
+.ibt-sel-dark .ibt-sel-save,
+.ibt-sel-dark .ibt-sel-x,
+.ibt-sel-dark .ibt-sel-copy,
+.ibt-sel-dark .ibt-sel-speak { color: #9aa3b8; }
+.ibt-sel-save:hover,
+.ibt-sel-x:hover,
+.ibt-sel-copy:hover,
+.ibt-sel-speak:hover { background: rgba(108, 122, 255, 0.12); color: #6c7aff; }
+.ibt-sel-dark .ibt-sel-save:hover,
+.ibt-sel-dark .ibt-sel-x:hover,
+.ibt-sel-dark .ibt-sel-copy:hover,
+.ibt-sel-dark .ibt-sel-speak:hover { background: rgba(108, 122, 255, 0.18); color: #8ea2ff; }
+.ibt-sel-save[aria-pressed="true"] {
+  background: transparent;
+  color: #6c7aff;
+}
+.ibt-sel-save[aria-pressed="true"] svg {
+  filter: drop-shadow(0 0 3px rgba(108, 122, 255, 0.55));
+}
+.ibt-sel-dark .ibt-sel-save[aria-pressed="true"] { color: #8ea2ff; }
+.ibt-sel-orig {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #6b7287;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ibt-sel-orig > span { flex: 1; min-width: 0; }
+.ibt-sel-ex { margin-top: 10px; }
+.ibt-sel-ex-label { margin-bottom: 6px; color: #9aa3b8; font-size: 12px; }
+.ibt-sel-ex-en, .ibt-sel-ex-zh { margin: 0; font-size: 13px; line-height: 1.55; }
+.ibt-sel-ex-zh { margin-top: 4px; color: #6b7287; }
+.ibt-sel-dark .ibt-sel-ex-zh { color: #9aa3b8; }
+.ibt-sel-hit { color: #6c7aff; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.ibt-sel-sk {
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 6px;
+  background: rgba(154, 163, 184, 0.28);
+}
+.ibt-sel-dark .ibt-sel-orig { color: #9aa3b8; }
+.ibt-sel-body {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 0;
+  background: #f4f6fb;
+  color: #1a1d29;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+.ibt-sel-dark .ibt-sel-body { background: #1b1f2e; color: #e8eaf2; }
+.ibt-sel-dict { margin-top: 8px; color: #6b7287; font-size: 12px; line-height: 1.45; }
+.ibt-sel-dark .ibt-sel-dict { color: #9aa3b8; }
+.ibt-sel-actions { display: flex; gap: 4px; margin-top: 8px; }
+
 .ibt-retry {
   margin-left: 8px; font-size: 0.8em; padding: 1px 8px; cursor: pointer;
   border-radius: 6px; border: 1px solid currentColor; background: transparent; color: inherit;
@@ -70,36 +448,119 @@
    FALLBACK MODE: a single Chinese line (.ibt-yt-line) injected beside YouTube's
    own on-screen caption (native NOT hidden). */
 .ibt-yt-overlay {
+  /* ONE translucent box holding both lines (Chinese + English), like YouTube's own caption window.
+     Brought over from the installed 1.4.4 build, which was not in git. */
   position: absolute;
   left: 0; right: 0;
+  margin-left: auto; margin-right: auto;
+  width: fit-content;
+  max-width: 92%;
   bottom: 8%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 0 6%;
+  gap: 1px;
+  box-sizing: border-box;
+  padding: 3px 14px;
+  border-radius: 6px;
+  background: rgba(8, 8, 8, 0.75);
   text-align: center;
   pointer-events: none;
   z-index: 60;
 }
-.ibt-yt-overlay > div {
-  display: inline-block;
-  max-width: 94%;
-  padding: 1px 8px;
-  border-radius: 3px;
-  background: rgba(8, 8, 8, 0.8);
+.ibt-yt-overlay > div,
+.ibt-x-overlay > div,
+.ibt-nf-overlay > div {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  background: none;
   color: #fff;
-  line-height: 1.32;
+  font-weight: 400;
+  line-height: 1.35;
   white-space: pre-wrap;
 }
-/* YouTube subtitles use YouTube's own caption typeface so the Chinese line looks like the native
-   captions. content.js copies the live native font into --ibt-yt-font; the stack below is only the
-   fallback until a native caption has been on screen. (The page-translation CJK font rules further
-   down deliberately do not apply here.) Weight 400 = the native caption weight. */
-.ibt-yt-overlay {
-  font-family: var(--ibt-yt-font, "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", sans-serif);
+/* Same --ibt-zh-font as page translations. On YouTube, content.js copies the live
+   caption font-family into that variable and keeps the CJK tail above. */
+.ibt-yt-overlay,
+.ibt-x-overlay,
+.ibt-nf-overlay,
+.ibt-yt-line > span {
+  font-family: var(--ibt-zh-font);
 }
-.ibt-yt-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-trans-color, #7188f5); }
+.ibt-yt-overlay .ibt-yt-zh,
+.ibt-x-overlay .ibt-yt-zh,
+.ibt-nf-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-sub-color, #fff); }
+
+/* Netflix watch captions. Same box as YouTube. Position is set from the
+   player each cue (normal window and fullscreen). */
+.ibt-nf-overlay {
+  position: absolute;
+  left: 50%;
+  width: auto;
+  max-width: 90%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 10px;
+  border-radius: 4px;
+  background: rgba(8, 8, 8, 0.75);
+  text-align: center;
+  pointer-events: none;
+  z-index: 4;
+}
+.ibt-nf-overlay > div {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+
+/* X video bilingual captions. Same single box as YouTube. Position is set from
+   the <video> box each frame (inline, expanded, fullscreen). */
+.ibt-x-overlay {
+  position: absolute;
+  left: 50%;
+  /* Width is a definite pixel length set from the video box (see place()).
+     fit-content / max-content here shrinks to the longest token once left is
+     offset, which wraps "USDC、 USDT、" one word per line on a narrow player. */
+  width: auto;
+  max-width: 90%;
+  transform: translateX(-50%);
+  bottom: 12%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 10px;
+  border-radius: 4px;
+  background: rgba(8, 8, 8, 0.75);
+  text-align: center;
+  pointer-events: none;
+  z-index: 5;
+}
+.ibt-x-overlay > div {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+.ibt-x-native-cap { visibility: hidden !important; opacity: 0 !important; }
+/* X's native CC is often the browser cue on <video>, not a DOM node we can class. */
+video.ibt-x-hide-cue::-webkit-media-text-track-container,
+video.ibt-x-hide-cue::-webkit-media-text-track-display {
+  display: none !important;
+}
+video.ibt-x-hide-cue::cue {
+  visibility: hidden;
+  opacity: 0;
+}
 
 .ibt-yt-line {
   display: block;
@@ -116,7 +577,7 @@
   padding: 0 6px;
   border-radius: 3px;
   background: rgba(8, 8, 8, 0.75);
-  color: #fff;
+  color: var(--ibt-sub-color, #fff);
   line-height: 1.3;
   font-weight: 400;
   white-space: pre-wrap;
@@ -132,6 +593,8 @@
 /* orig: hide every translation we added → only the page's own original text */
 :root[data-ibt-view="orig"] .ibt-block,
 :root[data-ibt-view="orig"] .ibt-yt-overlay,
+:root[data-ibt-view="orig"] .ibt-x-overlay,
+:root[data-ibt-view="orig"] .ibt-nf-overlay,
 :root[data-ibt-view="orig"] .ibt-yt-line { display: none !important; }
 
 /* zh: hide the original. `.ibt-orig-src` is the source element our block sits
@@ -146,8 +609,13 @@
    line-height → 0) while restoring our translation lines to a real size. */
 :root[data-ibt-view="zh"] [data-testid="tweetText"] { font-size: 0 !important; line-height: 0 !important; }
 :root[data-ibt-view="zh"] [data-testid="tweetText"] .ibt-block {
-  font-size: calc(1rem * var(--ibt-font-scale)) !important;
+  /* Size is the tweet's own computed size, set inline. Forcing 1rem here made
+     every Chinese line the same and ignored a larger title. line-height stays
+     so a font-size:0 parent cannot collapse the translation. */
   line-height: 1.5 !important;
+}
+:root[data-ibt-highlight="on"][data-ibt-view="zh"] [data-testid="tweetText"] .ibt-block {
+  line-height: 1.65 !important;
 }
 
 /* Movie mode hides YouTube's native caption while our overlay is showing
@@ -155,6 +623,8 @@
 :root[data-ibt-yt="on"]:not([data-ibt-view="orig"]) .ytp-caption-window-container { visibility: hidden !important; }
 
 :root[data-ibt-enabled="false"] .ibt-yt-overlay,
+:root[data-ibt-enabled="false"] .ibt-x-overlay,
+:root[data-ibt-enabled="false"] .ibt-nf-overlay,
 :root[data-ibt-enabled="false"] .ibt-yt-line { display: none !important; }
 
 /* Alt+A universal-mode toast */
@@ -180,19 +650,6 @@
 .ibt-toast.ibt-toast-show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* ============================================================
-   Consistent CJK font per target language (fixes mixed bold/thin
-   glyphs when the page's own font doesn't fully cover the script).
-   One complete font → every character renders the same weight. */
-:root[data-ibt-lang="zh-CN"] .ibt-trans {
-  font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
-    "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", sans-serif;
-}
-:root[data-ibt-lang="zh-TW"] .ibt-trans {
-  font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC",
-    "Source Han Sans TC", "Segoe UI", sans-serif;
-}
-
-/* ============================================================
    Translated-text display styles (chosen in the options page).
    Applied to page/Reddit translations (.ibt-trans) and the
    YouTube movie-mode Chinese line (.ibt-yt-zh). */
@@ -210,7 +667,7 @@
 }
 :root[data-ibt-style="wavy"] .ibt-trans,
 :root[data-ibt-style="wavy"] .ibt-yt-zh {
-  text-decoration: underline wavy; text-decoration-color: rgba(108,122,255,0.9); text-underline-offset: 3px;
+  text-decoration: underline wavy; text-decoration-color: currentColor; text-underline-offset: 3px;
 }
 :root[data-ibt-style="solidBox"] .ibt-trans,
 :root[data-ibt-style="solidBox"] .ibt-yt-zh {
@@ -224,7 +681,7 @@
   background: rgba(255, 214, 10, 0.30); border-radius: 3px; padding: 0 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone;
 }
 :root[data-ibt-style="highlight"] .ibt-yt-zh {
-  background: rgba(255, 214, 10, 0.45) !important; color: #111 !important;
+  background: rgba(255, 214, 10, 0.45) !important;
 }
 :root[data-ibt-style="dim"] .ibt-trans,
 :root[data-ibt-style="dim"] .ibt-yt-zh { opacity: 0.6; }

@@ -1,8 +1,10 @@
 import { AlignedPair, Settings, TranslateBatchResponse, TranslateResponse } from '../core/types';
 import { SELECTORS, queryFirst } from './selectors';
 import { onUrlChange } from '../utils/observer';
+import { langTag } from '../core/lang-tag';
 import { el } from '../utils/dom';
 import { extensionAlive, isContextGoneError, sendMessage } from '../utils/runtime';
+import { xCaptionFontPx } from './x-vtt';
 
 const ROOT_FLAG = 'data-ibt-yt';
 const SETTLE_MS = 180;
@@ -13,6 +15,16 @@ const CHUNK = 16;               // normal refill: at most this many cues per req
 const URGENT_CHUNK = 4;         // the cue on screen right now: tiny request so it shows fast
 const REFILL_BELOW = 12;        // only ask for more once the translated runway drops below this
 const AHEAD_THROTTLE_MS = 400;
+// Faces after YouTube's Latin stack. Must stay in this order: JhengHei is the
+// Windows zh-TW face the caption actually draws; Noto is only a later fallback.
+const ZH_CJK_TAIL = '"Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", sans-serif';
+
+export function withCjkTail(specified: string): string {
+  const ff = specified.trim().replace(/;$/, '');
+  if (/Microsoft JhengHei/i.test(ff)) return ff;
+  if (/sans-serif\s*$/i.test(ff)) return ff.replace(/sans-serif\s*$/i, ZH_CJK_TAIL);
+  return `${ff}, ${ZH_CJK_TAIL}`;
+}
 
 interface Word { t: number; w: string }
 interface Cue {
@@ -333,7 +345,33 @@ class TrackCaptions {
       if (t && this.zhEl && this.zhEl.textContent !== t) this.setZh(t);
     }
     this.flag(this.everShown); // hide native only once we've shown a cue
+    if (idx >= 0) this.place();
   };
+
+  /** One box on the video picture, not on the player's letterbox. */
+  private place(): void {
+    const v = this.video();
+    if (!v || !this.overlay) return;
+    const vr = v.getBoundingClientRect();
+    if (vr.width < 20 || vr.height < 20) return;
+    const fixed = document.fullscreenElement === v;
+    const pr = this.player.getBoundingClientRect();
+    const parentBottom = fixed ? window.innerHeight : pr.bottom;
+    const letterbox = Math.max(0, parentBottom - vr.bottom);
+    const bottom = Math.round(letterbox + Math.max(8, Math.min(28, vr.height * 0.04)));
+    const center = (vr.left + vr.width / 2) - (fixed ? 0 : pr.left);
+    const size = xCaptionFontPx(vr.width, vr.height, this.settings.fontScale || 1);
+    const s = this.overlay.style;
+    s.setProperty('position', fixed ? 'fixed' : 'absolute', 'important');
+    s.setProperty('left', `${Math.round(center)}px`, 'important');
+    s.setProperty('bottom', `${bottom}px`, 'important');
+    s.setProperty('transform', 'translateX(-50%)', 'important');
+    s.setProperty('right', 'auto', 'important');
+    s.setProperty('top', 'auto', 'important');
+    s.setProperty('max-width', `${Math.round(vr.width * 0.9)}px`, 'important');
+    if (this.zhEl) this.zhEl.style.fontSize = `${size}px`;
+    if (this.enEl) this.enEl.style.fontSize = `${size}px`;
+  }
 
   private findCue(ms: number): number {
     const c = this.cues;
@@ -418,12 +456,16 @@ class TrackCaptions {
   }
 
   private applyFont(): void {
-    const base = Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
+    const v = this.video();
+    const vr = v?.getBoundingClientRect();
+    const base = vr && vr.width > 20
+      ? xCaptionFontPx(vr.width, vr.height, 1)
+      : Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
     const size = Math.round(base * this.settings.fontScale);
     if (this.enEl) this.enEl.style.fontSize = `${size}px`;
     if (this.zhEl) {
       this.zhEl.style.fontSize = `${size}px`;
-      this.zhEl.lang = this.settings.targetLangCode || 'zh-TW';
+      this.zhEl.lang = langTag(this.settings.targetLangCode);
     }
     this.syncNativeFont();
   }
@@ -439,7 +481,9 @@ class TrackCaptions {
     const ff = getComputedStyle(seg).fontFamily;
     if (ff && ff !== this.nativeFont) {
       this.nativeFont = ff;
-      this.overlay.style.setProperty('--ibt-yt-font', ff);
+      // Page translations on this tab share the caption stack. Keep the CJK
+      // tail so Han still resolves to Microsoft JhengHei after the Latin faces.
+      document.documentElement.style.setProperty('--ibt-zh-font', withCjkTail(ff));
     }
   }
 
@@ -539,7 +583,13 @@ class DomCaptions {
     return (tb?.parentElement as HTMLElement) || win;
   }
   private ensureLine(win: HTMLElement): void {
-    if (!this.lineEl) { this.lineEl = el('div', 'ibt-yt-line'); this.spanEl = el('span'); this.lineEl.appendChild(this.spanEl); }
+    if (!this.lineEl) {
+      this.lineEl = el('div', 'ibt-yt-line');
+      this.spanEl = el('span');
+      this.lineEl.lang = langTag(this.settings.targetLangCode);
+      this.spanEl.lang = this.lineEl.lang;
+      this.lineEl.appendChild(this.spanEl);
+    }
     const host = this.host(win);
     if (this.lineEl.isConnected && this.lineEl.parentElement === host) return;
     const tb = win.querySelector('.captions-text') as HTMLElement | null;
@@ -548,6 +598,9 @@ class DomCaptions {
   }
   private applyFont(): void {
     if (!this.spanEl) return;
+    const tag = langTag(this.settings.targetLangCode);
+    this.spanEl.lang = tag;
+    if (this.lineEl) this.lineEl.lang = tag;
     const base = Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
     this.spanEl.style.fontSize = `${Math.round(base * this.settings.fontScale)}px`;
   }

@@ -1,81 +1,74 @@
+import { normalizeGeminiKey } from '../../core/gemini-key';
+import { UI_FIXED, applyI18n, setUiLang, t, watchUiLang } from '../../core/i18n';
 import { loadSettings, saveSettings } from '../../core/storage';
-import { Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 async function init() {
   const s = await loadSettings();
+  setUiLang(s.uiLang || '');
+  applyI18n();
+  watchUiLang();
+  bindUiLang(s.uiLang || '');
 
   const enabled = $<HTMLInputElement>('enabled');
   enabled.checked = s.enabled;
   enabled.addEventListener('change', () => saveSettings({ enabled: enabled.checked }));
 
-  // 譯文呈現 — mirrors the page's CURRENT 3-state view and sets it on change.
-  // Read/write <html data-ibt-view> on the active tab so the popup always shows
-  // the real state (and stays in sync after Alt+A cycling).
+  // 譯文呈現. The value lives in chrome.storage. Reading it off the page
+  // showed "bilingual" after every reload, because nothing had saved the choice
+  // and the page default is bilingual. An empty stored value is "never chosen":
+  // on X the video default is Chinese-only (native CC already has the English).
   const viewMode = $<HTMLSelectElement>('viewMode');
-  const activeTabId = async (): Promise<number | undefined> => {
+  const activeTab = async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tab?.id;
+    return tab;
   };
-  const tabId = await activeTabId();
-  if (tabId != null) {
-    try {
-      const [res] = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => document.documentElement.getAttribute('data-ibt-view') || 'both',
-      });
-      if (res?.result) viewMode.value = String(res.result);
-    } catch { /* page not scriptable (chrome://, store) — keep default */ }
-  }
+  const tab = await activeTab();
+  const onX = !!tab?.url && /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com)\//i.test(tab.url);
+  // Unset view: X video and a Netflix watch page default to Chinese-only because
+  // the native captions already show the original. Browse pages stay bilingual.
+  const onNfWatch = !!tab?.url && /^https?:\/\/([^/]*\.)?netflix\.com\/watch\/\d+/i.test(tab.url);
+  const chosen = s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '';
+  viewMode.value = chosen || (onX || onNfWatch ? 'zh' : 'both');
   viewMode.addEventListener('change', async () => {
-    const id = await activeTabId();
+    const v = viewMode.value;
+    if (v !== 'zh' && v !== 'both' && v !== 'orig') return;
+    await saveSettings({ viewMode: v });
+    const id = (await activeTab())?.id;
     if (id == null) return;
     try {
       await chrome.scripting.executeScript({
         target: { tabId: id },
-        func: (v: string) => document.documentElement.setAttribute('data-ibt-view', v),
-        args: [viewMode.value],
+        func: (mode: string) => document.documentElement.setAttribute('data-ibt-view', mode),
+        args: [v],
       });
     } catch { /* not scriptable */ }
   });
 
-  // language: keep the free-engine code and the LLM-prompt name in sync
   const lang = $<HTMLSelectElement>('lang');
-  lang.value = s.targetLangCode === 'zh-CN' ? 'zh-CN' : 'zh-TW';
+  const codes = [...lang.options].map((opt) => opt.value);
+  lang.value = codes.includes(s.targetLangCode) ? s.targetLangCode : 'zh-TW';
   lang.addEventListener('change', () => {
-    const code = lang.value;
-    const name = code === 'zh-CN' ? 'Simplified Chinese (zh-CN)' : 'Traditional Chinese (zh-TW)';
-    saveSettings({ targetLangCode: code, targetLang: name });
+    const names: Record<string, string> = {
+      'zh-TW': 'Traditional Chinese (zh-TW)',
+      'zh-CN': 'Simplified Chinese (zh-CN)',
+      en: 'English',
+      ja: 'Japanese',
+      ko: 'Korean',
+      es: 'Spanish',
+      fr: 'French',
+      de: 'German',
+    };
+    void saveSettings({ targetLangCode: lang.value, targetLang: names[lang.value] || lang.value });
   });
 
-  bindSelect('order', s.subtitleOrder, (v) => ({
-    subtitleOrder: v as Settings['subtitleOrder'],
-    // keep the Twitter/Reddit side-by-side order in sync with the same choice
-    layout: (v === 'enTop' ? 'origTop' : 'transTop') as Settings['layout'],
-  }));
-  const provider = $<HTMLSelectElement>('provider');
-  const keyHint = $<HTMLButtonElement>('keyHint');
-  const refreshKeyHint = async (): Promise<void> => {
-    const cur = await loadSettings();
-    keyHint.hidden = !(cur.provider === 'gemini' && !(cur.apiKeys.gemini || '').trim());
-  };
-  provider.value = s.provider;
-  provider.addEventListener('change', async () => {
-    await saveSettings({ provider: provider.value as Settings['provider'] });
-    await refreshKeyHint();
-  });
-  keyHint.addEventListener('click', () => chrome.runtime.openOptionsPage());
-  await refreshKeyHint();
-
-  const font = $<HTMLInputElement>('fontScale');
-  const fontVal = $('fontScaleVal');
-  font.value = String(s.fontScale);
-  fontVal.textContent = `${s.fontScale.toFixed(2)}×`;
-  font.addEventListener('input', () => { fontVal.textContent = `${Number(font.value).toFixed(2)}×`; });
-  font.addEventListener('change', () => saveSettings({ fontScale: Number(font.value) }));
-
-  $('openOptions').addEventListener('click', () => chrome.runtime.openOptionsPage());
+  const open = $('openOptions');
+  const needsKey = s.provider === 'gemini' && !normalizeGeminiKey(s.apiKeys.gemini);
+  const openKey = needsKey ? 'pasteGemini' : 'settings';
+  open.dataset.i18n = openKey;
+  open.textContent = t(openKey);
+  open.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
   // "翻譯這個網頁" — works even if the Alt+A shortcut isn't bound.
   const AUTO_SITE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
@@ -90,21 +83,67 @@ async function init() {
       window.close();
       return;
     }
+    // The content script is already on http(s) pages (including LinkedIn).
+    // Ask it first. Inject only if that script is missing.
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: 'ibt-toggle-page' });
+      window.close();
+      return;
+    } catch { /* no receiver — fall through to injection */ }
     try {
       await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['bilingual.css'] });
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['universal-inject.js'] });
       window.close();
     } catch {
-      hint.textContent = '這個頁面無法翻譯（例如 chrome:// 或商店頁）';
+      hint.dataset.i18n = 'pageBlocked';
+      hint.textContent = t('pageBlocked');
       (hint as HTMLElement).style.color = '#e06c6c';
     }
   });
 }
 
-function bindSelect(id: string, value: string, patch: (v: string) => Partial<Settings>) {
-  const sel = $<HTMLSelectElement>(id);
-  sel.value = value;
-  sel.addEventListener('change', () => saveSettings(patch(sel.value)));
+function bindUiLang(pref: string): void {
+  const btn = $<HTMLButtonElement>('uiLangBtn');
+  const pop = $('uiLangPop');
+  let current = pref;
+  const paint = () => {
+    pop.replaceChildren();
+    const choices: { id: string; name: string }[] = [{ id: '', name: t('uiLangAuto') }, ...UI_FIXED];
+    for (const item of choices) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.role = 'option';
+      row.textContent = item.name;
+      row.setAttribute('aria-checked', item.id === current ? 'true' : 'false');
+      row.addEventListener('click', () => {
+        current = item.id;
+        void saveSettings({ uiLang: item.id });
+        setUiLang(item.id);
+        applyI18n();
+        paint();
+        pop.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+      });
+      pop.appendChild(row);
+    }
+  };
+  paint();
+  btn.addEventListener('click', () => {
+    pop.hidden = !pop.hidden;
+    btn.setAttribute('aria-expanded', pop.hidden ? 'false' : 'true');
+    if (!pop.hidden) paint();
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (pop.hidden) return;
+    if ((event.target as Node | null) && btn.parentElement?.contains(event.target as Node)) return;
+    pop.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || pop.hidden) return;
+    pop.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  });
 }
 
 init();

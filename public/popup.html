@@ -4,67 +4,51 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="popup.css" />
-  <title>雙語對照</title>
+  <title data-i18n="appName">雙語對照</title>
 </head>
 <body>
   <header>
-    <strong>雙語對照</strong>
+    <img src="icons/icon48.png" width="28" height="28" alt="" />
+    <h1 data-i18n="appName">雙語對照</h1>
+    <div class="ui-lang">
+      <button type="button" id="uiLangBtn" aria-haspopup="listbox" aria-expanded="false" data-i18n-aria="uiLang" aria-label="介面語言">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 4c2.2 2.4 3.3 5 3.3 8s-1.1 5.6-3.3 8c-2.2-2.4-3.3-5-3.3-8s1.1-5.6 3.3-8zM4.5 12h15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+      <div id="uiLangPop" class="ui-lang-pop" role="listbox" hidden></div>
+    </div>
     <label class="switch">
-      <input type="checkbox" id="enabled" />
+      <input type="checkbox" id="enabled" data-i18n-aria="enable" aria-label="啟用翻譯" />
       <span class="slider"></span>
     </label>
   </header>
 
-  <div class="cta">
-    <button id="translatePage">🌐 翻譯這個網頁</button>
-    <div id="ctaHint" class="cta-hint">也可按 Alt+A 循環切換：原文 → 只中文 → 原文+中文</div>
-  </div>
+  <button id="translatePage" type="button" data-i18n="translatePage">翻譯這個網頁</button>
+  <p id="ctaHint" class="hint" data-i18n="altHint">Alt+A 切換原文、譯文、對照</p>
 
-  <section>
-    <div class="row">
-      <label for="lang">翻譯成</label>
-      <select id="lang">
-        <option value="zh-TW">繁體中文</option>
-        <option value="zh-CN">简体中文</option>
-      </select>
-    </div>
+  <label class="field">
+    <span data-i18n="translateTo">翻譯成</span>
+    <select id="lang">
+      <option value="zh-TW">繁體中文</option>
+      <option value="zh-CN">简体中文</option>
+      <option value="en">English</option>
+      <option value="ja">日本語</option>
+      <option value="ko">한국어</option>
+      <option value="es">Español</option>
+      <option value="fr">Français</option>
+      <option value="de">Deutsch</option>
+    </select>
+  </label>
 
-    <div class="row">
-      <label for="viewMode">譯文呈現</label>
-      <select id="viewMode">
-        <option value="both">原文＋中文對照</option>
-        <option value="zh">只顯示中文</option>
-        <option value="orig">只顯示原文（關閉譯文）</option>
-      </select>
-    </div>
+  <label class="field">
+    <span data-i18n="viewLabel">譯文呈現</span>
+    <select id="viewMode">
+      <option value="both" data-i18n="viewBoth">原文 + 譯文對照</option>
+      <option value="zh" data-i18n="viewTrans">只顯示譯文</option>
+      <option value="orig" data-i18n="viewOrig">只顯示原文</option>
+    </select>
+  </label>
 
-    <div class="row">
-      <label for="order">字幕順序</label>
-      <select id="order">
-        <option value="zhTop">中文在上</option>
-        <option value="enTop">英文在上</option>
-      </select>
-    </div>
-
-    <div class="row">
-      <label for="fontScale">字體大小</label>
-      <input type="range" id="fontScale" min="0.8" max="1.6" step="0.05" />
-      <span id="fontScaleVal" class="muted"></span>
-    </div>
-
-    <div class="row">
-      <label for="provider">翻譯引擎</label>
-      <select id="provider">
-        <option value="google">Google 翻譯（免費）</option>
-        <option value="gemini">Gemini（需 API key）</option>
-      </select>
-    </div>
-    <button id="keyHint" class="key-hint" hidden>尚未設定 Gemini API key，點此前往設定 →</button>
-  </section>
-
-  <footer>
-    <button id="openOptions">更多設定 →</button>
-  </footer>
+  <button id="openOptions" type="button" data-i18n="settings">設定</button>
   <script src="popup.js"></script>
 </body>
 </html>

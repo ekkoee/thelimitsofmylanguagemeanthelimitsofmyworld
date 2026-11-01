@@ -31,6 +31,15 @@ export const SELECTORS = {
   },
 } as const;
 
+/** X paints source chips, clocks, and captions inside these. Not tweet text. */
+export const X_PLAYER_SELECTOR = '[data-testid="videoPlayer"], [data-testid="videoComponent"]';
+
+export function insideXVideo(node: Node | null | undefined): boolean {
+  if (!node) return false;
+  const el = node.nodeType === 1 ? (node as Element) : node.parentElement;
+  return !!el?.closest(X_PLAYER_SELECTOR);
+}
+
 export function queryFirst(selectors: readonly string[], root: ParentNode = document): Element[] {
   for (const sel of selectors) {
     const found = root.querySelectorAll(sel);
@@ -52,6 +61,8 @@ export interface SiteRule {
   match: RegExp;
   /** Drop any generic unit whose element is inside one of these (UI chrome only). */
   exclude?: string;
+  /** Content that should still be translated even when it is only a short title. */
+  include?: string;
 }
 
 export const SITE_RULES: SiteRule[] = [
@@ -72,6 +83,66 @@ export const SITE_RULES: SiteRule[] = [
     // scoping (keeps the right-hand About panel translatable too).
     match: /(^|\.)facebook\.com$/,
     exclude: '[role="button"],[role="toolbar"],[role="menu"],[role="menuitem"]',
+  },
+  {
+    // GitHub. The generic gate already skips buttons and short labels. This drops
+    // the app header, search, and Copilot composer chrome, and keeps README /
+    // issue / commit text even when the title is short.
+    match: /(^|\.)github\.com$/,
+    exclude: [
+      'header', 'nav', 'footer',
+      '.AppHeader', '.js-header-wrapper', '.Header',
+      'qbsearch-input', '[role="search"]', '.AppHeader-search',
+      '.copilot-chat-input', 'form.js-site-search-form',
+    ].join(','),
+    include: [
+      '.markdown-body', '.js-issue-title', '.gh-header-title', '.markdown-title',
+      '.comment-body', '.js-comment-body', '.review-comment',
+      '.commit-title', '.commit-desc', '.commit-message',
+      '[itemprop="description"]',
+    ].join(','),
+  },
+  {
+    // LinkedIn feed. Nav, the share box, and the Like/Comment bar are chrome.
+    // Post bodies and comments stay in the generic prose path.
+    match: /(^|\.)linkedin\.com$/,
+    exclude: [
+      'header', 'nav', 'footer',
+      '.global-nav', '.scaffold-layout__aside',
+      '.share-box-feed-entry__wrapper', '.share-creation-state',
+      '.social-actions', '.feed-shared-social-action-bar',
+      '.comments-comment-social-bar',
+      '.feed-shared-see-translation-button',
+      '[class*="see-translation"]',
+      '[data-test-id*="translation"]',
+    ].join(','),
+    include: [
+      '.update-components-text', '.feed-shared-update-v2__description',
+      '.feed-shared-inline-show-more-text', '.comments-comment-item__main-content',
+      '[data-test-id="main-feed-activity-card__commentary"]',
+      '.attributed-text-segment-list__content',
+    ].join(','),
+  },
+  {
+    // Threads. Post text is a block span; nav and the header chrome are not.
+    // The「翻譯」widget is stripped in blocks.ts so it does not split the post.
+    match: /(^|\.)threads\.(com|net)$/,
+    exclude: [
+      'header', 'nav', 'footer',
+      '[role="banner"]', '[role="navigation"]',
+    ].join(','),
+  },
+  {
+    // Netflix player chrome and the timed-text layer. Browse titles stay on the
+    // generic page path. The video overlay is drawn separately.
+    match: /(^|\.)netflix\.com$/,
+    exclude: [
+      '.watch-video', '[data-uia="watch-video"]', '.watch-video--player-view',
+      '.player-timedtext', '[data-uia="player-timedtext"]', '[data-uia="player"]',
+      '.NFPlayer', '.nf-player-container', '.AkiraPlayer',
+      '.PlayerControlsNeo__layout', '[data-uia="controls-standard"]',
+      '[data-uia="player-controls"]',
+    ].join(','),
   },
 ];
 

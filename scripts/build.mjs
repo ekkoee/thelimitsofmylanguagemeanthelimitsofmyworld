@@ -11,12 +11,18 @@ mkdirSync(outdir, { recursive: true });
 // Static assets copied verbatim into dist/
 const copies = [
   ['public/manifest.json', 'dist/manifest.json'],
+  ['public/_locales', 'dist/_locales'],
   ['public/popup.html', 'dist/popup.html'],
   ['public/options.html', 'dist/options.html'],
   ['src/ui/popup/popup.css', 'dist/popup.css'],
   ['src/ui/options/options.css', 'dist/options.css'],
   ['src/styles/bilingual.css', 'dist/bilingual.css'],
   ['public/icons', 'dist/icons'],
+  ['public/offscreen.html', 'dist/offscreen.html'],
+  ['node_modules/tesseract.js/dist/tesseract.min.js', 'dist/ocr/tesseract.min.js'],
+  ['node_modules/tesseract.js/dist/worker.min.js', 'dist/ocr/worker.min.js'],
+  ['public/ocr/worker-quiet.js', 'dist/ocr/worker-quiet.js'],
+  ['node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js', 'dist/ocr/core/tesseract-core-simd-lstm.wasm.js'],
 ];
 function copyAll() {
   for (const [from, to] of copies) {
@@ -39,8 +45,12 @@ const shared = {
 const iifeEntries = {
   'content': 'src/content/index.ts',
   'alt-a-global': 'src/content/alt-a-global.ts',
+  'alt-a-page': 'src/content/alt-a-page.ts',
   'yt-main': 'src/content/yt-main.ts',
+  'x-main': 'src/content/x-main.ts',
   'universal-inject': 'src/content/universal-inject.ts',
+  'image-inject': 'src/content/image-inject.ts',
+  'offscreen': 'src/ocr/offscreen.ts',
   'popup': 'src/ui/popup/popup.ts',
   'options': 'src/ui/options/options.ts',
 };

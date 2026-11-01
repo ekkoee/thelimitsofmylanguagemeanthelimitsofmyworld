@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings } from '../core/storage';
+import { loadSettings } from '../core/storage';
 import { cacheKey, getCached, putCached } from '../core/cache';
 import { paraphraseForMT } from '../core/paraphrase';
 import { TaskQueue } from '../core/queue';
@@ -7,8 +7,12 @@ import { segment } from '../core/segmentation';
 import { findTermMatches, lookupGlossary, TermMatch } from '../core/glossary';
 import { toTraditional } from '../core/st2t';
 import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
-import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
+import { friendlyTranslateError } from '../core/errors';
+import { setUiLang, t } from '../core/i18n';
+import { echoesEnglish, shouldSkipImageText, translateImageSequential } from '../providers/gemini-image';
+import { normalizeGeminiKey } from '../core/gemini-key';
+import { bindQuota, emptyQuotaState, fingerprintKey, migrateQuotaState, quotaForKey, setQuotaAlign, setQuotaReady, QuotaState } from '../core/quota-router';
 
 const queue = new TaskQueue(4);
 
@@ -34,6 +38,13 @@ let lastLLMStart = 0;
 /** Space LLM request starts (free-tier RPM protection). Only waits when the
  *  previous request started less than the current spacing ago — the first
  *  batch after idle goes immediately instead of paying a gratuitous wait. */
+let imageGate: Promise<void> = Promise.resolve();
+function withImageLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = imageGate.then(fn, fn);
+  imageGate = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 function paceLLM(): Promise<void> {
   if (Date.now() > llmCalmAt) llmSpacing = LLM_SPACING_FAST_MS;
   const wait = llmSpacing - (Date.now() - lastLLMStart);
@@ -78,26 +89,85 @@ const llmBatcher = new LlmBatcher({
   })))),
 }, { windowMs: 60, maxSentences: 10, maxChars: 1600 });
 
-chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); });
-chrome.runtime.onStartup.addListener(() => { reconcileDblClick(); });
-
-// If the user revokes <all_urls> from chrome://extensions, drop the dynamic
-// registration and flip the setting off so state stays consistent (least privilege).
-chrome.permissions.onRemoved.addListener((p) => {
-  if (p.origins?.includes('<all_urls>')) {
-    unregisterDblClick();
-    saveSettings({ dblClickTranslate: false });
-  }
+const QUOTA_KEY = 'ibt_quota';
+let quotaState: QuotaState = emptyQuotaState();
+function persistQuota(): void {
+  void chrome.storage.local.set({ [QUOTA_KEY]: quotaState });
+}
+function bindCurrentQuota(): void {
+  bindQuota({ state: quotaState, persist: persistQuota });
+}
+const quotaReady = chrome.storage.local.get(QUOTA_KEY).then((raw) => {
+  const saved = raw?.[QUOTA_KEY];
+  quotaState = migrateQuotaState(saved);
+  if (saved && !(saved as { keyId?: string }).keyId) persistQuota();
+  bindCurrentQuota();
+}).catch(() => {
+  bindCurrentQuota();
+});
+setQuotaReady(quotaReady);
+setQuotaAlign(async (key) => {
+  await quotaReady;
+  const id = await fingerprintKey(key);
+  const next = quotaForKey(quotaState, id);
+  if (next === quotaState) return;
+  quotaState = next;
+  persistQuota();
+  bindCurrentQuota();
 });
 
-// On install/startup, make the dynamic registration match the saved setting + the
-// permission we actually still hold (the permission persists across restarts, but
-// re-asserting registration is cheap insurance).
-async function reconcileDblClick(): Promise<void> {
-  const s = await loadSettings();
-  if (!s.dblClickTranslate) return;
-  if (await hasAllUrls()) await registerDblClick();
-  else await saveSettings({ dblClickTranslate: false }); // permission gone → setting can't be on
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync' || !changes.ibt_settings) return;
+  const prevLang = (changes.ibt_settings.oldValue as { uiLang?: string } | undefined)?.uiLang || '';
+  const nextLang = (changes.ibt_settings.newValue as { uiLang?: string } | undefined)?.uiLang || '';
+  if (prevLang !== nextLang) void ensureImageMenu();
+  const prevBag = changes.ibt_settings.oldValue as { apiKeys?: { gemini?: string } } | undefined;
+  const nextBag = changes.ibt_settings.newValue as { apiKeys?: { gemini?: string } } | undefined;
+  const prev = normalizeGeminiKey(prevBag?.apiKeys?.gemini || '');
+  const nextKey = normalizeGeminiKey(nextBag?.apiKeys?.gemini || '');
+  if (prev === nextKey) return;
+  void fingerprintKey(nextKey).then((id) => {
+    quotaState = quotaForKey(quotaState, id);
+    persistQuota();
+    bindCurrentQuota();
+  });
+});
+
+chrome.runtime.onInstalled.addListener(() => { loadSettings(); void ensureImageMenu(); });
+chrome.runtime.onStartup.addListener(() => { void ensureImageMenu(); });
+void ensureImageMenu();
+
+async function ensureImageMenu(): Promise<void> {
+  const settings = await loadSettings().catch(() => null);
+  setUiLang(settings?.uiLang || '');
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'ibt-translate-image',
+      title: t('contextImage'),
+      contexts: ['image'],
+    }, () => void chrome.runtime.lastError);
+  });
+}
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (!tab?.id) return;
+  if (info.menuItemId !== 'ibt-translate-image') return;
+  void deliverImageClick(tab.id, info.srcUrl || '');
+});
+
+async function deliverImageClick(tabId: number, srcUrl: string): Promise<void> {
+  const send = () => chrome.tabs.sendMessage(tabId, { type: 'ibt-image', srcUrl });
+  try {
+    await send();
+    return;
+  } catch { /* the page has no content script yet */ }
+  try {
+    await chrome.scripting.insertCSS({ target: { tabId }, files: ['bilingual.css'] });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['image-inject.js'] });
+    await send();
+  } catch (err) {
+    console.log('[IBT] image inject failed', err);
+  }
 }
 
 // Alt+A command. Granted activeTab for the tab where it was pressed, so we can
@@ -114,8 +184,18 @@ async function handleAltA(tab: chrome.tabs.Tab | undefined): Promise<void> {
     return;
   }
   try {
+    // Prefer the content script already on the page (LinkedIn included).
+    // The listener calls sendResponse; a missing script rejects instead.
+    await chrome.tabs.sendMessage(tab.id, { type: 'ibt-toggle-page' });
+    console.log('[IBT] command delivered to content script', tab.url);
+    return;
+  } catch (err) {
+    console.log('[IBT] command message failed', tab.url, err);
+  }
+  try {
     await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['bilingual.css'] });
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['universal-inject.js'] });
+    console.log('[IBT] command inject fallback', tab.url);
   } catch (e) {
     console.log('[IBT] inject skipped:', e);
   }
@@ -131,14 +211,41 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
   if (msg?.type === 'translate') {
     handleTranslate(msg.text, { title: msg.title, mode: msg.mode })
       .then((pairs) => sendResponse({ ok: true, pairs } satisfies TranslateResponse))
-      .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateResponse));
+      .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'page') } satisfies TranslateResponse));
     return true; // async response
   }
   if (msg?.type === 'translateBatch') {
     handleTranslateBatch(msg.texts)
       .then((translations) => sendResponse({ ok: true, translations } satisfies TranslateBatchResponse))
-      .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateBatchResponse));
+      .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'page') } satisfies TranslateBatchResponse));
     return true; // async response
+  }
+  if (msg?.type === 'ibt-fetch-image') {
+    fetchImageBytes(msg.url)
+      .then((got) => sendResponse(got ? { ok: true, ...got } : { ok: false }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg?.type === 'ibt-capture-tab') {
+    const windowId = _sender.tab?.windowId;
+    chrome.tabs.captureVisibleTab(windowId ?? chrome.windows.WINDOW_ID_CURRENT, { format: 'png' }, (dataUrl) => {
+      const err = chrome.runtime.lastError;
+      if (err || !dataUrl) sendResponse({ ok: false, error: err?.message || 'capture failed' });
+      else sendResponse({ ok: true, dataUrl });
+    });
+    return true;
+  }
+  if (msg?.type === 'ibt-ocr-translate') {
+    ocrTranslate(msg.mime, msg.data)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'image') }));
+    return true;
+  }
+  if (msg?.type === 'ibt-translate-image') {
+    translateImageMessage(msg.mime, msg.data)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'image') }));
+    return true;
   }
   if (msg?.type === 'lookup') {
     handleLookup(msg.text)
@@ -148,6 +255,145 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
   }
   return false;
 });
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+async function fetchImageBytes(url: string): Promise<{ mime: string; data: string } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.log('[IBT] image fetch failed', res.status, url.slice(0, 120));
+      return null;
+    }
+    const mime = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+    if (!mime.startsWith('image/')) return null;
+    const data = bytesToBase64(new Uint8Array(await res.arrayBuffer()));
+    console.log('[IBT] image fetch ok', mime, data.length);
+    return { mime, data };
+  } catch (err) {
+    console.log('[IBT] image fetch blocked', String((err as Error)?.message || err).slice(0, 140), url.slice(0, 120));
+    return null;
+  }
+}
+
+const imageInflight = new Map<string, Promise<{ text: string; regions: { textEn: string; textZh: string; box?: [number, number, number, number] }[]; model: string }>>();
+
+async function translateImageMessage(mime: string, data: string) {
+  const settings = await loadSettings();
+  const key = normalizeGeminiKey(settings.apiKeys.gemini);
+  if (!key) throw new Error('NO_API_KEY:image');
+  const sig = `${data.length}:${data.slice(0, 48)}:${data.slice(-24)}`;
+  const hit = imageInflight.get(sig);
+  if (hit) {
+    console.log('[IBT] image gemini deduped', sig.slice(0, 24));
+    return hit;
+  }
+  const job = withImageLock(async () => {
+    await quotaReady;
+    const got = await translateImageSequential({
+      key,
+      model: settings.model,
+      imageModel: settings.imageModel,
+      mime,
+      data,
+      quotaState,
+      onQuota: persistQuota,
+    });
+    const regions = [];
+    for (const region of got.regions) {
+      const textZh = toTraditional(await chineseLine(region.textEn, region.textZh, settings));
+      if (!textZh) continue;
+      regions.push({ ...region, textZh });
+    }
+    const text = regions.map((r) => r.textZh).join('\n') || await chineseLine('', got.text, settings);
+    if (!text && got.regions.some((r) => r.textEn)) throw new Error('IMAGE_ECHO');
+    return { text, regions, model: got.model };
+  });
+  imageInflight.set(sig, job);
+  try { return await job; } finally { imageInflight.delete(sig); }
+}
+
+async function ensureOffscreen(): Promise<void> {
+  if (chrome.runtime.getContexts) {
+    const existing = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+    if (existing.length) return;
+  }
+  try {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: [chrome.offscreen.Reason.WORKERS],
+      justification: 'Local OCR for image translation runs in a worker so the page stays responsive.',
+    });
+  } catch (err) {
+    if (!/single offscreen/i.test(String((err as Error)?.message || err))) throw err;
+  }
+}
+
+async function translateOcrLines(lines: string[]): Promise<string[]> {
+  if (!lines.length) return [];
+  const settings = await loadSettings();
+  // Image text never enters the page Gemini batcher. The free engines only.
+  const free = { ...settings, provider: 'google' as const, model: '' };
+  const numbered = lines.map((line, i) => `(${i}) ${line}`).join('\n');
+  try {
+    const pairs = await withFreeFallback(free, async (p) => (p.translateBlock ? p.translateBlock(numbered, free) : []));
+    const text = toTraditional(pairs.map((p) => p.t).join(''));
+    const found = new Map<number, string>();
+    for (const line of text.split(/\n/)) {
+      const match = /^\((\d+)\)\s*(.*)$/.exec(line.trim());
+      if (match) found.set(Number(match[1]), match[2].trim());
+    }
+    if ([...found.keys()].length === lines.length) return lines.map((_, i) => found.get(i) || '');
+  } catch (err) {
+    console.log('[IBT] ocr batch translate failed', String((err as Error)?.message || err).slice(0, 160));
+  }
+  const out: string[] = [];
+  for (const line of lines) {
+    const pairs = await withFreeFallback(free, async (p) => (p.translateBlock ? p.translateBlock(line, free) : []));
+    out.push(toTraditional(pairs.map((p) => p.t).join('').trim()));
+  }
+  return out;
+}
+
+async function ocrTranslate(mime: string, data: string): Promise<{ regions: { textEn: string; textZh: string; box?: [number, number, number, number]; glyph?: number }[]; ms: number }> {
+  await ensureOffscreen();
+  const ocr = await chrome.runtime.sendMessage({ type: 'ibt-offscreen-ocr', mime, data }) as {
+    ok?: boolean; error?: string; ms?: number; regions?: { text: string; box: [number, number, number, number]; glyph?: number }[];
+  };
+  if (!ocr?.ok) throw new Error(ocr?.error || '本機文字辨識失敗');
+  const kept = (ocr.regions || []).filter((region) => region.text && region.box && !shouldSkipImageText(region.text));
+  const translated = await translateOcrLines(kept.map((region) => region.text));
+  const regions = kept.map((region, i) => ({
+    textEn: region.text,
+    textZh: translated[i] || '',
+    box: region.box,
+    glyph: region.glyph,
+  })).filter((region) => region.textZh && !echoesEnglish(region.textEn, region.textZh));
+  console.log('[IBT] ocr translate', ocr.ms, 'kept', regions.length);
+  return { regions, ms: ocr.ms || 0 };
+}
+
+async function chineseLine(en: string, zh: string, settings: Settings): Promise<string> {
+  if (zh && !echoesEnglish(en || zh, zh)) return zh;
+  const source = (en || '').trim();
+  if (!source) return '';
+  try {
+    const free = { ...settings, provider: 'google' as const, model: '' };
+    const pairs = await withFreeFallback(free, (p) => translateWith(p, source, free, { mode: 'prose' }));
+    const t = pairs.map((p) => p.t).join('').trim();
+    if (t && !echoesEnglish(source, t)) return t;
+  } catch (err) {
+    console.log('[IBT] image text fallback failed', String((err as Error)?.message || err).slice(0, 180));
+  }
+  return '';
+}
 
 async function handleTranslate(
   text: string,

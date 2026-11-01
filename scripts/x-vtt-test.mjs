@@ -1,0 +1,115 @@
+// X WebVTT parser and caption placement. Run: node scripts/x-vtt-test.mjs
+import { execSync } from 'node:child_process';
+
+execSync(
+  'npx esbuild src/content/x-vtt.ts --bundle --platform=node --format=esm --outfile=/tmp/x-vtt.test.mjs --log-level=error',
+  { cwd: new URL('..', import.meta.url).pathname, stdio: 'inherit' },
+);
+const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth, isPlayerChromeText, isXCaptionText, xVideoView, captionTextMatches, nativeCueFontPx, nativeCueReservePx, cueLineCount, overlayBottomClearingCue } = await import('/tmp/x-vtt.test.mjs');
+
+let failures = 0;
+function check(name, cond) {
+  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}`);
+  if (!cond) failures++;
+}
+
+const sample = `WEBVTT
+
+00:00:01.840 --> 00:00:03.399
+<X-word-ms ms=539,120 index=1 character_ranges=0-5,6-9>Cursor now has a mobile app.</X-word-ms>
+
+00:00:03.580 --> 00:00:04.980
+<X-word-ms ms=439 index=2>I want to show you three ways</X-word-ms>
+`;
+const cues = parseXVtt(sample);
+check('two cues', cues.length === 2);
+check('tags stripped', cues[0].text === 'Cursor now has a mobile app.');
+check('start ms', cues[0].start === 1840);
+check('second cue', cues[1].text === 'I want to show you three ways');
+check('strip helper', stripXTags('<X-word-ms ms=1>Hello there</X-word-ms>') === 'Hello there');
+
+const url = 'https://video.twimg.com/subtitles/amplify_video/2071638346145923072/0/Z4JgfHwpD4CVrlNL.vtt';
+check('media id', mediaIdFromUrl(url) === '2071638346145923072');
+check('thumb id matches', mediaIdFromUrl('https://pbs.twimg.com/amplify_video_thumb/2071638346145923072/img/x.jpg') === '2071638346145923072');
+
+const playlist = `#EXTM3U
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",LANGUAGE="en",URI="subs/en.vtt"
+#EXT-X-STREAM-INF:BANDWIDTH=800000,SUBTITLES="subs"
+v.m3u8
+`;
+const uris = subtitleUris(playlist, 'https://video.twimg.com/ext_tw_video/1/pl.m3u8');
+check('subtitle uri resolved', uris[0] === 'https://video.twimg.com/ext_tw_video/1/subs/en.vtt');
+
+const video = { left: 100, top: 80, width: 640, height: 360, bottom: 440, right: 740 };
+const player = { left: 80, top: 60, width: 680, height: 420, bottom: 480, right: 760 };
+const box = xCaptionBox(video, player, 36);
+check('centered on the picture', box.center === (100 - 80) + 320);
+check('clears letterbox and controls', box.bottom === (480 - 440) + Math.round(Math.max(8, 360 * 0.06)) + 36);
+check('width follows the video', box.maxWidth === Math.round(640 * 0.92));
+
+// 310×560 timeline player: width drives the size, not the tall portrait height.
+check('small portrait font', xCaptionFontPx(310, 560) === 14);
+check('font ignores the tall side', xCaptionFontPx(310, 560) === xCaptionFontPx(310, 2000));
+check('fullscreen font caps', xCaptionFontPx(1280, 720) === 32);
+check('tiny player floor', xCaptionFontPx(180, 320) === 12);
+check('font scale after clamp', xCaptionFontPx(310, 560, 1.5) === 21);
+
+// Chinese line sits a fixed gap above the native caption. A taller English
+// line moves captionTop up, and the CSS bottom grows by the same amount.
+check('gap above one line', overlayBottomAbove(800, 700) === 106);
+check('gap above two lines', overlayBottomAbove(800, 660) === 146);
+check('gap stays 6px', (700 - (800 - overlayBottomAbove(800, 700))) === 6);
+check('gap stays 6px when taller', (660 - (800 - overlayBottomAbove(800, 660))) === 6);
+
+const maxW = Math.round(310 * 0.9);
+check('short line hugs the text', overlayUsedWidth(180, 20, maxW) === 201);
+check('long line caps at 90%', overlayUsedWidth(400, 20, maxW) === maxW);
+
+check('from-account chip', isPlayerChromeText('From AmericaAmerica'));
+check('from @handle', isPlayerChromeText('From @AmericaAmerica'));
+check('localized from chip', isPlayerChromeText('來自 AmericaAmerica'));
+check('clock', isPlayerChromeText('0:42'));
+check('clock range', isPlayerChromeText('0:42 / 3:10'));
+check('view count', isPlayerChromeText('1.2M views'));
+check('gif badge', isPlayerChromeText('GIF'));
+check('spoken line kept', !isPlayerChromeText('From day one this changed the race'));
+check('caption sentence kept', !isPlayerChromeText('such as USDC, USDT, BTC, E, BNB'));
+
+const picture = { left: 0, top: 0, width: 560, height: 315, right: 560, bottom: 315 };
+const fromChip = { left: 12, top: 260, width: 200, height: 36, right: 212, bottom: 296 };
+const centered = { left: 70, top: 250, width: 420, height: 28, right: 490, bottom: 278 };
+check('quote-tweet source is not a caption', !isXCaptionText('From AmericaAmerica', fromChip, picture));
+check('centered line is a caption', isXCaptionText('such as USDC, USDT, BTC, E, BNB', centered, picture));
+check('corner clock is not a caption', !isXCaptionText('0:42 / 3:10', { left: 430, top: 270, width: 110, height: 22, right: 540, bottom: 292 }, picture));
+
+// No stored choice → one bilingual caption. An explicit pick still wins.
+check('x video default is bilingual', xVideoView(undefined) === 'both' && xVideoView('') === 'both');
+check('explicit bilingual wins', xVideoView('both') === 'both');
+check('explicit chinese wins', xVideoView('zh') === 'zh');
+check('explicit original wins', xVideoView('orig') === 'orig');
+const cue = 'Pete Hegseth, everybody knows that guy from the locker room';
+check('full cue matches', captionTextMatches(cue, cue));
+check('word span matches', captionTextMatches('everybody', cue));
+check('source chip plus cue is not the cue', !captionTextMatches('From Chuck Ross ' + cue, cue));
+
+// Inline landscape: ::cue has no box. The old ~6% margin sits inside a 5vh cue.
+const inlineH = 360;
+const inlineFont = nativeCueFontPx(inlineH);
+const oneLine = nativeCueReservePx(inlineFont, 1);
+const oldMargin = Math.round(Math.max(8, inlineH * 0.06));
+check('inline cue font is 5% of height', inlineFont === 18);
+check('one-line cue block clears a real cue', oneLine >= Math.round(18 * 1.7));
+check('old margin overlaps that cue', oldMargin < oneLine);
+check('unmeasured inline gap is 6px', overlayBottomClearingCue(0, 0, oneLine) - oneLine === 6);
+check('two-line reserve is taller', nativeCueReservePx(inlineFont, 2) > oneLine + inlineFont);
+check('two-line cue is twice the block', nativeCueReservePx(inlineFont, cueLineCount('a\nb', 10, 400)) === nativeCueReservePx(inlineFont, 2));
+check('wraps to two lines', cueLineCount('hello', 1000, 500) === 2);
+check('controls and letterbox stay under the cue', overlayBottomClearingCue(12, 36, oneLine) === 12 + 36 + oneLine + 6);
+check('portrait cue uses its own height', nativeCueFontPx(560) === 28);
+check('fullscreen measured gap unchanged', overlayBottomAbove(800, 700) === 106);
+
+if (failures) {
+  console.error(`\n${failures} failed`);
+  process.exit(1);
+}
+console.log('\nx vtt tests passed');

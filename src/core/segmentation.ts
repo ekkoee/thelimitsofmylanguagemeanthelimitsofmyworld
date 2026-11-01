@@ -1,3 +1,5 @@
+import { toTraditional } from './st2t';
+
 // Locale-aware sentence segmentation.
 // Goal: split a paragraph into sentences so each can be aligned 1:1 with its
 // translation. Primary path uses the browser's built-in Intl.Segmenter
@@ -113,15 +115,41 @@ export function chineseShare(text: string): number {
   return units / (units + foreign);
 }
 
-// True when the text is ALREADY in the target language (only meaningful for a
-// Chinese target). Chinese writing is not translated into Chinese, however many
-// English words, names or links it contains: the reader understands them. Only
-// passages that are mostly foreign are translated. Used to skip pointless
-// 中文→中文 (incl. Simplified→Traditional) re-translation across every surface
-// (X / Reddit / whole-page). Cheap — a few regex over one node.
+function hanAndLatin(text: string): { han: number; latin: number; words: string[] } {
+  const s = stripNoise(text);
+  const han = (s.match(/\p{Script=Han}/gu) || []).length;
+  const words = s.replace(/\p{Script=Han}/gu, ' ').match(/\p{Script=Latin}[\p{Script=Latin}'’-]*/gu) || [];
+  const latin = words.reduce((n, w) => n + w.replace(/['’\-]/g, '').length, 0);
+  return { han, latin, words };
+}
+
+// True when this unit is already Chinese and the target is Chinese.
+// Han vs Latin letters, after URLs, mentions, hashtags, digits, and punctuation
+// are ignored. A high Han share, or Chinese with only a few short Latin tokens,
+// is skipped. An English sentence that merely contains a Chinese word is not.
 export function isAlreadyTargetLang(text: string, targetLangCode: string): boolean {
   if (!(targetLangCode || '').toLowerCase().startsWith('zh')) return false;
-  return chineseShare(text) >= 0.3;
+  const s = stripNoise(text);
+  if (/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(s)) return false;
+  const { han, latin, words } = hanAndLatin(text);
+  if (!han) return false;
+  if (han / (han + latin) >= 0.5) return true;
+  const short = words.filter((w) => w.replace(/['’\-]/g, '').length <= 4);
+  return han >= 8 && words.length > 0 && words.length <= 3 && short.length === words.length && latin <= 12;
+}
+
+/** Same words after dropping space and punctuation. zh-TW folds Simplified into Traditional. */
+export function sameMeaning(source: string, translated: string, targetLangCode: string): boolean {
+  const fold = (value: string) => {
+    const code = (targetLangCode || '').toLowerCase();
+    const folded = code.startsWith('zh') && !code.includes('cn') && !code.includes('hans')
+      ? toTraditional(value)
+      : value;
+    return folded.replace(/[\s\p{P}]/gu, '').toLowerCase();
+  };
+  const a = fold(source);
+  const b = fold(translated);
+  return a.length > 0 && a === b;
 }
 
 export function hasTranslatableText(s: string): boolean {

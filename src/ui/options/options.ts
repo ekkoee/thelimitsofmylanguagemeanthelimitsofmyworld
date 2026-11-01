@@ -1,28 +1,80 @@
+import { checkGeminiKey, normalizeGeminiKey } from '../../core/gemini-key';
+import { applyI18n, getUiLang, setUiLang, t, watchUiLang } from '../../core/i18n';
+import { langTag } from '../../core/lang-tag';
 import { loadSettings, saveSettings } from '../../core/storage';
-import { clearPersistentCache } from '../../core/cache';
-import { disableDblClick, registerDblClick, requestAllUrls } from '../../core/dblclick';
-import { DEFAULT_MODELS, ProviderId, Settings } from '../../core/types';
+import { DEFAULT_MODELS, DEFAULT_SETTINGS, ProviderId, Settings, normalizeTint } from '../../core/types';
+import { VocabEntry, clearVocab, listVocab, removeVocab, vocabToCsv, vocabToTxt } from '../../core/vocab';
+
+const LANGS: { code: string; name: string; label: string }[] = [
+  { code: 'zh-TW', name: 'Traditional Chinese (zh-TW)', label: '繁體中文' },
+  { code: 'zh-CN', name: 'Simplified Chinese (zh-CN)', label: '简体中文' },
+  { code: 'en', name: 'English', label: 'English' },
+  { code: 'ja', name: 'Japanese', label: '日本語' },
+  { code: 'ko', name: 'Korean', label: '한국어' },
+  { code: 'es', name: 'Spanish', label: 'Español' },
+  { code: 'fr', name: 'French', label: 'Français' },
+  { code: 'de', name: 'German', label: 'Deutsch' },
+];
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-
-function toast(msg: string) {
-  const s = $('status');
-  s.textContent = msg;
-  s.classList.add('show');
-  setTimeout(() => s.classList.remove('show'), 1200);
-}
+let refreshVocab = (): void => {};
 
 async function init() {
   const s = await loadSettings();
+  const version = $('version');
+  try { version.textContent = chrome.runtime.getManifest().version; } catch { version.textContent = ''; }
+
+  setUiLang(s.uiLang || '');
+  applyI18n();
+  watchUiLang();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync' && changes.ibt_settings) paintPreview();
+  });
+  const uiLang = $<HTMLSelectElement>('uiLang');
+  uiLang.value = s.uiLang || '';
+  uiLang.addEventListener('change', () => {
+    void save({ uiLang: uiLang.value }).then(() => {
+      setUiLang(uiLang.value);
+      applyI18n();
+      paintPreview();
+      refreshVocab();
+    });
+  });
+
+  const lang = $<HTMLSelectElement>('lang');
+  const known = LANGS.some((item) => item.code === s.targetLangCode);
+  lang.value = known ? s.targetLangCode : 'zh-TW';
+  lang.addEventListener('change', () => {
+    const item = LANGS.find((entry) => entry.code === lang.value) || LANGS[0];
+    void save({ targetLangCode: item.code, targetLang: item.name });
+  });
+
+  const order = $<HTMLSelectElement>('order');
+  order.value = s.subtitleOrder === 'enTop' ? 'enTop' : 'zhTop';
+  order.addEventListener('change', () => {
+    const v = order.value === 'enTop' ? 'enTop' : 'zhTop';
+    void save({ subtitleOrder: v, layout: v === 'enTop' ? 'origTop' : 'transTop' });
+  });
+
+  const font = $<HTMLInputElement>('fontScale');
+  const fontVal = $('fontScaleVal');
+  const paintSize = (scale: number) => {
+    fontVal.textContent = `${scale.toFixed(2)}×`;
+    document.querySelectorAll<HTMLElement>('.tint-live .ibt-trans').forEach((node) => {
+      node.style.fontSize = `${Math.round(14 * scale)}px`;
+    });
+  };
+  font.value = String(s.fontScale);
+  paintSize(Number(s.fontScale) || 1);
+  font.addEventListener('input', () => { paintSize(Number(font.value) || 1); });
+  font.addEventListener('change', () => { void save({ fontScale: Number(font.value) }); });
 
   const provider = $<HTMLSelectElement>('provider');
   const model = $<HTMLInputElement>('model');
   const geminiBlock = $('geminiBlock');
   provider.value = s.provider;
   model.value = s.model || '';
-  const syncEngineUi = (): void => {
-    geminiBlock.hidden = provider.value !== 'gemini';
-  };
+  const syncEngineUi = (): void => { geminiBlock.hidden = provider.value !== 'gemini'; };
   syncEngineUi();
   provider.addEventListener('change', async () => {
     syncEngineUi();
@@ -31,84 +83,298 @@ async function init() {
   });
   model.addEventListener('change', () => save({ model: model.value.trim() }));
 
-  bindKey('key_gemini', s.apiKeys.gemini, 'gemini');
+  const imageModel = $<HTMLSelectElement>('imageModel');
+  imageModel.value = s.imageModel === 'gemini' ? 'gemini' : 'local';
+  imageModel.addEventListener('change', () => save({ imageModel: imageModel.value }));
 
-  // appearance: translated-text style + custom color + left marker bar, live preview
-  const transStyle = $<HTMLSelectElement>('transStyle');
+  const selectionTranslate = $<HTMLInputElement>('selectionTranslate');
+  const selectionInstant = $<HTMLInputElement>('selectionInstant');
+  selectionTranslate.checked = s.selectionTranslate !== false;
+  selectionInstant.checked = s.selectionInstant === true;
+  selectionTranslate.addEventListener('change', () => save({ selectionTranslate: selectionTranslate.checked }));
+  selectionInstant.addEventListener('change', () => save({ selectionInstant: selectionInstant.checked, selectionInstantSet: true }));
+
+  bindGeminiKey(s.apiKeys.gemini);
+  bindAppearance(s);
+  void bindVocab();
+}
+
+const EN_SENTENCE = 'Good design is quiet; it helps you read without getting in the way.';
+const ZH_TW_SENTENCE = '好的設計很安靜，它幫助你閱讀，卻不會打擾你。';
+const PREVIEW_TRANS: Record<string, string> = {
+  'zh-TW': ZH_TW_SENTENCE,
+  'zh-CN': '好的设计很安静，它帮助你阅读，却不会打扰你。',
+  ja: '良いデザインは静かです。読むことを助け、邪魔をしません。',
+  ko: '좋은 디자인은 조용합니다. 읽기를 도우면서도 방해하지 않습니다.',
+  de: 'Gutes Design ist leise. Es hilft beim Lesen und steht nicht im Weg.',
+  fr: 'Un bon design est discret. Il aide à lire sans gêner.',
+  es: 'Un buen diseño es discreto. Ayuda a leer sin estorbar.',
+  en: EN_SENTENCE,
+};
+
+/** English source with a translation in the interface language. English UI uses the Traditional sentence as the source. */
+function paintPreview(): void {
+  const lang = getUiLang();
+  const englishUi = lang === 'en';
+  const orig = englishUi ? ZH_TW_SENTENCE : EN_SENTENCE;
+  const trans = PREVIEW_TRANS[lang] || EN_SENTENCE;
+  const tag = langTag(lang);
+  document.querySelectorAll<HTMLElement>('[data-preview="orig"]').forEach((node) => { node.textContent = orig; });
+  document.querySelectorAll<HTMLElement>('.tint-live .ibt-block, .tint-live .ibt-trans, [data-preview="trans"]').forEach((node) => {
+    node.lang = tag;
+  });
+  document.querySelectorAll<HTMLElement>('[data-preview="trans"]').forEach((node) => { node.textContent = trans; });
+  document.documentElement.setAttribute('data-ibt-lang', lang === 'zh-CN' ? 'zh-CN' : 'zh-TW');
+}
+
+const STYLE_VALUES = ['plain', 'underline', 'dashed', 'dotted', 'wavy', 'solidBox', 'dashedBox', 'highlight', 'dim', 'italic', 'bold', 'blur'];
+const BAR_VALUES = ['none', 'bar', 'thick', 'dashed'];
+const INHERIT_SWATCH = '#1c1c1c';
+const BAR_SWATCH = '#6c7aff';
+
+function bindAppearance(s: Settings) {
+  const style = $<HTMLSelectElement>('transStyle');
   const transColor = $<HTMLInputElement>('transColor');
   const barStyle = $<HTMLSelectElement>('barStyle');
   const barColor = $<HTMLInputElement>('barColor');
-  let appliedColor = s.transColor;
-  let appliedBarColor = s.barColor;
+  const highlight = $<HTMLInputElement>('transHighlight');
+  let textColor = /^#[0-9a-fA-F]{6}$/.test(s.transColor || '') ? s.transColor : '';
+  let markColor = /^#[0-9a-fA-F]{6}$/.test(s.barColor || '') ? s.barColor : '';
 
+  let tint = normalizeTint(s.highlightColor);
+  const tintCustom = $<HTMLInputElement>('tintCustom');
+  const swatchRow = $('tintSwatches');
+  const syncMarks = () => {
+    $('transColorNone').hidden = textColor !== '';
+    $('barColorNone').hidden = markColor !== '';
+  };
   const syncPreview = () => {
-    const r = document.documentElement;
-    r.setAttribute('data-ibt-style', transStyle.value || 'plain');
-    r.setAttribute('data-ibt-bar', barStyle.value || 'bar');
-    const code = (s.targetLangCode || '').trim();
-    r.setAttribute('data-ibt-lang', code === 'zh-CN' ? 'zh-CN' : 'zh-TW');
-    if (appliedColor) r.style.setProperty('--ibt-trans-color', appliedColor);
-    else r.style.removeProperty('--ibt-trans-color');
-    if (appliedBarColor) r.style.setProperty('--ibt-bar-color', appliedBarColor);
-    else r.style.removeProperty('--ibt-bar-color');
+    const root = document.documentElement;
+    root.setAttribute('data-ibt-style', style.value || 'plain');
+    root.setAttribute('data-ibt-bar', barStyle.value || 'none');
+    root.setAttribute('data-ibt-highlight', highlight.checked ? 'on' : 'off');
+    paintPreview();
+    swatchRow.hidden = !highlight.checked;
+    if (textColor) {
+      root.setAttribute('data-ibt-custom-color', 'on');
+      root.style.setProperty('--ibt-trans-color', textColor);
+    } else {
+      root.removeAttribute('data-ibt-custom-color');
+      root.style.removeProperty('--ibt-trans-color');
+    }
+    if (markColor) root.style.setProperty('--ibt-bar-color', markColor);
+    else root.style.removeProperty('--ibt-bar-color');
+    if (!tint) {
+      root.removeAttribute('data-ibt-tint');
+      root.style.removeProperty('--ibt-tint-light');
+      root.style.removeProperty('--ibt-tint-dark');
+    } else if (tint.startsWith('#')) {
+      root.setAttribute('data-ibt-tint', 'custom');
+      root.style.setProperty('--ibt-tint-light', hexAlpha(tint, 0.45));
+      root.style.setProperty('--ibt-tint-dark', hexAlpha(tint, 0.42));
+    } else {
+      root.setAttribute('data-ibt-tint', tint);
+      root.style.removeProperty('--ibt-tint-light');
+      root.style.removeProperty('--ibt-tint-dark');
+    }
+    swatchRow.querySelectorAll<HTMLButtonElement>('.swatch').forEach((btn) => {
+      const value = btn.dataset.tint ?? '';
+      btn.setAttribute('aria-pressed', value === tint || (value === '' && tint === '') ? 'true' : 'false');
+    });
+    syncMarks();
   };
 
-  transStyle.value = s.transStyle || 'plain';
-  transStyle.addEventListener('change', () => { save({ transStyle: transStyle.value }); syncPreview(); });
+  style.value = STYLE_VALUES.includes(s.transStyle) ? s.transStyle : 'plain';
+  style.addEventListener('change', () => { save({ transStyle: style.value }); syncPreview(); });
 
-  if (s.transColor) transColor.value = s.transColor;
-  transColor.addEventListener('change', () => { appliedColor = transColor.value; save({ transColor: appliedColor }); syncPreview(); });
-  $('transColorReset').addEventListener('click', () => { appliedColor = ''; save({ transColor: '' }); syncPreview(); });
+  transColor.value = textColor || INHERIT_SWATCH;
+  transColor.addEventListener('input', () => { textColor = transColor.value; syncPreview(); });
+  transColor.addEventListener('change', () => save({ transColor: textColor, transColorSet: true }));
+  $('transColorReset').addEventListener('click', () => {
+    textColor = '';
+    transColor.value = INHERIT_SWATCH;
+    save({ transColor: '', transColorSet: true });
+    syncPreview();
+  });
 
-  barStyle.value = s.barStyle || 'bar';
+  barStyle.value = BAR_VALUES.includes(s.barStyle) ? s.barStyle : 'none';
   barStyle.addEventListener('change', () => { save({ barStyle: barStyle.value }); syncPreview(); });
 
-  if (s.barColor) barColor.value = s.barColor;
-  barColor.addEventListener('change', () => { appliedBarColor = barColor.value; save({ barColor: appliedBarColor }); syncPreview(); });
-  $('barColorReset').addEventListener('click', () => { appliedBarColor = ''; save({ barColor: '' }); syncPreview(); });
+  barColor.value = markColor || BAR_SWATCH;
+  barColor.addEventListener('input', () => { markColor = barColor.value; syncPreview(); });
+  barColor.addEventListener('change', () => save({ barColor: markColor }));
+  $('barColorReset').addEventListener('click', () => {
+    markColor = '';
+    barColor.value = BAR_SWATCH;
+    save({ barColor: '' });
+    syncPreview();
+  });
 
+  highlight.checked = s.transHighlight === true;
+  highlight.addEventListener('change', () => {
+    save({ transHighlight: highlight.checked, transHighlightSet: true });
+    syncPreview();
+  });
+  if (tint.startsWith('#')) tintCustom.value = tint;
+  swatchRow.querySelectorAll<HTMLButtonElement>('button.swatch').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      tint = btn.dataset.tint || '';
+      save({ highlightColor: tint });
+      syncPreview();
+    });
+  });
+  tintCustom.addEventListener('input', () => { tint = tintCustom.value; syncPreview(); });
+  tintCustom.addEventListener('change', () => { tint = tintCustom.value; save({ highlightColor: tint }); syncPreview(); });
+
+  const confirm = $('resetConfirm');
+  $('resetDefaults').addEventListener('click', () => { confirm.hidden = false; });
+  $('resetNo').addEventListener('click', () => { confirm.hidden = true; });
+  $('resetYes').addEventListener('click', async () => {
+    await save({
+      transStyle: DEFAULT_SETTINGS.transStyle,
+      transColor: '',
+      transColorSet: true,
+      barStyle: 'none',
+      barColor: '',
+      transHighlight: true,
+      transHighlightSet: true,
+      highlightColor: '',
+      fontScale: 1,
+    });
+    location.reload();
+  });
   syncPreview();
-
-  $('clearCache').addEventListener('click', async () => {
-    await clearPersistentCache();
-    $('cacheMsg').textContent = '已清除';
-    setTimeout(() => ($('cacheMsg').textContent = ''), 1500);
-  });
-
-  bindDblClickToggle(s.dblClickTranslate);
 }
 
-// The double-click popup needs broad host access, so enabling it requests <all_urls>
-// from a user gesture (this checkbox). If the user declines, we revert the toggle and
-// save nothing. Disabling unregisters the script and hands the permission back.
-function bindDblClickToggle(initial: boolean) {
-  const cb = $<HTMLInputElement>('dblClickTranslate');
-  cb.checked = initial;
-  cb.addEventListener('change', async () => {
-    if (cb.checked) {
-      const granted = await requestAllUrls();
-      if (!granted) { cb.checked = false; toast('需要授權才能啟用'); return; }
-      await registerDblClick();
-      await save({ dblClickTranslate: true });
-    } else {
-      await save({ dblClickTranslate: false });
-      await disableDblClick();
+function download(name: string, text: string, mime: string): void {
+  const blob = new Blob([text], { type: mime });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+async function bindVocab(): Promise<void> {
+  const search = $<HTMLInputElement>('vocabSearch');
+  const sort = $<HTMLSelectElement>('vocabSort');
+  const list = $('vocabList');
+  const empty = $('vocabEmpty');
+  const confirm = $('vocabConfirm');
+  let items: VocabEntry[] = await listVocab();
+  const draw = () => {
+    const q = search.value.trim().toLowerCase();
+    const shown = items.filter((item) => {
+      if (!q) return true;
+      return [item.word, item.translation, item.meanings, item.context, item.contextZh, item.title].join('\n').toLowerCase().includes(q);
+    });
+    shown.sort((a, b) => sort.value === 'az'
+      ? a.word.localeCompare(b.word, 'en')
+      : b.savedAt - a.savedAt);
+    list.replaceChildren();
+    empty.hidden = shown.length > 0;
+    for (const item of shown) {
+      const row = document.createElement('li');
+      const main = document.createElement('div');
+      const word = document.createElement('strong');
+      word.textContent = item.word;
+      const gloss = document.createElement('span');
+      gloss.textContent = item.translation;
+      const meta = document.createElement('em');
+      const when = new Date(item.savedAt).toISOString().slice(0, 10);
+      meta.textContent = [item.pos, item.meanings, when].filter(Boolean).join(' · ');
+      main.append(word, gloss, meta);
+      if (item.context) {
+        const en = document.createElement('p');
+        en.className = 'vocab-ex';
+        en.textContent = item.context;
+        main.append(en);
+        if (item.contextZh) {
+          const zh = document.createElement('p');
+          zh.className = 'vocab-ex';
+          zh.textContent = item.contextZh;
+          main.append(zh);
+        }
+      }
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'vocab-del';
+      del.setAttribute('aria-label', t('deleteWord', { word: item.word }));
+      del.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 7h14M9 7V5h6v2M8 7l.7 12h6.6L16 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      del.addEventListener('click', async () => {
+        await removeVocab(item.id);
+        items = items.filter((entry) => entry.id !== item.id);
+        draw();
+      });
+      row.append(main, del);
+      list.appendChild(row);
     }
+  };
+  search.addEventListener('input', draw);
+  sort.addEventListener('change', draw);
+  $('vocabCsv').addEventListener('click', () => download(t('vocabCsvName'), vocabToCsv(items), 'text/csv;charset=utf-8'));
+  $('vocabTxt').addEventListener('click', () => download(t('vocabTxtName'), vocabToTxt(items), 'text/plain;charset=utf-8'));
+  $('vocabClear').addEventListener('click', () => { confirm.hidden = false; });
+  $('vocabNo').addEventListener('click', () => { confirm.hidden = true; });
+  $('vocabYes').addEventListener('click', async () => {
+    await clearVocab();
+    items = [];
+    confirm.hidden = true;
+    draw();
   });
+  refreshVocab = draw;
+  draw();
 }
 
-function bindKey(id: string, value: string, provider: ProviderId) {
-  const input = $<HTMLInputElement>(id);
-  input.value = value;
-  input.addEventListener('change', async () => {
-    const cur = await loadSettings();
-    await save({ apiKeys: { ...cur.apiKeys, [provider]: input.value.trim() } });
-  });
+function hexAlpha(hex: string, alpha: number): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function bindGeminiKey(initial: string) {
+  const input = $<HTMLInputElement>('key_gemini');
+  const note = $('keyNote');
+  input.value = normalizeGeminiKey(initial);
+  let ticket = 0;
+  const apply = async () => {
+    const value = normalizeGeminiKey(input.value);
+    if (input.value !== value) input.value = value;
+    const mine = ++ticket;
+    if (!value) {
+      delete note.dataset.i18n;
+      note.textContent = '';
+      note.removeAttribute('data-state');
+      await saveKey('');
+      return;
+    }
+    note.dataset.i18n = 'checking';
+    note.textContent = t('checking');
+    note.dataset.state = 'wait';
+    const result = await checkGeminiKey(value);
+    if (mine !== ticket) return;
+    if (result === 'invalid') {
+      note.dataset.i18n = 'keyInvalid';
+      note.textContent = t('keyInvalid');
+      note.dataset.state = 'bad';
+      return;
+    }
+    note.dataset.i18n = result === 'valid' ? 'saved' : 'savedUnsure';
+    note.textContent = result === 'valid' ? t('saved') : t('savedUnsure');
+    note.dataset.state = 'ok';
+    await saveKey(value);
+  };
+  input.addEventListener('paste', () => { setTimeout(() => { void apply(); }, 0); });
+  input.addEventListener('change', () => { void apply(); });
+}
+
+async function saveKey(value: string) {
+  const cur = await loadSettings();
+  if ((cur.apiKeys.gemini || '') === value) return;
+  await save({ apiKeys: { ...cur.apiKeys, gemini: value } });
 }
 
 async function save(patch: Partial<Settings>) {
   await saveSettings(patch);
-  toast('已儲存');
 }
 
 init();
