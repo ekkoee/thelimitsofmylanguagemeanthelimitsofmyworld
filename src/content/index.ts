@@ -93,6 +93,7 @@ function applyRoot(s: Settings) {
     enabled: s.enabled, showOriginal: s.showOriginal, layout: s.layout, fontScale: s.fontScale,
     targetLangCode: s.targetLangCode, transStyle: s.transStyle, transColor: s.transColor,
     barStyle: s.barStyle, barColor: s.barColor,
+    transHighlight: s.transHighlight, highlightColor: s.highlightColor,
     viewMode: s.viewMode,
   });
 }

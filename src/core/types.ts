@@ -14,8 +14,12 @@ export interface Settings {
   subtitleOrder: SubtitleOrder; // YouTube subtitle order (both languages shown); default Chinese on top
   transStyle: string;           // visual style of the translated text (underline / box / blur / …)
   transColor: string;           // custom color for translated text ('' = use default)
-  barStyle: string;             // page marker: 'bar' | 'tint' | 'wavy' | 'none'
+  barStyle: string;             // left marker bar: 'bar' | 'thick' | 'dashed' | 'none'
   barColor: string;             // custom color for the left marker bar ('' = use default)
+  /** Optional translucent chip behind the translated words. Default off. Does not change the text color. */
+  transHighlight: boolean;
+  /** Light-page chip color. '' uses the pale cream. Dark pages stay a white wash. */
+  highlightColor: string;
   fontScale: number;            // 0.8 – 1.6
   sourceLang: string;           // BCP-47 source-language code, or 'auto' to detect (default)
   targetLang: string;           // natural-language name, used by LLM prompts
@@ -52,6 +56,8 @@ export const DEFAULT_SETTINGS: Settings = {
   transColor: '',
   barStyle: 'bar',
   barColor: '',
+  transHighlight: false,
+  highlightColor: '',
   fontScale: 1,
   sourceLang: 'auto',          // ← detect any source language (Korean/Japanese/…)
   targetLang: 'Traditional Chinese (zh-TW)',

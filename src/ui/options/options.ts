@@ -2,7 +2,7 @@ import { loadSettings, saveSettings } from '../../core/storage';
 import { DEFAULT_BAR_COLOR, DEFAULT_MODELS, DEFAULT_TRANS_COLOR, ProviderId, Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const SWATCHES = ['#f2d492', '#7aa2ff', '#5cbf8a', '#e0a15a', '#e06a6a', '#b07adf', '#e08ab0'];
+const CREAM = '#ffecaa';
 
 function toast(msg: string) {
   const s = $('status');
@@ -13,15 +13,25 @@ function toast(msg: string) {
 
 async function init() {
   const s = await loadSettings();
+  const version = $('version');
+  try { version.textContent = chrome.runtime.getManifest().version; } catch { version.textContent = ''; }
+
+  document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.tab;
+      document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.classList.toggle('on', b === btn));
+      document.querySelectorAll<HTMLElement>('[data-panel]').forEach((panel) => {
+        panel.hidden = panel.dataset.panel !== id;
+      });
+    });
+  });
 
   const provider = $<HTMLSelectElement>('provider');
   const model = $<HTMLInputElement>('model');
   const geminiBlock = $('geminiBlock');
   provider.value = s.provider;
   model.value = s.model || '';
-  const syncEngineUi = (): void => {
-    geminiBlock.hidden = provider.value !== 'gemini';
-  };
+  const syncEngineUi = (): void => { geminiBlock.hidden = provider.value !== 'gemini'; };
   syncEngineUi();
   provider.addEventListener('change', async () => {
     syncEngineUi();
@@ -48,71 +58,61 @@ async function init() {
 function bindAppearance(s: Settings) {
   let textColor = s.transColor || '';
   let barColor = s.barColor || '';
-  const marker = s.barStyle === 'tint' || s.barStyle === 'wavy' || s.barStyle === 'none' || s.barStyle === 'bar'
-    ? s.barStyle
-    : 'bar';
-  const radios = document.querySelectorAll<HTMLInputElement>('input[name="marker"]');
-  const hex = $<HTMLInputElement>('accentHex');
-  const swatches = $('swatches');
+  let chip = s.highlightColor || '';
+  const transColor = $<HTMLInputElement>('transColor');
+  const barColorInput = $<HTMLInputElement>('barColor');
+  const barStyle = $<HTMLSelectElement>('barStyle');
+  const highlight = $<HTMLSelectElement>('transHighlight');
+  const highlightColor = $<HTMLInputElement>('highlightColor');
 
-  const activeColor = () => (textColor || barColor || DEFAULT_TRANS_COLOR).toLowerCase();
   const syncPreview = () => {
     const root = document.documentElement;
-    const picked = document.querySelector<HTMLInputElement>('input[name="marker"]:checked');
-    root.setAttribute('data-ibt-bar', picked?.value || 'bar');
     root.setAttribute('data-ibt-style', 'plain');
+    root.setAttribute('data-ibt-bar', barStyle.value || 'bar');
+    root.setAttribute('data-ibt-highlight', highlight.value === 'on' ? 'on' : 'off');
     root.setAttribute('data-ibt-lang', 'zh-TW');
     root.style.setProperty('--ibt-trans-color', textColor || DEFAULT_TRANS_COLOR);
     root.style.setProperty('--ibt-bar-color', barColor || DEFAULT_BAR_COLOR);
+    if (chip) root.style.setProperty('--ibt-highlight', chip);
+    else root.style.setProperty('--ibt-highlight', CREAM);
   };
 
-  for (const radio of radios) {
-    radio.checked = radio.value === marker;
-    radio.addEventListener('change', () => {
-      if (!radio.checked) return;
-      save({ barStyle: radio.value });
-      syncPreview();
-    });
-  }
-
-  const paintSwatches = () => {
-    swatches.replaceChildren();
-    for (const color of SWATCHES) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'swatch';
-      button.style.background = color;
-      button.setAttribute('aria-label', color);
-      button.setAttribute('aria-checked', color === activeColor() && !hex.value ? 'true' : 'false');
-      button.addEventListener('click', () => {
-        hex.value = '';
-        const stored = color === DEFAULT_TRANS_COLOR ? '' : color;
-        textColor = stored;
-        barColor = stored;
-        save({ transColor: stored, barColor: stored });
-        paintSwatches();
-        syncPreview();
-      });
-      swatches.appendChild(button);
-    }
-  };
-
-  if (activeColor() !== DEFAULT_TRANS_COLOR && !SWATCHES.includes(activeColor())) hex.value = activeColor();
-  hex.addEventListener('change', () => {
-    const next = hex.value.trim();
-    if (!/^#[0-9a-fA-F]{6}$/.test(next)) {
-      hex.value = activeColor() === DEFAULT_TRANS_COLOR || SWATCHES.includes(activeColor()) ? '' : activeColor();
-      return;
-    }
-    const stored = next.toLowerCase() === DEFAULT_TRANS_COLOR ? '' : next.toLowerCase();
-    textColor = stored;
-    barColor = stored;
-    save({ transColor: stored, barColor: stored });
-    paintSwatches();
+  transColor.value = textColor || DEFAULT_TRANS_COLOR;
+  transColor.addEventListener('input', () => { textColor = transColor.value; syncPreview(); });
+  transColor.addEventListener('change', () => save({ transColor: textColor }));
+  $('transColorReset').addEventListener('click', () => {
+    textColor = '';
+    transColor.value = DEFAULT_TRANS_COLOR;
+    save({ transColor: '' });
     syncPreview();
   });
 
-  paintSwatches();
+  barStyle.value = s.barStyle === 'thick' || s.barStyle === 'dashed' || s.barStyle === 'none' ? s.barStyle : 'bar';
+  barStyle.addEventListener('change', () => { save({ barStyle: barStyle.value }); syncPreview(); });
+
+  barColorInput.value = barColor || DEFAULT_BAR_COLOR;
+  barColorInput.addEventListener('input', () => { barColor = barColorInput.value; syncPreview(); });
+  barColorInput.addEventListener('change', () => save({ barColor }));
+  $('barColorReset').addEventListener('click', () => {
+    barColor = '';
+    barColorInput.value = DEFAULT_BAR_COLOR;
+    save({ barColor: '' });
+    syncPreview();
+  });
+
+  highlight.value = s.transHighlight ? 'on' : 'off';
+  highlight.addEventListener('change', () => { save({ transHighlight: highlight.value === 'on' }); syncPreview(); });
+
+  highlightColor.value = chip || CREAM;
+  highlightColor.addEventListener('input', () => { chip = highlightColor.value; syncPreview(); });
+  highlightColor.addEventListener('change', () => save({ highlightColor: chip }));
+  $('highlightColorReset').addEventListener('click', () => {
+    chip = '';
+    highlightColor.value = CREAM;
+    save({ highlightColor: '' });
+    syncPreview();
+  });
+
   syncPreview();
 }
 

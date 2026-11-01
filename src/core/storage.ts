@@ -20,8 +20,8 @@ export function migrateDefaultColor(value: string | undefined): string {
  * from the settings UI. Force their values on read so stale stored settings can never
  * leave the extension in a state the user can no longer see or change.
  */
-function markerStyle(value: string | undefined): string {
-  if (value === 'tint' || value === 'wavy' || value === 'none' || value === 'bar') return value;
+function barStyleOf(value: string | undefined): string {
+  if (value === 'bar' || value === 'thick' || value === 'dashed' || value === 'none') return value;
   return 'bar';
 }
 
@@ -44,8 +44,9 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; db
     sites: { x: true, reddit: true, youtube: true, netflix: true },
     // '' is "never chosen". Do not coerce it to 'both' — X video treats unset as Chinese-only.
     viewMode: s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '',
-    transStyle: 'plain',
-    barStyle: markerStyle(s.barStyle),
+    barStyle: barStyleOf(s.barStyle),
+    transHighlight: s.transHighlight === true,
+    highlightColor: /^#[0-9a-fA-F]{6}$/.test(s.highlightColor || '') ? s.highlightColor : '',
     transColor: migrateDefaultColor(s.transColor),
     barColor: migrateDefaultColor(s.barColor),
   };

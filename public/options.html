@@ -8,14 +8,24 @@
   <title>雙語對照 — 設定</title>
 </head>
 <body>
-  <main>
-    <header>
-      <h1>雙語對照</h1>
-      <p>設定</p>
+  <div class="shell">
+    <header class="top">
+      <img src="icons/icon48.png" width="40" height="40" alt="" />
+      <div class="brand">
+        <h1>雙語對照</h1>
+        <p>網頁與 YouTube 字幕 <span id="version"></span></p>
+      </div>
+      <a class="ext" href="https://github.com/ekkoee/thelimitsofmylanguagemeanthelimitsofmyworld" target="_blank" rel="noopener">原始碼</a>
     </header>
 
-    <section class="card">
-      <h2>翻譯</h2>
+    <div class="tabs" role="tablist">
+      <button type="button" class="on" data-tab="general">一般</button>
+      <button type="button" data-tab="look">外觀</button>
+      <button type="button" data-tab="advanced">進階</button>
+    </div>
+
+    <section data-panel="general">
+      <h2>翻譯引擎</h2>
       <label class="field">
         <span>引擎</span>
         <select id="provider">
@@ -23,7 +33,6 @@
           <option value="gemini">Gemini</option>
         </select>
       </label>
-
       <div id="geminiBlock" hidden>
         <label class="field">
           <span>Gemini API Key</span>
@@ -35,7 +44,6 @@
           <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
         </label>
       </div>
-
       <label class="field">
         <span>圖片翻譯</span>
         <select id="imageModel">
@@ -45,66 +53,78 @@
       </label>
     </section>
 
-    <section class="card">
-      <h2>外觀</h2>
-      <div class="preview">
-        <article class="sheet light">
-          <p class="kicker">亮色頁面</p>
-          <div class="ibt-block">
-            <div class="ibt-pair">
-              <div class="ibt-orig">The quick brown fox jumps over the lazy dog.</div>
-              <div class="ibt-trans">敏捷的棕狐跨越懶狗</div>
-            </div>
-          </div>
-        </article>
-        <article class="sheet dark">
-          <p class="kicker">深色頁面</p>
-          <div class="ibt-block">
-            <div class="ibt-pair">
-              <div class="ibt-orig">The quick brown fox jumps over the lazy dog.</div>
-              <div class="ibt-trans">敏捷的棕狐跨越懶狗</div>
-            </div>
-          </div>
-        </article>
-      </div>
-
-      <div class="segment" role="radiogroup" aria-label="標記樣式">
-        <label><input type="radio" name="marker" value="tint" />淡底色</label>
-        <label><input type="radio" name="marker" value="bar" />左邊細條</label>
-        <label><input type="radio" name="marker" value="wavy" />波浪底線</label>
-        <label><input type="radio" name="marker" value="none" />無標記</label>
-      </div>
-
-      <div class="accent">
-        <span>強調色</span>
-        <div id="swatches" class="swatches"></div>
-        <label class="hex">
-          自訂
-          <input id="accentHex" type="text" maxlength="7" placeholder="#RRGGBB" spellcheck="false" autocomplete="off" />
+    <section data-panel="look" hidden>
+      <h2>譯文</h2>
+      <div class="colors">
+        <label class="field">
+          <span>譯文顏色</span>
+          <span class="color-line">
+            <input type="color" id="transColor" value="#f2d492" />
+            <button type="button" id="transColorReset" class="text-btn">預設</button>
+          </span>
         </label>
+        <label class="field">
+          <span>左側標記</span>
+          <select id="barStyle">
+            <option value="bar">線條</option>
+            <option value="thick">粗線條</option>
+            <option value="dashed">虛線</option>
+            <option value="none">無</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>標記顏色</span>
+          <span class="color-line">
+            <input type="color" id="barColor" value="#f2d492" />
+            <button type="button" id="barColorReset" class="text-btn">預設</button>
+          </span>
+        </label>
+      </div>
+
+      <h2>譯文底色</h2>
+      <label class="field">
+        <span>底色</span>
+        <select id="transHighlight">
+          <option value="off">無</option>
+          <option value="on">半透明底色</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>亮色頁面的底色</span>
+        <span class="color-line">
+          <input type="color" id="highlightColor" value="#ffecaa" />
+          <button type="button" id="highlightColorReset" class="text-btn">預設</button>
+        </span>
+      </label>
+      <p class="hint">只加在譯文後面，不改字色。深色頁面用淡白。</p>
+
+      <div class="demos">
+        <article class="demo light">
+          <p class="kicker">亮色頁面</p>
+          <p class="src">The quick brown fox jumps over the lazy dog.</p>
+          <div class="ibt-block"><div class="ibt-trans" data-ibt-on="light">敏捷的棕狐跨越懶狗</div></div>
+        </article>
+        <article class="demo dark">
+          <p class="kicker">深色頁面</p>
+          <p class="src">The quick brown fox jumps over the lazy dog.</p>
+          <div class="ibt-block"><div class="ibt-trans" data-ibt-on="dark">敏捷的棕狐跨越懶狗</div></div>
+        </article>
       </div>
     </section>
 
-    <section class="card">
+    <section data-panel="advanced" hidden>
       <h2>劃詞</h2>
       <label class="toggle">
         <span>劃詞翻譯</span>
-        <span class="switch">
-          <input type="checkbox" id="selectionTranslate" />
-          <span class="slider"></span>
-        </span>
+        <span class="switch"><input type="checkbox" id="selectionTranslate" /><span class="slider"></span></span>
       </label>
       <label class="toggle">
         <span>選取後立即顯示譯文</span>
-        <span class="switch">
-          <input type="checkbox" id="selectionInstant" />
-          <span class="slider"></span>
-        </span>
+        <span class="switch"><input type="checkbox" id="selectionInstant" /><span class="slider"></span></span>
       </label>
     </section>
-
-    <p id="status" class="status"></p>
-  </main>
+  </div>
+  <p id="status" class="status"></p>
   <script src="options.js"></script>
 </body>
 </html>

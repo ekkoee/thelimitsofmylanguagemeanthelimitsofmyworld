@@ -45,10 +45,55 @@ export function cycleView(): ViewMode {
 
 let rootApplied = false;
 /** Mirror visual settings onto <html> so CSS handles all toggles without re-translation. */
+function parseBg(bg: string): { r: number; g: number; b: number; a: number } | null {
+  const m = bg.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?\s*\)/);
+  if (!m) return null;
+  return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]), a: m[4] == null ? 1 : Number(m[4]) };
+}
+
+/** Walk up until a painted background shows whether the page is dark. */
+export function darkSurface(el: Element): boolean {
+  let node: Element | null = el.parentElement;
+  while (node) {
+    const parsed = parseBg(getComputedStyle(node).backgroundColor || '');
+    if (parsed && parsed.a > 0.45) {
+      const y = 0.2126 * parsed.r + 0.7152 * parsed.g + 0.0722 * parsed.b;
+      return y < 150;
+    }
+    node = node.parentElement;
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+export function refreshTransSurfaces(): void {
+  document.querySelectorAll('.ibt-trans').forEach((el) => {
+    if (el instanceof HTMLElement) el.setAttribute('data-ibt-on', darkSurface(el) ? 'dark' : 'light');
+  });
+}
+
+/** Tag each translation once, including ones inserted later. */
+function tagTrans(el: Element): void {
+  if (el instanceof HTMLElement && el.classList.contains('ibt-trans')) {
+    el.setAttribute('data-ibt-on', darkSurface(el) ? 'dark' : 'light');
+  }
+  if (el instanceof HTMLElement) el.querySelectorAll('.ibt-trans').forEach(tagTrans);
+}
+
+export function watchTransSurfaces(): void {
+  const w = window as unknown as { __ibtSurface?: boolean };
+  if (w.__ibtSurface) return;
+  w.__ibtSurface = true;
+  refreshTransSurfaces();
+  new MutationObserver((records) => {
+    for (const record of records) record.addedNodes.forEach((node) => { if (node instanceof Element) tagTrans(node); });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+}
+
 export function applyRootState(s: {
   enabled: boolean; showOriginal: boolean; layout: string; fontScale: number;
   targetLangCode?: string; transStyle?: string; transColor?: string;
   barStyle?: string; barColor?: string;
+  transHighlight?: boolean; highlightColor?: string;
   viewMode?: string;
 }): void {
   const r = document.documentElement;
@@ -75,6 +120,10 @@ export function applyRootState(s: {
   // left marker bar: style + custom color (user-configurable / hideable)
   r.setAttribute('data-ibt-bar', s.barStyle || 'bar');
   r.style.setProperty('--ibt-bar-color', s.barColor || DEFAULT_BAR_COLOR);
+  r.setAttribute('data-ibt-highlight', s.transHighlight ? 'on' : 'off');
+  if (s.highlightColor) r.style.setProperty('--ibt-highlight', s.highlightColor);
+  else r.style.removeProperty('--ibt-highlight');
+  refreshTransSurfaces();
   rootApplied = true;
 }
 export function rootStateApplied(): boolean { return rootApplied; }

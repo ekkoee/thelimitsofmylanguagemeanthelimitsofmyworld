@@ -9,7 +9,7 @@
 //
 // Auto-sites (x/reddit/youtube) are excluded: content.js handles Alt+A there.
 import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
-import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
+import { applyRootState, cycleView, VIEW_LABEL, watchTransSurfaces } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
 import { isAltA } from './alt-a-key';
@@ -20,6 +20,7 @@ import { startSelectionTranslate } from './selection';
 console.log('[IBT] content script loaded', location.hostname, location.href);
 startImageTranslate();
 startSelectionTranslate();
+watchTransSurfaces();
 
 const AUTO_SITE_RE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
 if (AUTO_SITE_RE.test(location.href)) {
@@ -34,6 +35,7 @@ if (AUTO_SITE_RE.test(location.href)) {
       enabled: s.enabled, showOriginal: s.showOriginal, layout: s.layout, fontScale: s.fontScale,
       targetLangCode: s.targetLangCode, transStyle: s.transStyle, transColor: s.transColor,
       barStyle: s.barStyle, barColor: s.barColor, viewMode: s.viewMode,
+      transHighlight: s.transHighlight, highlightColor: s.highlightColor,
     });
   }
 

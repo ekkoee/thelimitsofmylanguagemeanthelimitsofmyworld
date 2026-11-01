@@ -65,23 +65,20 @@
 :root[data-ibt-bar="thick"] .ibt-block { border-left-width: 6px; }
 :root[data-ibt-bar="dashed"] .ibt-block { border-left-style: dashed; }
 :root[data-ibt-bar="none"] .ibt-block { border-left: 0; padding-left: 0; }
-:root[data-ibt-bar="tint"] .ibt-block {
-  border-left: 0;
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--ibt-bar-color, #f2d492) 28%, transparent);
+
+/* Optional highlight. Text color is untouched. The chip is only as wide as the words. */
+:root[data-ibt-highlight="on"] .ibt-trans,
+.ibt-highlight .ibt-trans {
+  display: inline;
+  padding: 0 0.18em;
+  border-radius: 0.2em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  background: color-mix(in srgb, var(--ibt-highlight, #ffecaa) 35%, transparent);
 }
-:root[data-ibt-bar="tint"] .ibt-block.ibt-uni.ibt-fit {
-  padding: 0 4px;
-  border-radius: 4px;
-}
-:root[data-ibt-bar="wavy"] .ibt-block { border-left: 0; padding-left: 0; }
-:root[data-ibt-bar="wavy"] .ibt-block .ibt-trans {
-  text-decoration-line: underline;
-  text-decoration-style: wavy;
-  text-decoration-color: var(--ibt-bar-color, #f2d492);
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1.5px;
+:root[data-ibt-highlight="on"] .ibt-trans[data-ibt-on="dark"],
+.ibt-highlight .ibt-trans[data-ibt-on="dark"] {
+  background: rgba(255, 255, 255, 0.10);
 }
 
 .ibt-pair { display: flex; flex-direction: column; gap: 1px; margin: 1px 0; }
