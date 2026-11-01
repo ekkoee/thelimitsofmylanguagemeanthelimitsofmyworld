@@ -26,7 +26,7 @@ execSync(
   'npx esbuild src/core/storage.ts --bundle --platform=node --format=esm --outfile=/tmp/storage.test.mjs --log-level=error',
   { cwd: root, stdio: 'inherit' },
 );
-const { isShortLabel, isShortcutHint } = await import('/tmp/blocks.test.mjs');
+const { isShortLabel, isShortcutHint, isSeeMoreLessControl } = await import('/tmp/blocks.test.mjs');
 const { isAltA } = await import('/tmp/alt-a-key.test.mjs');
 const { controlFromElement, linkedInCollapsed, commentaryText } = await import('/tmp/linkedin.test.mjs');
 const { chineseSkipReason } = await import('/tmp/universal.test.mjs');
@@ -50,6 +50,29 @@ check('readme sentence is not a label', !isShortLabel('This release adds bilingu
 check('shortcut hint', isShortcutHint('Open menu home (g then d)'));
 check('chinese shortcut hint', isShortcutHint('開啟選單首頁 (g 然後 d)'));
 check('prose is not a shortcut', !isShortcutHint('The inline player overlapped the English caption and needs a gap.'));
+
+let parseSee = null;
+try { ({ parseHTML: parseSee } = await import(process.env.LINKEDOM || 'linkedom')); } catch { /* label-only */ }
+if (parseSee) {
+  const { document: doc } = parseSee('<!doctype html><body></body>');
+  const less = doc.createElement('div');
+  less.setAttribute('role', 'button');
+  less.textContent = '顯示較少';
+  const more = doc.createElement('div');
+  more.setAttribute('role', 'button');
+  more.textContent = '… 查看更多';
+  const see = doc.createElement('div');
+  see.setAttribute('role', 'button');
+  see.textContent = 'See less';
+  const para = doc.createElement('div');
+  para.textContent = 'Luka Doncic has the Lakers off to a 4-1 start.';
+  check('顯示較少 is a see-less control', isSeeMoreLessControl(less));
+  check('查看更多 is a see-more control', isSeeMoreLessControl(more));
+  check('See less is a see-less control', isSeeMoreLessControl(see));
+  check('a paragraph is not a see-less control', !isSeeMoreLessControl(para));
+} else {
+  console.log('SKIP see-more control fixtures');
+}
 
 const base = { altKey: true, ctrlKey: false, metaKey: false, shiftKey: false, repeat: false };
 check('physical KeyA', isAltA({ ...base, code: 'KeyA', key: 'å' }));

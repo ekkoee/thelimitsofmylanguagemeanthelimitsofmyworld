@@ -166,6 +166,10 @@ export function collectUnits(root: HTMLElement): Unit[] {
   const hasChildBlockWithText = (el: Element): boolean => {
     for (const ch of Array.from(el.children)) {
       if (skip(ch)) continue;
+      // Facebook's「顯示較少」is a div[role=button] painted inline at the end of the
+      // last paragraph. A div is not phrasing, so it looks like a child block and
+      // the loose sentence before it was never a unit. The toggle is not a block.
+      if (isSeeMoreLessControl(ch)) continue;
       const dk = display(ch);
       if (dk === 'none') continue;
       if (dk === 'block') {
@@ -252,6 +256,20 @@ export function isHiddenFromView(el: HTMLElement): boolean {
   return false;
 }
 
+const SEE_MORE_LESS = /^(?:[…⋯.]{1,3}\s*)?(?:see\s*more|see\s*less|show\s*more|show\s*less|more|less|更多|更少|查看更多|查看較少|顯示更多|顯示較少|顯示更少|繼續閱讀|收合|收起)$/i;
+
+/** Inline "see more / 顯示較少" control. Not the paragraph that contains it. */
+export function isSeeMoreLessControl(el: Element): boolean {
+  const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!text || text.length > 32) return false;
+  const compact = text.replace(/\s+/g, '');
+  if (!SEE_MORE_LESS.test(text) && !SEE_MORE_LESS.test(compact)) return false;
+  const role = el.getAttribute('role') || '';
+  if (el.tagName === 'BUTTON' || role === 'button') return true;
+  const cls = classBlob(el);
+  return /see[_-]?more|see[_-]?less/i.test(`${cls} ${el.getAttribute('aria-label') || ''}`);
+}
+
 function visibleText(el: HTMLElement): string {
   let s = '';
   const tw = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
@@ -273,7 +291,10 @@ function visibleText(el: HTMLElement): string {
   });
   let c: Node | null;
   while ((c = tw.nextNode())) s += `${c.nodeValue || ''} `;
-  return s.replace(/\s+/g, ' ').trim();
+  return s.replace(/\s+/g, ' ').trim().replace(
+    /(?:\s|^)(?:[…⋯]|\.{3})?\s*(?:see more|see less|show more|show less|查看更多|查看較少|顯示更多|顯示較少|顯示更少)\s*$/i,
+    '',
+  ).trim();
 }
 
 function isContentHeading(el: HTMLElement, text: string): boolean {

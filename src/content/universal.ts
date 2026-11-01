@@ -1,7 +1,7 @@
 import { Settings } from '../core/types';
 import { chineseShare, isAlreadyTargetLang, stripNoise } from '../core/segmentation';
 import { renderTranslationAfter } from './engine';
-import { collectUnits } from './blocks';
+import { collectUnits, isSeeMoreLessControl } from './blocks';
 import { matchSiteRule } from './selectors';
 import { linkedInCollapsed, linkedInHost } from './linkedin';
 
@@ -61,6 +61,22 @@ export class UniversalTranslator {
   private io?: IntersectionObserver;
   private mo?: MutationObserver;
   private rescan?: number;
+  private seeMoreTimer?: number;
+  private readonly onSeeMoreClick = (e: Event) => {
+    if (!this.active) return;
+    if (!/(^|\.)facebook\.com$/i.test(location.hostname)) return;
+    const btn = (e.target as Element | null)?.closest?.('button, [role="button"]');
+    if (!btn || !isSeeMoreLessControl(btn)) return;
+    const post = (btn.closest('article, [role="article"]') as HTMLElement) || (btn.parentElement as HTMLElement);
+    const run = () => {
+      if (!this.active || !post?.isConnected) return;
+      this.dirty.add(post);
+      this.scheduleScan();
+    };
+    if (this.seeMoreTimer) clearTimeout(this.seeMoreTimer);
+    setTimeout(run, 60);
+    this.seeMoreTimer = setTimeout(run, 400) as unknown as number;
+  };
   private firstScanReported = false;
   private readonly blocks = new Set<HTMLElement>();       // inserted translation blocks
   private readonly sources = new Set<HTMLElement>();      // source elements we marked
@@ -110,12 +126,15 @@ export class UniversalTranslator {
       if (sawReal) this.scheduleScan();
     });
     this.mo.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('click', this.onSeeMoreClick, true);
   }
 
   deactivate(): void {
     if (!this.active) return;
     this.active = false;
     this.mo?.disconnect(); this.mo = undefined;
+    document.removeEventListener('click', this.onSeeMoreClick, true);
+    if (this.seeMoreTimer) { clearTimeout(this.seeMoreTimer); this.seeMoreTimer = undefined; }
     this.io?.disconnect(); this.io = undefined;
     if (this.rescan) { clearTimeout(this.rescan); this.rescan = undefined; }
     this.dirty.clear();
