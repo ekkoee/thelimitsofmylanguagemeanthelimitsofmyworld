@@ -166,10 +166,10 @@ export function collectUnits(root: HTMLElement): Unit[] {
   const hasChildBlockWithText = (el: Element): boolean => {
     for (const ch of Array.from(el.children)) {
       if (skip(ch)) continue;
-      // Facebook's「顯示較少」is a div[role=button] painted inline at the end of the
-      // last paragraph. A div is not phrasing, so it looks like a child block and
-      // the loose sentence before it was never a unit. The toggle is not a block.
-      if (isSeeMoreLessControl(ch)) continue;
+      // An inline chrome widget (Facebook「顯示較少」, Threads「翻譯」, a 1/3 counter)
+      // is often a div, so it looks like a child block. The sentence in the
+      // sibling span would then never become a unit. The widget is not a block.
+      if (isInlinePostChrome(ch)) continue;
       const dk = display(ch);
       if (dk === 'none') continue;
       if (dk === 'block') {
@@ -258,6 +258,20 @@ export function isHiddenFromView(el: HTMLElement): boolean {
 
 const SEE_MORE_LESS = /^(?:[…⋯.]{1,3}\s*)?(?:see\s*more|see\s*less|show\s*more|show\s*less|more|less|更多|更少|查看更多|查看較少|顯示更多|顯示較少|顯示更少|繼續閱讀|收合|收起)$/i;
 
+/**
+ * A widget painted inside the post body: see-more, Threads' own「翻譯」, or a
+ * carousel counter like 1/3. The whole element is that widget, not a sentence
+ * that merely mentions the word.
+ */
+export function isInlinePostChrome(el: Element): boolean {
+  if (isSeeMoreLessControl(el)) return true;
+  const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!text || text.length > 24) return false;
+  const compact = text.replace(/\s+/g, '');
+  if (/^\d+\/\d+$/.test(compact)) return true;
+  return /^(?:翻譯|翻译|translate|see\s*translation|view\s*translation|顯示原文|查看翻譯|see\s*original)$/i.test(text);
+}
+
 /** Inline "see more / 顯示較少" control. Not the paragraph that contains it. */
 export function isSeeMoreLessControl(el: Element): boolean {
   const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
@@ -278,6 +292,7 @@ function visibleText(el: HTMLElement): string {
       if (n.nodeType === 1) {
         const e = n as HTMLElement;
         if (HARD_SKIP.has(e.tagName)) return NodeFilter.FILTER_REJECT;
+        if (isInlinePostChrome(e)) return NodeFilter.FILTER_REJECT;
         // A control inside the block is chrome. When the block itself is that
         // control (LinkedIn's commentary button), its own text is the post.
         const control = e.closest(CONTROL_SEL);
@@ -291,10 +306,15 @@ function visibleText(el: HTMLElement): string {
   });
   let c: Node | null;
   while ((c = tw.nextNode())) s += `${c.nodeValue || ''} `;
-  return s.replace(/\s+/g, ' ').trim().replace(
-    /(?:\s|^)(?:[…⋯]|\.{3})?\s*(?:see more|see less|show more|show less|查看更多|查看較少|顯示更多|顯示較少|顯示更少)\s*$/i,
-    '',
-  ).trim();
+  return stripTrailingWidgets(s);
+}
+
+const WIDGET_TAIL = /(?:\s|^)(?:[…⋯]|\.{3})?\s*(?:see more|see less|show more|show less|查看更多|查看較少|顯示更多|顯示較少|顯示更少|翻譯|翻译|translate|\d+\s*\/\s*\d+)\s*$/i;
+
+function stripTrailingWidgets(s: string): string {
+  let t = s.replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < 4 && WIDGET_TAIL.test(t); i++) t = t.replace(WIDGET_TAIL, '').trim();
+  return t;
 }
 
 function isContentHeading(el: HTMLElement, text: string): boolean {

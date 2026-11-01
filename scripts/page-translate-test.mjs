@@ -84,6 +84,8 @@ check('key b ignored', !isAltA({ ...base, code: 'KeyB', key: 'b' }));
 const post = 'Leading aerospace manufacturers have proven that larger, more complex aluminum aerostructures can be produced with shorter cycle times and greater efficiency using Makino machining solutions.';
 const zhShell = `首頁 人脈 職缺 訊息 通知 顯示翻譯 讚 留言 轉發 傳送 推薦給你 加為好友 關注 排序依據 最相關 `.repeat(8) + `\n${post}`;
 check('english post is not skipped on linkedin zh shell', chineseSkipReason('www.linkedin.com', post, zhShell, 'zh-TW') === '');
+check('english post is not skipped on threads zh shell', chineseSkipReason('www.threads.com', post, zhShell, 'zh-TW') === '');
+check('threads.net uses the same post-text rule', chineseSkipReason('www.threads.net', post, zhShell, 'zh-TW') === '');
 check('same english post is skipped on github zh shell', chineseSkipReason('github.com', post, zhShell, 'zh-TW') === 'shell');
 check('chinese unit is skipped on linkedin', chineseSkipReason('www.linkedin.com', '牧野這次展示大型航太鋁件的加工節拍可以再縮短，而且精度維持得住。', zhShell, 'zh-TW') === 'target');
 

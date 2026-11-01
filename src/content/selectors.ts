@@ -124,6 +124,15 @@ export const SITE_RULES: SiteRule[] = [
     ].join(','),
   },
   {
+    // Threads. Post text is a block span; nav and the header chrome are not.
+    // The「翻譯」widget is stripped in blocks.ts so it does not split the post.
+    match: /(^|\.)threads\.(com|net)$/,
+    exclude: [
+      'header', 'nav', 'footer',
+      '[role="banner"]', '[role="navigation"]',
+    ].join(','),
+  },
+  {
     // Netflix player chrome and the timed-text layer. Browse titles stay on the
     // generic page path. The video overlay is drawn separately.
     match: /(^|\.)netflix\.com$/,

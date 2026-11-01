@@ -29,12 +29,17 @@ export function shellIsChinese(text: string, targetLangCode: string): boolean {
   return han >= 12 && chineseShare(text) >= 0.5;
 }
 
-/** LinkedIn judges the post text. Other sites still skip English inside a Chinese shell (GitHub included). */
+/** LinkedIn and Threads have no reliable per-post article box, so a zh-TW shell must not skip the post. */
+function judgesByUnitText(host: string): boolean {
+  return linkedInHost(host) || /(^|\.)threads\.(com|net)$/i.test(host);
+}
+
+/** LinkedIn and Threads judge the post text. Other sites still skip English inside a Chinese shell (GitHub included). */
 export function chineseSkipReason(
   host: string, unitText: string, shellText: string, targetLangCode: string,
 ): '' | 'target' | 'shell' {
   if (isAlreadyTargetLang(unitText, targetLangCode)) return 'target';
-  if (linkedInHost(host)) return '';
+  if (judgesByUnitText(host)) return '';
   if (shellIsChinese(shellText, targetLangCode)) return 'shell';
   return '';
 }
