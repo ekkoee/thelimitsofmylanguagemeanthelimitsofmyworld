@@ -303,10 +303,23 @@
   user-select: none;
 }
 .ibt-sel-card.ibt-sel-drag .ibt-sel-head { cursor: grabbing; }
-.ibt-sel-grip { display: grid; color: #6b7287; }
+.ibt-sel-grip { display: inline-flex; flex: none; width: 16px; height: 16px; color: #8b93a7; }
+.ibt-sel-grip svg { display: block; }
 .ibt-sel-save { margin-left: auto; }
 .ibt-sel-save,
-.ibt-sel-x,
+.ibt-sel-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #6b7287;
+  cursor: pointer;
+}
 .ibt-sel-copy,
 .ibt-sel-speak {
   display: inline-flex;
@@ -320,6 +333,10 @@
   font: 13px/1 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   padding: 6px;
 }
+.ibt-sel-copy svg,
+.ibt-sel-speak svg,
+.ibt-sel-save svg,
+.ibt-sel-x svg { flex: none; display: block; }
 .ibt-sel-dark .ibt-sel-grip,
 .ibt-sel-dark .ibt-sel-save,
 .ibt-sel-dark .ibt-sel-x,
@@ -333,8 +350,14 @@
 .ibt-sel-dark .ibt-sel-x:hover,
 .ibt-sel-dark .ibt-sel-copy:hover,
 .ibt-sel-dark .ibt-sel-speak:hover { background: rgba(108, 122, 255, 0.18); color: #8ea2ff; }
-.ibt-sel-save[aria-pressed="true"] { background: rgba(108, 122, 255, 0.16); color: #6c7aff; }
-.ibt-sel-dark .ibt-sel-save[aria-pressed="true"] { color: #c5cdff; }
+.ibt-sel-save[aria-pressed="true"] {
+  background: transparent;
+  color: #6c7aff;
+}
+.ibt-sel-save[aria-pressed="true"] svg {
+  filter: drop-shadow(0 0 3px rgba(108, 122, 255, 0.55));
+}
+.ibt-sel-dark .ibt-sel-save[aria-pressed="true"] { color: #8ea2ff; }
 .ibt-sel-orig {
   display: flex;
   align-items: flex-start;

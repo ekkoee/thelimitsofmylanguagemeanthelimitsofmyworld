@@ -56,7 +56,7 @@ function grip(): SVGSVGElement {
     const dot = document.createElementNS(NS, 'circle');
     dot.setAttribute('cx', String(x));
     dot.setAttribute('cy', String(y));
-    dot.setAttribute('r', '1.15');
+    dot.setAttribute('r', '1.35');
     dot.setAttribute('fill', 'currentColor');
     svg.appendChild(dot);
   }

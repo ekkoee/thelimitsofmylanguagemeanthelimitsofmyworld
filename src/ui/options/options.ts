@@ -245,8 +245,9 @@ async function bindVocab(): Promise<void> {
       main.append(word, gloss, meta);
       const del = document.createElement('button');
       del.type = 'button';
-      del.className = 'text-btn';
-      del.textContent = '刪除';
+      del.className = 'vocab-del';
+      del.setAttribute('aria-label', `刪除 ${item.word}`);
+      del.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 7h14M9 7V5h6v2M8 7l.7 12h6.6L16 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       del.addEventListener('click', async () => {
         await removeVocab(item.id);
         items = items.filter((entry) => entry.id !== item.id);

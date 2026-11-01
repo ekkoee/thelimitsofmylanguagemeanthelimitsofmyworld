@@ -159,18 +159,40 @@ input[type="range"]::-moz-range-thumb {
 .vocab-tools { display: flex; gap: 8px; margin-bottom: 16px; }
 .vocab-tools input { flex: 1; }
 .vocab-tools select { width: 112px; }
-.vocab-list { list-style: none; margin: 0; padding: 0; }
+.vocab-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .vocab-list li {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 0;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #f4f6fb;
 }
-.vocab-list li + li { box-shadow: inset 0 1px 0 var(--inset); }
+@media (prefers-color-scheme: dark) {
+  .vocab-list li { background: #1b1f2e; }
+}
 .vocab-list div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .vocab-list strong { font-size: 15px; font-weight: 600; }
 .vocab-list span { color: var(--ink); }
 .vocab-list em { color: var(--muted); font-style: normal; font-size: 12px; }
+.vocab-del {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+}
+.vocab-list li:hover .vocab-del,
+.vocab-list li:focus-within .vocab-del,
+.vocab-del:focus-visible { opacity: 1; }
+.vocab-del:hover { background: rgba(108, 122, 255, 0.1); color: var(--ink); }
 .vocab-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
 select, input[type="text"], input[type="password"], input[type="search"] {
   width: 100%;
