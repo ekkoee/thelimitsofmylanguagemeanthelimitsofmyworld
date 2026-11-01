@@ -308,8 +308,10 @@ function visibleText(el: HTMLElement): string {
         if (e.getAttribute('aria-hidden') === 'true' && !paintedBox(e)) return NodeFilter.FILTER_REJECT;
         // A control inside the block is chrome. When the block itself is that
         // control (LinkedIn's commentary button), its own text is the post.
+        // Threads stamps translate="no" on the @mention span. That is the
+        // handle, not a button — rejecting it deleted @name from the source.
         const control = e.closest(CONTROL_SEL);
-        if (control && control !== el) return NodeFilter.FILTER_REJECT;
+        if (control && control !== el && !isMentionChipText(control.textContent || '')) return NodeFilter.FILTER_REJECT;
         if (e.classList.contains('ibt-block') || e.dataset.ibtOut === '1') return NodeFilter.FILTER_REJECT;
         if (e.closest(HIDDEN_SEL) || /\b(sr-only|visually-hidden)\b/i.test(classBlob(e))) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_SKIP;
@@ -318,8 +320,21 @@ function visibleText(el: HTMLElement): string {
     },
   });
   let c: Node | null;
-  while ((c = tw.nextNode())) s += `${c.nodeValue || ''} `;
+  while ((c = tw.nextNode())) {
+    const v = c.nodeValue || '';
+    // React splits the handle into "@" + comment + "name". A space there
+    // would ship "@ name". Every other boundary still gets a space.
+    const glueMention = /[@#]$/.test(s) && /^[\w.]/.test(v);
+    if (!glueMention) s += ' ';
+    s += v;
+  }
   return stripTrailingWidgets(s);
+}
+
+/** The whole string is one @name or #tag. Not a sentence that contains one. */
+function isMentionChipText(text: string): boolean {
+  const t = text.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, '');
+  return t.length > 1 && t.length <= 50 && /^[@#][\w.]+$/.test(t);
 }
 
 const WIDGET_TAIL = /(?:\s|^)(?:[…⋯]|\.{3})?\s*(?:see more|see less|show more|show less|查看更多|查看較少|顯示更多|顯示較少|顯示更少|翻譯|翻译|translate|\d+\s*\/\s*\d+)\s*$/i;
@@ -332,11 +347,21 @@ function stripTrailingWidgets(s: string): string {
 
 /** A mention or other short link inside a longer sentence. Not a title link that is the whole line. */
 function isEmbeddedChip(el: Element, parent: Element): boolean {
+  const child = (el.textContent || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+  const all = (parent.textContent || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+  if (!child) return false;
+  // Threads paints @name as div.inline-block > span[display:contents] > div > a.
+  // A div is a block even when its display is inline-block, so the sentence
+  // stopped being a leaf and the words around the mention were never a unit.
+  // A link that is the whole line (a GitHub title, a username) is not this:
+  // the parent must still have words outside the handle.
+  if (isMentionChipText(child)) {
+    const rest = all.replace(child, ' ').replace(/\s+/g, ' ').trim();
+    return rest.length >= 2 && /\p{L}/u.test(rest);
+  }
   const role = el.getAttribute('role') || '';
   if (el.tagName !== 'A' && role !== 'link' && el.tagName !== 'SPAN') return false;
-  const child = (el.textContent || '').replace(/\s+/g, ' ').trim();
-  const all = (parent.textContent || '').replace(/\s+/g, ' ').trim();
-  if (!child || child.length > 40) return false;
+  if (child.length > 40) return false;
   if (all.length < child.length + 8) return false;
   return /^[@#]/.test(child) || el.tagName === 'A' || role === 'link';
 }

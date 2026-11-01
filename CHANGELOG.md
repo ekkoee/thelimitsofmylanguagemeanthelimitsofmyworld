@@ -2,6 +2,10 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.4.24] — 2026-11-01
+### 修正 Fixed
+- **Threads 含 @ 的回覆會翻。** 1.4.23 只把直接的 `<a>`／`<span>` 當成句中的小標籤。實頁上 @ 是 `div`（`display: inline-block`）包著 `a`，而且名字在 `<span translate="no">` 裡被拆成 `@` 和帳號。那個 div 被當成子區塊，整句就沒有翻譯單位。現在這種 div 留在句子裡，原文和譯文都保留 `@name`，連結仍可點。沒有 @ 的短回覆、X／LinkedIn／Facebook／GitHub 的切法沒改。沒有新增權限。
+
 ## [1.4.23] — 2026-11-01
 ### 修正 Fixed
 - **Threads 短回覆和帶 @ 的貼文也會翻。** 1.4.22 只處理「翻譯」把長文拆開的情況。短句（Cool tweet bruh、Me too.）仍被字數門檻丟掉；@ 連結若自己成塊，句子也會被拆掉。公開頁的 `#scrollview` 還標了 aria-hidden，整欄可見貼文被當成隱藏。現在 Threads 上只要還有至少兩個英文字就翻，純表情、純 @、純網址不翻。GitHub 的短介面文字門檻沒改。

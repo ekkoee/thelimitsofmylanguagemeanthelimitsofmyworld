@@ -16,9 +16,17 @@ const html = `<!doctype html>
 <body>
 <div id="post" aria-hidden="true" style="width:560px;font:16px/1.4 sans-serif">
   <div>串文</div>
-  <span style="display:block">
-    <span style="display:inline">Hey @meta corposlops, keep all mentions of @alexandr including Twitter screenshots out of my feed</span>
-    <a href="/@alexandr" style="display:inline-block">@alexandr</a>
+  <span dir="auto" style="display:block">
+    <span style="display:inline">Hey </span>
+    <div style="display:inline-block"><span style="display:contents"><div style="display:block"><a href="/@meta" role="link" tabindex="0" style="display:inline"><span translate="no">@<!-- -->meta</span></a></div></span></div>
+    <span style="display:inline"> corposlops, keep all mentions of </span>
+    <div style="display:inline-block"><span style="display:contents"><div style="display:block"><a href="/@alexandr" role="link" tabindex="0" style="display:inline"><span translate="no">@<!-- -->alexandr</span></a></div></span></div>
+    <span style="display:inline"> including Twitter screenshots out of my feed</span>
+    <div style="display:inline-block"><div role="button"><span>翻譯</span></div></div>
+  </span>
+  <span dir="auto" style="display:block">
+    <span style="display:inline">bro clearly lacks self awareness </span>
+    <div style="display:inline-block"><a href="/@alexandr" role="link" tabindex="0" style="display:inline"><span translate="no">@<!-- -->alexandr</span></a></div>
     <div style="display:inline-block"><div role="button"><span>翻譯</span></div></div>
   </span>
   <span style="display:block"><span style="display:inline">Cool tweet bruh</span></span>
@@ -48,8 +56,10 @@ function check(name, cond) {
   if (!cond) failures++;
 }
 const hey = units.find((t) => t.includes('keep all mentions'));
+const bro = units.find((t) => t.includes('self awareness'));
 check('mention post is one unit', !!hey);
-check('mention stays in the source', !!hey && hey.includes('@alexandr'));
+check('both mentions stay as @name', !!hey && hey.includes('@meta') && hey.includes('@alexandr') && !hey.includes('@ meta') && !hey.includes('@ alexandr'));
+check('short @ reply is one unit', !!bro && bro.includes('@alexandr') && !bro.includes('@ alexandr'));
 check('翻譯 is not in the source', !units.some((t) => t.includes('翻譯')));
 check('short reply Cool tweet bruh', units.some((t) => t === 'Cool tweet bruh'));
 check('short reply Me too.', units.some((t) => t.startsWith('Me too')));
