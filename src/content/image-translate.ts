@@ -2,6 +2,7 @@
 // them here, or crop a tab screenshot) and Gemini reads the picture. The block
 // sits under the image when the layout can grow, and on top of it when it cannot.
 
+import { setUiLang, t, watchUiLang } from '../core/i18n';
 import { applyRootState } from '../utils/dom';
 import { loadSettings } from '../core/storage';
 import { pageFontPx } from './page-font';
@@ -10,9 +11,6 @@ import { renderRegions } from './image-inplace';
 import { friendlyTranslateError } from '../core/errors';
 import { IMAGE_JPEG_QUALITY, IMAGE_MAX_EDGE, ImageRegion, isMostlyLatin, selectInPlace } from '../providers/gemini-image';
 
-const EMPTY = '圖片中沒有可翻譯的文字';
-const LOADING = '右鍵圖片翻譯中…';
-const FAILED_ZH = '無法把圖片裡的文字翻成中文，請再試一次';
 const inflight = new Map<string, Promise<void>>();
 
 type ImgHit = HTMLImageElement | HTMLElement;
@@ -24,6 +22,8 @@ export function startImageTranslate(): void {
   const w = window as unknown as { __ibtImage?: boolean };
   if (w.__ibtImage) return;
   w.__ibtImage = true;
+  watchUiLang();
+  void loadSettings().then((s) => setUiLang(s.uiLang || '')).catch(() => {});
   document.addEventListener('contextmenu', (e) => {
     lastTarget = e.target as Element | null;
   }, true);
@@ -128,7 +128,7 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
     applyRootState(settings);
     const bytes = await acquire(img, srcUrl);
     if (!shell.isConnected) return;
-    if (!bytes) throw new Error('無法讀取這張圖片');
+    if (!bytes) throw new Error(t('imageUnreadable'));
     console.log('[IBT] image encoded', bytes.via, bytes.mime, bytes.data.length, new Date().toISOString());
     if (settings.imageModel === 'gemini') {
       const resp = await chrome.runtime.sendMessage({
@@ -143,7 +143,7 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
           return;
         }
         const body = (resp.text || '').trim();
-        const shown = !body ? EMPTY : (isMostlyLatin(body) ? FAILED_ZH : body);
+        const shown = !body ? t('imageEmpty') : (isMostlyLatin(body) ? t('imageFailed') : body);
         if (decision.mode === 'below' && !el.closest('article')) { shell.remove(); mountBelow(img, shown); return; }
         paintPanel(shell, shown);
         return;
@@ -154,14 +154,14 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
       type: 'ibt-ocr-translate', mime: bytes.mime, data: bytes.data,
     }) as { ok?: boolean; regions?: ImageRegion[]; error?: string; ms?: number };
     if (!shell.isConnected) return;
-    if (!ocr?.ok) throw new Error(ocr?.error || '本機文字辨識失敗');
+    if (!ocr?.ok) throw new Error(ocr?.error || t('ocrFailed'));
     console.log('[IBT] ocr', ocr.ms, 'regions', (ocr.regions || []).length);
     const ocrPicked = selectInPlace(ocr.regions || []);
     if (ocrPicked.mode === 'inplace') {
       await paintInPlace(shell, img, bytes, ocrPicked.regions);
       return;
     }
-    const ocrShown = (ocr.regions || []).map((r) => r.textZh).filter(Boolean).join('\n') || EMPTY;
+    const ocrShown = (ocr.regions || []).map((r) => r.textZh).filter(Boolean).join('\n') || t('imageEmpty');
     if (decision.mode === 'below' && !el.closest('article')) { shell.remove(); mountBelow(img, ocrShown); return; }
     paintPanel(shell, ocrShown);
   } catch (err) {
@@ -200,7 +200,8 @@ function mountOverlay(img: ImgHit): HTMLElement {
   overlay.dataset.ibtImgFor = tag(img);
   const loading = document.createElement('div');
   loading.className = 'ibt-img-loading';
-  loading.textContent = LOADING;
+  loading.dataset.i18n = 'imageLoading';
+  loading.textContent = t('imageLoading');
   overlay.appendChild(controls(overlay));
   overlay.appendChild(loading);
   placeOverlay(img as HTMLElement, overlay);
@@ -253,7 +254,8 @@ function controls(overlay: HTMLElement): HTMLElement {
   const peek = document.createElement('button');
   peek.type = 'button';
   peek.className = 'ibt-img-peek';
-  peek.textContent = '原文';
+  peek.dataset.i18n = 'original';
+  peek.textContent = t('original');
   peek.addEventListener('mouseenter', () => overlay.classList.add('is-peek'));
   peek.addEventListener('mousedown', () => overlay.classList.add('is-peek'));
   peek.addEventListener('mouseup', () => overlay.classList.remove('is-peek'));

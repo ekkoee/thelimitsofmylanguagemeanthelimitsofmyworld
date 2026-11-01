@@ -11,6 +11,7 @@ mkdirSync(outdir, { recursive: true });
 // Static assets copied verbatim into dist/
 const copies = [
   ['public/manifest.json', 'dist/manifest.json'],
+  ['public/_locales', 'dist/_locales'],
   ['public/popup.html', 'dist/popup.html'],
   ['public/options.html', 'dist/options.html'],
   ['src/ui/popup/popup.css', 'dist/popup.css'],

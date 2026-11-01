@@ -1,6 +1,7 @@
 // One Gemini generateContent call at a time, on the best model that still has quota.
 // Image calls give up a silent socket after 15s and keep the whole chain under 20s.
 
+import { t as ui } from './i18n';
 import {
   IMAGE_BODY_TIMEOUT_MS,
   IMAGE_CHAIN_BUDGET_MS,
@@ -122,7 +123,7 @@ async function callModel(
   try {
     return JSON.parse(raw) as unknown;
   } catch {
-    throw new Error('Gemini 沒有回傳譯文');
+    throw new Error(ui('geminiNoText'));
   }
 }
 
@@ -161,7 +162,7 @@ export async function executeGeminiRoute(opts: GeminiRouteOpts): Promise<{ model
           opts.onState?.(opts.state);
           return { model, json };
         } catch (err) {
-          if (err instanceof RouteSignal && err.code === 'auth') throw new Error('Gemini 金鑰無效');
+          if (err instanceof RouteSignal && err.code === 'auth') throw new Error(ui('geminiInvalid'));
           if (err instanceof RouteSignal) {
             last = err;
             if (err.code === 'day') noteDay(opts.state, model, {
@@ -199,7 +200,7 @@ export async function executeGeminiRoute(opts: GeminiRouteOpts): Promise<{ model
       if (err instanceof RouteSignal) {
         last = err;
         if (err.code === 'timeout') noteHung(opts.state, pick.model, now());
-        if (err.code === 'auth') throw new Error('Gemini 金鑰無效');
+        if (err.code === 'auth') throw new Error(ui('geminiInvalid'));
         if (err.code === 'day' || err.code === 'minute' || err.code === 'timeout' || err.code === 'server') {
           if (err.code === 'minute') minuteSec = Math.max(minuteSec, err.retrySec || 10);
           opts.onState?.(opts.state);
@@ -214,11 +215,11 @@ export async function executeGeminiRoute(opts: GeminiRouteOpts): Promise<{ model
     }
   }
   if (minuteSec > 0) throw new Error(minuteMessage(minuteSec));
-  if (last?.code === 'timeout') throw new Error(`Gemini 回應逾時（${last.model}）`);
-  if (last?.code === 'network') throw new Error('連不到 Gemini，請檢查網路');
-  if (last?.code === 'server') throw new Error(`Gemini 服務暫時錯誤（${last.status}）`);
+  if (last?.code === 'timeout') throw new Error(ui('geminiTimeoutModel', { model: last.model }));
+  if (last?.code === 'network') throw new Error(ui('geminiNetwork'));
+  if (last?.code === 'server') throw new Error(ui('geminiServer'));
   if (last?.code === 'day') throw new Error(allExhaustedMessage(soonestReset(opts.state, now())));
-  throw new Error(opts.purpose === 'image' ? 'Gemini 沒有回傳圖片譯文' : 'Gemini 沒有回傳譯文');
+  throw new Error(opts.purpose === 'image' ? ui('geminiNoImage') : ui('geminiNoText'));
 }
 
 function cheapestModel(chain: string[]): string {

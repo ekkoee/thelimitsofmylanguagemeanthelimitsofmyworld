@@ -1,3 +1,5 @@
+import { t } from './i18n';
+
 // Free-tier Gemini quotas are per model. A 429 tells us which bucket ran out.
 // PerDay: skip that model until the next Pacific midnight (Google's reset).
 // PerMinute: remember the cap, and use another model that still has room.
@@ -303,15 +305,15 @@ export function noteSwitch(state: QuotaState, chain: string[], chosen: string, n
 }
 
 export function switchedMessage(model: string, fallback: string): string {
-  return `Gemini 免費額度今天已用完（${model}），已改用 ${fallback}`;
+  return t('quotaDay', { model, fallback });
 }
 
 export function allExhaustedMessage(resetAt: number): string {
-  return `Gemini 免費額度已用完，將於 ${formatTaipeiHM(resetAt)} 重置`;
+  return t('quotaReset', { time: formatTaipeiHM(resetAt) });
 }
 
 export function minuteMessage(sec: number): string {
-  return `請求太頻繁，${Math.max(1, Math.ceil(sec))} 秒後自動重試`;
+  return t('rateLimit', { sec: Math.max(1, Math.ceil(sec)) });
 }
 
 export function quotaStatusText(state: QuotaState, now = Date.now()): string {
@@ -321,9 +323,9 @@ export function quotaStatusText(state: QuotaState, now = Date.now()): string {
     const fallback = state.switchedTo && state.switchedTo.toLowerCase() !== model.toLowerCase()
       ? state.switchedTo
       : 'gemini-2.5-flash-lite';
-    lines.push(`${switchedMessage(model, fallback)}。將於 ${formatTaipeiHM(quota.exhaustedUntil)} 重置。`);
+    lines.push(`${switchedMessage(model, fallback)}${t('quotaResetJoin', { time: formatTaipeiHM(quota.exhaustedUntil) })}`);
   }
-  if (!lines.length) return 'Gemini 額度：今日還沒有模型用完免費額度。';
+  if (!lines.length) return t('quotaNone');
   return lines.join('\n');
 }
 

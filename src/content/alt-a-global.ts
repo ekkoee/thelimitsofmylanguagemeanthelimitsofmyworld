@@ -9,7 +9,8 @@
 //
 // Auto-sites (x/reddit/youtube) are excluded: content.js handles Alt+A there.
 import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
-import { applyRootState, cycleView, VIEW_LABEL, watchTransSurfaces } from '../utils/dom';
+import { setUiLang, watchUiLang } from '../core/i18n';
+import { applyRootState, cycleView, viewLabel, watchTransSurfaces } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
 import { isAltA } from './alt-a-key';
@@ -18,9 +19,11 @@ import { startImageTranslate } from './image-translate';
 import { startSelectionTranslate } from './selection';
 
 console.log('[IBT] content script loaded', location.hostname, location.href);
+watchUiLang();
 startImageTranslate();
 startSelectionTranslate();
 watchTransSurfaces();
+loadSettings().then((s) => setUiLang(s.uiLang || '')).catch(() => {});
 
 const AUTO_SITE_RE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
 if (AUTO_SITE_RE.test(location.href)) {
@@ -31,6 +34,7 @@ if (AUTO_SITE_RE.test(location.href)) {
   const w = window as unknown as { __ibtUniversal?: UniversalTranslator; __ibtAltAAt?: number };
 
   function applyVisual(s: Settings) {
+    setUiLang(s.uiLang || '');
     applyRootState({
       enabled: s.enabled, showOriginal: s.showOriginal, layout: s.layout, fontScale: s.fontScale,
       targetLangCode: s.targetLangCode, transStyle: s.transStyle, transColor: s.transColor,
@@ -50,7 +54,7 @@ if (AUTO_SITE_RE.test(location.href)) {
     // Already translated → cycle the 3-state display (pure CSS).
     if (w.__ibtUniversal) {
       const next = cycleView();
-      toast(VIEW_LABEL[next]);
+      toast(viewLabel(next));
       void saveSettings({ viewMode: next });
       return;
     }

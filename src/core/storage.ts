@@ -38,6 +38,8 @@ function instantChosen(stored: object): boolean {
   return Object.prototype.hasOwnProperty.call(stored, 'selectionInstantSet');
 }
 
+const UI_LANGS = new Set(['zh-TW', 'zh-CN', 'en', 'ja', 'ko', 'de', 'fr', 'es']);
+
 function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; dblClickTranslate?: unknown; transHighlightSet?: unknown; transColorSet?: unknown; selectionInstantSet?: unknown }): Settings {
   const isGemini = s.provider === 'gemini';
   // The LinkedIn expand toggle was removed. A stored false must not survive on the object.
@@ -55,6 +57,7 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; db
     selectionTranslate: s.selectionTranslate !== false,
     selectionInstant: instantChosen(s) ? s.selectionInstant === true : true,
     sourceLang: 'auto',
+    uiLang: UI_LANGS.has(String(s.uiLang || '')) ? String(s.uiLang) : '',
     translateOnVisible: true,
     cacheEnabled: true,
     sites: { x: true, reddit: true, youtube: true, netflix: true },

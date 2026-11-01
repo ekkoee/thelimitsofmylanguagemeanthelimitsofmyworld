@@ -1,3 +1,4 @@
+import { t } from '../core/i18n';
 import { Settings } from '../core/types';
 import { chineseShare, isAlreadyTargetLang, stripNoise } from '../core/segmentation';
 import { renderTranslationAfter } from './engine';
@@ -111,7 +112,7 @@ export class UniversalTranslator {
   activate(): void {
     if (this.active) return;
     this.active = true;
-    toast('整頁雙語已開啟（再按 Alt+A 關閉）'); // immediate feedback — scan() can
+    toast(t('pageOn')); // immediate feedback — scan() can
     this.scan(); // initial full pass (dirty empty → whole document.body)      // take a moment on heavy pages
     this.mo = new MutationObserver((records) => {
       let sawReal = false;
@@ -163,7 +164,7 @@ export class UniversalTranslator {
     this.processed = new WeakSet();
     this.fp = new WeakMap();
     this.firstScanReported = false;
-    toast('整頁雙語已關閉');
+    toast(t('pageOff'));
   }
 
   private scheduleScan(): void {
@@ -259,8 +260,8 @@ export class UniversalTranslator {
     if (!this.firstScanReported) {
       this.firstScanReported = true;
       console.log('[IBT] scan done', { candidates, rendered, skippedTarget, skippedShell, skippedCollapsed, host: location.hostname });
-      if (!rendered && skippedCollapsed > 0 && !skippedTarget && !skippedShell) toast('貼文還摺著，點「更多」後會翻譯這則');
-      else if (!rendered && (skippedTarget > 0 || skippedShell > 0) && !skippedCollapsed) toast('這頁看起來已經是中文，不需要翻譯');
+      if (!rendered && skippedCollapsed > 0 && !skippedTarget && !skippedShell) toast(t('postFolded'));
+      else if (!rendered && (skippedTarget > 0 || skippedShell > 0) && !skippedCollapsed) toast(t('alreadyTarget'));
     }
   }
 

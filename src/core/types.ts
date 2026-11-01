@@ -28,6 +28,8 @@ export interface Settings {
   sourceLang: string;           // BCP-47 source-language code, or 'auto' to detect (default)
   targetLang: string;           // natural-language name, used by LLM prompts
   targetLangCode: string;       // BCP-47 code, used by the free Google engine (e.g. zh-TW)
+  /** '' follows the browser. Otherwise a UI language code. */
+  uiLang: string;
   translateOnVisible: boolean;  // only translate elements scrolled into view
   provider: ProviderId;
   model: string;                // ignored by the free Google engine
@@ -78,6 +80,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sourceLang: 'auto',          // ← detect any source language (Korean/Japanese/…)
   targetLang: 'Traditional Chinese (zh-TW)',
   targetLangCode: 'zh-TW',
+  uiLang: '',
   translateOnVisible: true,
   provider: 'google',          // ← FREE by default, no API key required
   model: '',

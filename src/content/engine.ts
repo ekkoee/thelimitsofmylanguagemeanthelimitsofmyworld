@@ -1,3 +1,4 @@
+import { t } from '../core/i18n';
 import { AlignedPair, Settings, TranslateResponse } from '../core/types';
 import { hasTranslatableText, isAlreadyTargetLang, sameMeaning } from '../core/segmentation';
 import { el, isProcessed, markProcessed } from '../utils/dom';
@@ -115,7 +116,9 @@ function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
 function showReloadHint(block: HTMLElement): void {
   setBlockClass(block);
   block.textContent = '';
-  block.appendChild(el('span', 'ibt-error-msg', '擴充功能已更新，請重新整理此頁面以繼續翻譯。'));
+  const reload = el('span', 'ibt-error-msg', t('reloadExt'));
+  reload.dataset.i18n = 'reloadExt';
+  block.appendChild(reload);
 }
 
 function showError(block: HTMLElement, message: string, retry: () => void): void {
@@ -125,7 +128,8 @@ function showError(block: HTMLElement, message: string, retry: () => void): void
   // provider, so this only shows when the quota is genuinely exhausted.
   const friendly = friendlyTranslateError(message, 'page');
   block.appendChild(el('span', 'ibt-error-msg', friendly));
-  const btn = el('button', 'ibt-retry', '重試');
+  const btn = el('button', 'ibt-retry', t('retry'));
+  btn.dataset.i18n = 'retry';
   btn.addEventListener('click', retry);
   block.appendChild(btn);
 }
@@ -154,7 +158,9 @@ export function renderTranslationAfter(
   const block = el('div', 'ibt-block ibt-loading');
   block.dataset.ibtOut = '1';
   if (opts?.sig) block.dataset.ibtSig = opts.sig;
-  block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
+  const loading = el('span', 'ibt-loading-dot', t('translating'));
+  loading.dataset.i18n = 'translating';
+  block.appendChild(loading);
   if (anchor.parentNode) anchor.parentNode.insertBefore(block, anchor.nextSibling);
   // Tag the original element so "Chinese-only" view can hide it via CSS — but
   // ONLY when our block is a true sibling of a self-contained original
@@ -180,7 +186,9 @@ export function renderTranslationAfter(
   const run = async (retry = false) => {
     setBlockClass(block, 'ibt-loading');
     block.textContent = '';
-    block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
+    const again = el('span', 'ibt-loading-dot', t('translating'));
+    again.dataset.i18n = 'translating';
+    block.appendChild(again);
     try {
       const pairs = await translateBlock(text, retry);
       fillPairs(block, pairs);
@@ -214,7 +222,7 @@ export class Engine {
     for (const unit of this.adapter.collect()) {
       if (isProcessed(unit.source) || this.pending.has(unit.source)) continue;
       // Skip text already in the target language (e.g. a Chinese post when the
-      // target is Chinese) — no 中文→中文 duplicate. Not marked processed, so it
+      // target is Chinese) — no duplicate of text already in the target language. Not marked processed, so it
       // re-evaluates if the target language is later changed.
       if (isAlreadyTargetLang(unit.text, this.settings.targetLangCode)) continue;
 

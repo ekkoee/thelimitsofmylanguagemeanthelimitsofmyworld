@@ -2,6 +2,7 @@
 // shows the source, the translation, and copy. Speaking reads the original.
 // Inputs and editable fields are left alone.
 
+import { t } from '../core/i18n';
 import { loadSettings } from '../core/storage';
 import { DictEntry } from '../core/types';
 import { findVocab, removeVocab, saveVocab } from '../core/vocab';
@@ -160,7 +161,8 @@ function showButton(rect: DOMRect): void {
   button = btn;
   btn.type = 'button';
   btn.className = 'ibt-sel-btn';
-  btn.setAttribute('aria-label', '翻譯選取文字');
+  btn.dataset.i18nAria = 'selTranslate';
+  btn.setAttribute('aria-label', t('selTranslate'));
   btn.replaceChildren(icon(ICONS.mark, 15));
   const left = Math.min(window.innerWidth - 40, Math.max(8, rect.right + 4));
   const top = Math.min(window.innerHeight - 40, Math.max(8, rect.bottom + 2));
@@ -178,12 +180,13 @@ async function openFromButton(): Promise<void> {
   showCard(anchor || new DOMRect(8, 8, 0, 0), current);
 }
 
-function iconButton(className: string, label: string, paths: string[]): HTMLButtonElement {
+function iconButton(className: string, key: 'copy' | 'saveWord' | 'close' | 'speakOrig', paths: string[]): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = className;
-  btn.setAttribute('aria-label', label);
-  btn.append(icon(paths, 15), document.createTextNode(label));
+  btn.dataset.i18nAria = key;
+  btn.setAttribute('aria-label', t(key));
+  btn.append(icon(paths, 15), document.createTextNode(t(key)));
   return btn;
 }
 
@@ -199,13 +202,13 @@ function showCard(rect: DOMRect, text: string): void {
   const gripEl = document.createElement('span');
   gripEl.className = 'ibt-sel-grip';
   gripEl.appendChild(grip());
-  const copy = iconButton('ibt-sel-copy', '複製', ICONS.copy);
+  const copy = iconButton('ibt-sel-copy', 'copy', ICONS.copy);
   copy.lastChild?.remove();
   copy.disabled = true;
-  const save = iconButton('ibt-sel-save', '收入單字本', ICONS.star);
+  const save = iconButton('ibt-sel-save', 'saveWord', ICONS.star);
   save.setAttribute('aria-pressed', 'false');
   save.lastChild?.remove();
-  const close = iconButton('ibt-sel-x', '關閉', ICONS.close);
+  const close = iconButton('ibt-sel-x', 'close', ICONS.close);
   close.lastChild?.remove();
   close.onclick = (event) => { event.preventDefault(); hideCard(); };
   head.append(gripEl, copy, save, close);
@@ -215,14 +218,15 @@ function showCard(rect: DOMRect, text: string): void {
   original.className = 'ibt-sel-orig';
   const source = document.createElement('span');
   source.textContent = text;
-  const speak = iconButton('ibt-sel-speak', '朗讀原文', ICONS.speak);
+  const speak = iconButton('ibt-sel-speak', 'speakOrig', ICONS.speak);
   speak.lastChild?.remove();
   let sourceLang = 'en-US';
   speak.onclick = (event) => { event.preventDefault(); speakText(text, sourceLang); };
   original.append(source, speak);
   const body = document.createElement('div');
   body.className = 'ibt-sel-body';
-  body.textContent = '翻譯中…';
+  body.dataset.i18n = 'translating';
+  body.textContent = t('translating');
   const example = document.createElement('div');
   example.className = 'ibt-sel-ex';
   example.hidden = true;
@@ -325,7 +329,8 @@ async function translateSentence(sentence: string): Promise<string> {
 
 function paintSaved(btn: HTMLButtonElement, on: boolean): void {
   btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-  btn.setAttribute('aria-label', on ? '已收入單字本' : '收入單字本');
+  btn.dataset.i18nAria = on ? 'savedWord' : 'saveWord';
+  btn.setAttribute('aria-label', t(on ? 'savedWord' : 'saveWord'));
   btn.querySelector('path')?.setAttribute('fill', on ? 'currentColor' : 'none');
 }
 
@@ -349,13 +354,15 @@ async function fillCard(
     };
     if (id !== req || !body.isConnected) return;
     if (!resp?.ok) {
-      body.textContent = resp?.error || '無法取得譯文';
+      delete body.dataset.i18n;
+      body.textContent = resp?.error || t('translationFailed');
       return;
     }
     const translation = word
       ? (resp.lookup?.translation || '').trim()
       : (resp.pairs || []).map((p) => p.t || '').join('').trim();
-    body.textContent = translation || '沒有譯文';
+    delete body.dataset.i18n;
+    body.textContent = translation || t('noTranslation');
     const dict = word ? resp.lookup?.dict : undefined;
     if (dict?.length) {
       const list = document.createElement('div');
@@ -377,7 +384,8 @@ async function fillCard(
       example.replaceChildren();
       const label = document.createElement('div');
       label.className = 'ibt-sel-ex-label';
-      label.textContent = '例句';
+      label.dataset.i18n = 'example';
+      label.textContent = t('example');
       const en = document.createElement('p');
       en.className = 'ibt-sel-ex-en';
       en.append(highlightWord(sentence, text));
@@ -429,7 +437,8 @@ async function fillCard(
     };
   } catch (err) {
     if (id !== req || !body.isConnected) return;
-    body.textContent = '無法取得譯文';
+    delete body.dataset.i18n;
+    body.textContent = t('translationFailed');
     console.log('[IBT] selection failed', err);
   }
 }

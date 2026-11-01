@@ -4,23 +4,29 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="popup.css" />
-  <title>雙語對照</title>
+  <title data-i18n="appName">雙語對照</title>
 </head>
 <body>
   <header>
     <img src="icons/icon48.png" width="28" height="28" alt="" />
-    <h1>雙語對照</h1>
+    <h1 data-i18n="appName">雙語對照</h1>
+    <div class="ui-lang">
+      <button type="button" id="uiLangBtn" aria-haspopup="listbox" aria-expanded="false" data-i18n-aria="uiLang" aria-label="介面語言">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 4c2.2 2.4 3.3 5 3.3 8s-1.1 5.6-3.3 8c-2.2-2.4-3.3-5-3.3-8s1.1-5.6 3.3-8zM4.5 12h15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+      <div id="uiLangPop" class="ui-lang-pop" role="listbox" hidden></div>
+    </div>
     <label class="switch">
-      <input type="checkbox" id="enabled" aria-label="啟用翻譯" />
+      <input type="checkbox" id="enabled" data-i18n-aria="enable" aria-label="啟用翻譯" />
       <span class="slider"></span>
     </label>
   </header>
 
-  <button id="translatePage" type="button">翻譯這個網頁</button>
-  <p id="ctaHint" class="hint">Alt+A 切換原文、中文、對照</p>
+  <button id="translatePage" type="button" data-i18n="translatePage">翻譯這個網頁</button>
+  <p id="ctaHint" class="hint" data-i18n="altHint">Alt+A 切換原文、譯文、對照</p>
 
   <label class="field">
-    <span>翻譯成</span>
+    <span data-i18n="translateTo">翻譯成</span>
     <select id="lang">
       <option value="zh-TW">繁體中文</option>
       <option value="zh-CN">简体中文</option>
@@ -34,15 +40,15 @@
   </label>
 
   <label class="field">
-    <span>譯文呈現</span>
+    <span data-i18n="viewLabel">譯文呈現</span>
     <select id="viewMode">
-      <option value="both">原文＋中文對照</option>
-      <option value="zh">只顯示中文</option>
-      <option value="orig">只顯示原文</option>
+      <option value="both" data-i18n="viewBoth">原文 + 譯文對照</option>
+      <option value="zh" data-i18n="viewTrans">只顯示譯文</option>
+      <option value="orig" data-i18n="viewOrig">只顯示原文</option>
     </select>
   </label>
 
-  <button id="openOptions" type="button">設定</button>
+  <button id="openOptions" type="button" data-i18n="settings">設定</button>
   <script src="popup.js"></script>
 </body>
 </html>

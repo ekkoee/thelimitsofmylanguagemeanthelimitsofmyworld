@@ -124,7 +124,7 @@ export function isXCaptionText(text: string, node: Rect, video: Rect): boolean {
 
 /**
  * What a video draws. Chinese and English share one caption box (order comes
- * from 影片字幕順序). An explicit 只顯示中文 / 只顯示原文 still wins.
+ * from 影片字幕順序). An explicit translation-only / original-only view still wins.
  * Unset stays bilingual so the native line can be hidden instead of leaving
  * a second caption under ours.
  */

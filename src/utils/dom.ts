@@ -1,3 +1,4 @@
+import { t } from '../core/i18n';
 import { DEFAULT_TRANS_COLOR, normalizeTint } from '../core/types';
 
 export const NS = 'ibt'; // injected-node class/attribute namespace
@@ -21,13 +22,15 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 // --- 3-state display view (Alt+A cycles; popup mirrors). Pure CSS, no re-translate.
-//  both → original + Chinese   |   orig → original only   |   zh → Chinese only
+//  both → original + translation   |   orig → original only   |   zh → translation only
 export type ViewMode = 'both' | 'zh' | 'orig';
 const VIEW_ATTR = 'data-ibt-view';
 const VIEW_NEXT: Record<ViewMode, ViewMode> = { both: 'orig', orig: 'zh', zh: 'both' };
-export const VIEW_LABEL: Record<ViewMode, string> = {
-  both: '原文 + 中文', orig: '只顯示原文', zh: '只顯示中文',
-};
+export function viewLabel(mode: ViewMode): string {
+  if (mode === 'orig') return t('viewOrig');
+  if (mode === 'zh') return t('viewTrans');
+  return t('viewBothShort');
+}
 
 export function getView(): ViewMode {
   const v = document.documentElement.getAttribute(VIEW_ATTR);

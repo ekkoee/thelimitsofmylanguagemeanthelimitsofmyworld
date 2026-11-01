@@ -1,6 +1,8 @@
 // Local OCR for image translation. Runs in the extension offscreen document so
 // the page stays responsive. Language data is downloaded once, hashed, and cached.
 
+import { setUiLang, t } from '../core/i18n';
+import { loadSettings } from '../core/storage';
 import { acceptOcrWord, OcrToken, tokensToRegions } from './paragraphs';
 import { ENG_TRAINEDDATA_SHA256, ENG_TRAINEDDATA_URL, OCR_CACHE_KEY, gunzipBytes, sha256Hex } from './traineddata';
 
@@ -56,13 +58,20 @@ function idbHas(key: string): Promise<boolean> {
   });
 }
 
+async function useUiLang(): Promise<void> {
+  try {
+    const s = await loadSettings();
+    setUiLang(s.uiLang || '');
+  } catch { /* keep the current language */ }
+}
+
 async function ensureTraineddata(): Promise<void> {
   if (await idbHas(OCR_CACHE_KEY)) return;
   const res = await fetch(ENG_TRAINEDDATA_URL);
-  if (!res.ok) throw new Error('語言包下載失敗，請檢查網路');
+  if (!res.ok) throw new Error(t('ocrDownload'));
   const gzip = new Uint8Array(await res.arrayBuffer());
   const hash = await sha256Hex(gzip);
-  if (hash !== ENG_TRAINEDDATA_SHA256) throw new Error('語言包校驗失敗');
+  if (hash !== ENG_TRAINEDDATA_SHA256) throw new Error(t('ocrHash'));
   const raw = await gunzipBytes(gzip);
   await idbPut(OCR_CACHE_KEY, raw);
 }
@@ -72,7 +81,7 @@ async function getWorker(): Promise<TessWorker> {
     workerPromise = (async () => {
       await ensureTraineddata();
       const api = (globalThis as unknown as { Tesseract?: TessApi }).Tesseract;
-      if (!api) throw new Error('本機文字辨識沒有載入');
+      if (!api) throw new Error(t('ocrMissing'));
       const worker = await api.createWorker('eng', 1, {
         workerPath: chrome.runtime.getURL('ocr/worker.min.js'),
         corePath: chrome.runtime.getURL('ocr/core'),
@@ -116,12 +125,16 @@ async function recognize(mime: string, data: string): Promise<{ regions: { text:
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type !== 'ibt-offscreen-ocr') return;
-  enqueue(() => recognize(String(msg.mime || 'image/jpeg'), String(msg.data || '')))
+  enqueue(async () => {
+    await useUiLang();
+    return recognize(String(msg.mime || 'image/jpeg'), String(msg.data || ''));
+  })
     .then((result) => sendResponse({ ok: true, ...result }))
     .catch((err) => {
       const message = String((err as Error)?.message || err);
       console.log('[IBT] ocr failed', message.slice(0, 300));
-      sendResponse({ ok: false, error: /[\u4e00-\u9fff]/.test(message) ? message : '本機文字辨識失敗' });
+      const friendly = message.length > 0 && message.length < 200 && !/[{]/.test(message) ? message : t('ocrFailed');
+      sendResponse({ ok: false, error: friendly });
     });
   return true;
 });

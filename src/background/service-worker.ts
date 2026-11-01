@@ -9,6 +9,7 @@ import { toTraditional } from '../core/st2t';
 import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 import { friendlyTranslateError } from '../core/errors';
+import { setUiLang, t } from '../core/i18n';
 import { echoesEnglish, shouldSkipImageText, translateImageSequential } from '../providers/gemini-image';
 import { normalizeGeminiKey } from '../core/gemini-key';
 import { bindQuota, emptyQuotaState, fingerprintKey, migrateQuotaState, quotaForKey, setQuotaAlign, setQuotaReady, QuotaState } from '../core/quota-router';
@@ -117,6 +118,9 @@ setQuotaAlign(async (key) => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync' || !changes.ibt_settings) return;
+  const prevLang = (changes.ibt_settings.oldValue as { uiLang?: string } | undefined)?.uiLang || '';
+  const nextLang = (changes.ibt_settings.newValue as { uiLang?: string } | undefined)?.uiLang || '';
+  if (prevLang !== nextLang) void ensureImageMenu();
   const prevBag = changes.ibt_settings.oldValue as { apiKeys?: { gemini?: string } } | undefined;
   const nextBag = changes.ibt_settings.newValue as { apiKeys?: { gemini?: string } } | undefined;
   const prev = normalizeGeminiKey(prevBag?.apiKeys?.gemini || '');
@@ -129,16 +133,20 @@ chrome.storage.onChanged.addListener((changes, area) => {
   });
 });
 
-chrome.runtime.onInstalled.addListener(() => { loadSettings(); ensureImageMenu(); });
-chrome.runtime.onStartup.addListener(() => { ensureImageMenu(); });
-ensureImageMenu();
+chrome.runtime.onInstalled.addListener(() => { loadSettings(); void ensureImageMenu(); });
+chrome.runtime.onStartup.addListener(() => { void ensureImageMenu(); });
+void ensureImageMenu();
 
-function ensureImageMenu(): void {
-  chrome.contextMenus.create({
-    id: 'ibt-translate-image',
-    title: '翻譯這張圖片',
-    contexts: ['image'],
-  }, () => void chrome.runtime.lastError);
+async function ensureImageMenu(): Promise<void> {
+  const settings = await loadSettings().catch(() => null);
+  setUiLang(settings?.uiLang || '');
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'ibt-translate-image',
+      title: t('contextImage'),
+      contexts: ['image'],
+    }, () => void chrome.runtime.lastError);
+  });
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {

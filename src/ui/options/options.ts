@@ -1,4 +1,5 @@
 import { checkGeminiKey, normalizeGeminiKey } from '../../core/gemini-key';
+import { applyI18n, setUiLang, t, watchUiLang } from '../../core/i18n';
 import { loadSettings, saveSettings } from '../../core/storage';
 import { DEFAULT_MODELS, DEFAULT_SETTINGS, ProviderId, Settings, normalizeTint } from '../../core/types';
 import { VocabEntry, clearVocab, listVocab, removeVocab, vocabToCsv, vocabToTxt } from '../../core/vocab';
@@ -15,28 +16,35 @@ const LANGS: { code: string; name: string; label: string }[] = [
 ];
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+let refreshVocab = (): void => {};
 
 async function init() {
   const s = await loadSettings();
   const version = $('version');
   try { version.textContent = chrome.runtime.getManifest().version; } catch { version.textContent = ''; }
 
+  setUiLang(s.uiLang || '');
+  applyI18n();
+  watchUiLang();
+  const uiLang = $<HTMLSelectElement>('uiLang');
+  uiLang.value = s.uiLang || '';
+  uiLang.addEventListener('change', () => {
+    void save({ uiLang: uiLang.value }).then(() => {
+      setUiLang(uiLang.value);
+      applyI18n();
+      refreshVocab();
+    });
+  });
+
   const lang = $<HTMLSelectElement>('lang');
-  const order = $<HTMLSelectElement>('order');
   const known = LANGS.some((item) => item.code === s.targetLangCode);
   lang.value = known ? s.targetLangCode : 'zh-TW';
-  const syncOrderLabels = () => {
-    const chinese = lang.value === 'zh-TW' || lang.value === 'zh-CN';
-    order.options[0].textContent = chinese ? '中文在上' : '譯文在上';
-    order.options[1].textContent = chinese ? '英文在上' : '原文在上';
-  };
-  syncOrderLabels();
   lang.addEventListener('change', () => {
     const item = LANGS.find((entry) => entry.code === lang.value) || LANGS[0];
-    syncOrderLabels();
     void save({ targetLangCode: item.code, targetLang: item.name });
   });
 
+  const order = $<HTMLSelectElement>('order');
   order.value = s.subtitleOrder === 'enTop' ? 'enTop' : 'zhTop';
   order.addEventListener('change', () => {
     const v = order.value === 'enTop' ? 'enTop' : 'zhTop';
@@ -258,7 +266,7 @@ async function bindVocab(): Promise<void> {
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'vocab-del';
-      del.setAttribute('aria-label', `刪除 ${item.word}`);
+      del.setAttribute('aria-label', t('deleteWord', { word: item.word }));
       del.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 7h14M9 7V5h6v2M8 7l.7 12h6.6L16 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       del.addEventListener('click', async () => {
         await removeVocab(item.id);
@@ -271,8 +279,8 @@ async function bindVocab(): Promise<void> {
   };
   search.addEventListener('input', draw);
   sort.addEventListener('change', draw);
-  $('vocabCsv').addEventListener('click', () => download('單字本.csv', vocabToCsv(items), 'text/csv;charset=utf-8'));
-  $('vocabTxt').addEventListener('click', () => download('單字本.txt', vocabToTxt(items), 'text/plain;charset=utf-8'));
+  $('vocabCsv').addEventListener('click', () => download(t('vocabCsvName'), vocabToCsv(items), 'text/csv;charset=utf-8'));
+  $('vocabTxt').addEventListener('click', () => download(t('vocabTxtName'), vocabToTxt(items), 'text/plain;charset=utf-8'));
   $('vocabClear').addEventListener('click', () => { confirm.hidden = false; });
   $('vocabNo').addEventListener('click', () => { confirm.hidden = true; });
   $('vocabYes').addEventListener('click', async () => {
@@ -281,6 +289,7 @@ async function bindVocab(): Promise<void> {
     confirm.hidden = true;
     draw();
   });
+  refreshVocab = draw;
   draw();
 }
 
@@ -299,21 +308,25 @@ function bindGeminiKey(initial: string) {
     if (input.value !== value) input.value = value;
     const mine = ++ticket;
     if (!value) {
+      delete note.dataset.i18n;
       note.textContent = '';
       note.removeAttribute('data-state');
       await saveKey('');
       return;
     }
-    note.textContent = '檢查中…';
+    note.dataset.i18n = 'checking';
+    note.textContent = t('checking');
     note.dataset.state = 'wait';
     const result = await checkGeminiKey(value);
     if (mine !== ticket) return;
     if (result === 'invalid') {
-      note.textContent = '金鑰無效';
+      note.dataset.i18n = 'keyInvalid';
+      note.textContent = t('keyInvalid');
       note.dataset.state = 'bad';
       return;
     }
-    note.textContent = result === 'valid' ? '已儲存' : '無法確認，已儲存';
+    note.dataset.i18n = result === 'valid' ? 'saved' : 'savedUnsure';
+    note.textContent = result === 'valid' ? t('saved') : t('savedUnsure');
     note.dataset.state = 'ok';
     await saveKey(value);
   };

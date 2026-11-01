@@ -1,6 +1,7 @@
 import { detectSite } from '../utils/site';
 import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
-import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
+import { setUiLang, watchUiLang } from '../core/i18n';
+import { applyRootState, cycleView, viewLabel } from '../utils/dom';
 import { observeMutations, onUrlChange } from '../utils/observer';
 import { Engine } from './engine';
 import { scanTwitter } from './twitter';
@@ -15,6 +16,7 @@ import { Settings } from '../core/types';
 // This script auto-runs on X / Reddit / YouTube. Whole-page translation on other
 // sites is injected on demand via Alt+A.
 (async function main() {
+  watchUiLang();
   startImageTranslate();
   let settings = await loadSettings();
 
@@ -34,7 +36,7 @@ import { Settings } from '../core/types';
   applyRoot(settings);
 
   // Alt+A (or the popup button) on these auto-sites cycles the 3-state display:
-  // 原文 + 中文 → 只顯示原文 → 只顯示中文 → … (pure CSS, no re-translation).
+  // original + translation → original only → translation only (pure CSS, no re-translation).
   let lastDirectToggle = 0;
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type === 'ibt-toggle-visibility') {
@@ -84,11 +86,12 @@ import { Settings } from '../core/types';
 
 function cycleAndSave(): void {
   const next = cycleView();
-  flash(VIEW_LABEL[next]);
+  flash(viewLabel(next));
   void saveSettings({ viewMode: next });
 }
 
 function applyRoot(s: Settings) {
+  setUiLang(s.uiLang || '');
   applyRootState({
     enabled: s.enabled, showOriginal: s.showOriginal, layout: s.layout, fontScale: s.fontScale,
     targetLangCode: s.targetLangCode, transStyle: s.transStyle, transColor: s.transColor,

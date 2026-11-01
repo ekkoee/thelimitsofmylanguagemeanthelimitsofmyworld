@@ -1,5 +1,7 @@
 // Local word list. Stays on this browser. Nothing is uploaded.
 
+import { t } from './i18n';
+
 export interface VocabDict {
   pos: string;
   terms: string[];
@@ -67,7 +69,7 @@ function csvCell(value: string): string {
 }
 
 export function vocabToCsv(list: VocabEntry[]): string {
-  const header = ['單字', '譯文', '詞性', '字義', '例句', '例句譯文', '頁面', '網址', '日期'];
+  const header = [t('csvWord'), t('csvTrans'), t('csvPos'), t('csvMeaning'), t('csvExample'), t('csvExampleTr'), t('csvPage'), t('csvUrl'), t('csvDate')];
   const rows = list.map((item) => [
     item.word,
     item.translation,

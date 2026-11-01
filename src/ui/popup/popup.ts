@@ -1,10 +1,15 @@
 import { normalizeGeminiKey } from '../../core/gemini-key';
+import { UI_FIXED, applyI18n, setUiLang, t, watchUiLang } from '../../core/i18n';
 import { loadSettings, saveSettings } from '../../core/storage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 async function init() {
   const s = await loadSettings();
+  setUiLang(s.uiLang || '');
+  applyI18n();
+  watchUiLang();
+  bindUiLang(s.uiLang || '');
 
   const enabled = $<HTMLInputElement>('enabled');
   enabled.checked = s.enabled;
@@ -60,7 +65,9 @@ async function init() {
 
   const open = $('openOptions');
   const needsKey = s.provider === 'gemini' && !normalizeGeminiKey(s.apiKeys.gemini);
-  open.textContent = needsKey ? '貼上 Gemini 金鑰' : '設定';
+  const openKey = needsKey ? 'pasteGemini' : 'settings';
+  open.dataset.i18n = openKey;
+  open.textContent = t(openKey);
   open.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
   // "翻譯這個網頁" — works even if the Alt+A shortcut isn't bound.
@@ -88,9 +95,54 @@ async function init() {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['universal-inject.js'] });
       window.close();
     } catch {
-      hint.textContent = '這個頁面無法翻譯（例如 chrome:// 或商店頁）';
+      hint.dataset.i18n = 'pageBlocked';
+      hint.textContent = t('pageBlocked');
       (hint as HTMLElement).style.color = '#e06c6c';
     }
+  });
+}
+
+function bindUiLang(pref: string): void {
+  const btn = $<HTMLButtonElement>('uiLangBtn');
+  const pop = $('uiLangPop');
+  let current = pref;
+  const paint = () => {
+    pop.replaceChildren();
+    const choices: { id: string; name: string }[] = [{ id: '', name: t('uiLangAuto') }, ...UI_FIXED];
+    for (const item of choices) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.role = 'option';
+      row.textContent = item.name;
+      row.setAttribute('aria-checked', item.id === current ? 'true' : 'false');
+      row.addEventListener('click', () => {
+        current = item.id;
+        void saveSettings({ uiLang: item.id });
+        setUiLang(item.id);
+        applyI18n();
+        paint();
+        pop.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+      });
+      pop.appendChild(row);
+    }
+  };
+  paint();
+  btn.addEventListener('click', () => {
+    pop.hidden = !pop.hidden;
+    btn.setAttribute('aria-expanded', pop.hidden ? 'false' : 'true');
+    if (!pop.hidden) paint();
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (pop.hidden) return;
+    if ((event.target as Node | null) && btn.parentElement?.contains(event.target as Node)) return;
+    pop.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || pop.hidden) return;
+    pop.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
   });
 }
 

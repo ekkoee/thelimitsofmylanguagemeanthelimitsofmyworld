@@ -27,6 +27,48 @@ body {
   font: 13px/1.5 var(--font);
 }
 header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.ui-lang { position: relative; flex: none; }
+.ui-lang > button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ui-lang > button:hover,
+.ui-lang > button[aria-expanded="true"] { background: rgba(108, 122, 255, 0.1); color: var(--ink); }
+.ui-lang > button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(108, 122, 255, 0.28); }
+.ui-lang-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  min-width: 176px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--page);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 12px 28px rgba(16, 24, 40, 0.12);
+}
+.ui-lang-pop button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: 13px/1.4 var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.ui-lang-pop button:hover { background: var(--field); }
+.ui-lang-pop button[aria-checked="true"] { color: var(--accent); }
 header img { width: 28px; height: 28px; border-radius: 8px; }
 h1 { flex: 1; margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0; }
 
