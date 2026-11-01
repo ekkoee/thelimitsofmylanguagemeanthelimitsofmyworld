@@ -10,6 +10,7 @@ import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batche
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 import { friendlyTranslateError } from '../core/errors';
 import { echoesEnglish, shouldSkipImageText, translateImageSequential } from '../providers/gemini-image';
+import { normalizeGeminiKey } from '../core/gemini-key';
 import { bindQuota, emptyQuotaState, fingerprintKey, migrateQuotaState, quotaForKey, setQuotaAlign, setQuotaReady, QuotaState } from '../core/quota-router';
 
 const queue = new TaskQueue(4);
@@ -118,9 +119,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync' || !changes.ibt_settings) return;
   const prevBag = changes.ibt_settings.oldValue as { apiKeys?: { gemini?: string } } | undefined;
   const nextBag = changes.ibt_settings.newValue as { apiKeys?: { gemini?: string } } | undefined;
-  const prev = String(prevBag?.apiKeys?.gemini || '');
-  const nextKey = String(nextBag?.apiKeys?.gemini || '');
-  if (prev.trim() === nextKey.trim()) return;
+  const prev = normalizeGeminiKey(prevBag?.apiKeys?.gemini || '');
+  const nextKey = normalizeGeminiKey(nextBag?.apiKeys?.gemini || '');
+  if (prev === nextKey) return;
   void fingerprintKey(nextKey).then((id) => {
     quotaState = quotaForKey(quotaState, id);
     persistQuota();
@@ -278,7 +279,7 @@ const imageInflight = new Map<string, Promise<{ text: string; regions: { textEn:
 
 async function translateImageMessage(mime: string, data: string) {
   const settings = await loadSettings();
-  const key = (settings.apiKeys.gemini || '').trim();
+  const key = normalizeGeminiKey(settings.apiKeys.gemini);
   if (!key) throw new Error('NO_API_KEY:image');
   const sig = `${data.length}:${data.slice(0, 48)}:${data.slice(-24)}`;
   const hit = imageInflight.get(sig);

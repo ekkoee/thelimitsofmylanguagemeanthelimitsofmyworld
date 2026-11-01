@@ -2,6 +2,7 @@
 // quota is already spent instead of waiting on it.
 
 import { friendlyTranslateError } from '../core/errors';
+import { normalizeGeminiKey } from '../core/gemini-key';
 import { executeGeminiRoute } from '../core/gemini-route';
 import { QuotaState, emptyQuotaState, imageModelChain as routedImageChain } from '../core/quota-router';
 
@@ -270,7 +271,7 @@ export async function translateImageSequential(opts: {
   budgetMs?: number;
   headerTimeoutMs?: number;
 }): Promise<ImageTranslation> {
-  const key = opts.key.trim();
+  const key = normalizeGeminiKey(opts.key);
   if (!key) throw new Error('NO_API_KEY:image');
   const log = opts.log ?? ((line: string) => console.log(line));
   const state = opts.quotaState ?? emptyQuotaState();

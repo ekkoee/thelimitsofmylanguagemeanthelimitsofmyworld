@@ -1,3 +1,4 @@
+import { normalizeGeminiKey } from '../../core/gemini-key';
 import { loadSettings, saveSettings } from '../../core/storage';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -41,7 +42,7 @@ async function init() {
   });
 
   const open = $('openOptions');
-  const needsKey = s.provider === 'gemini' && !(s.apiKeys.gemini || '').trim();
+  const needsKey = s.provider === 'gemini' && !normalizeGeminiKey(s.apiKeys.gemini);
   open.textContent = needsKey ? '貼上 Gemini 金鑰' : '設定';
   open.addEventListener('click', () => chrome.runtime.openOptionsPage());
 

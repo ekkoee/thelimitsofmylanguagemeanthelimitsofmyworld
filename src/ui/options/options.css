@@ -99,7 +99,9 @@ section + section { margin-top: 36px; }
   margin: 8px 0 10px;
   font: 16px/1.55 Georgia, "Iowan Old Style", serif;
 }
-.reader .ibt-block { max-width: 34em; margin: 0; padding: 0; border: 0; line-height: 1.35; }
+.reader .ibt-block { max-width: 34em; margin: 0; padding: 0; border: 0; line-height: 1.35; white-space: normal; }
+/* The page tint pads each side. Pull the hero chip back so the glyphs share the English line's left edge. */
+:root[data-ibt-highlight="on"] .reader .ibt-trans { padding-left: 0; margin-left: 0; }
 
 .eyebrow {
   margin: 0;
@@ -134,6 +136,7 @@ h2::before {
 .key-label { display: flex; justify-content: space-between; gap: 12px; max-width: 460px; }
 .key-label a { color: var(--accent); text-decoration: none; }
 .key-label a:hover { text-decoration: underline; }
+.hint[data-state="wait"] { color: var(--muted); }
 .hint[data-state="ok"] { color: #3d8b6e; }
 .hint[data-state="bad"] { color: #c25555; }
 input[type="range"] { width: 100%; max-width: 460px; accent-color: var(--accent); }

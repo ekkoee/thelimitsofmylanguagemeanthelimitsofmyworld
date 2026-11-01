@@ -2,6 +2,11 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.4.37] — 2026-11-01
+### 修正 Fixed
+- **新的 Gemini 金鑰可以貼上。** 不再檢查 `AIza` 開頭、長度或字元。只去掉前後空白和引號，再向 `GET /v1beta/models` 確認（`x-goog-api-key`，不消耗 generateContent）。200 為有效，400／401／403 為無效。
+- **設定頁預覽的中文跟英文對齊。** 範例譯文不再因底色內距而向右縮。
+
 ## [1.4.36] — 2026-11-01
 ### 變更 Changed
 - **譯文顏色跟原文。** 預設 `color: inherit`，不再強制金色、黑色或白色，也沒有左側標記。自己選過的顏色仍保留。影片字幕在沒有自訂色時維持白色。

@@ -1,3 +1,4 @@
+import { checkGeminiKey, normalizeGeminiKey } from '../../core/gemini-key';
 import { loadSettings, saveSettings } from '../../core/storage';
 import { DEFAULT_MODELS, ProviderId, Settings } from '../../core/types';
 
@@ -87,26 +88,31 @@ function bindAppearance(s: Settings) {
   syncPreview();
 }
 
-const GEMINI_KEY = /^AIza[0-9A-Za-z_-]{20,}$/;
-
 function bindGeminiKey(initial: string) {
   const input = $<HTMLInputElement>('key_gemini');
   const note = $('keyNote');
-  input.value = initial;
+  input.value = normalizeGeminiKey(initial);
+  let ticket = 0;
   const apply = async () => {
-    const value = input.value.trim();
+    const value = normalizeGeminiKey(input.value);
+    if (input.value !== value) input.value = value;
+    const mine = ++ticket;
     if (!value) {
       note.textContent = '';
       note.removeAttribute('data-state');
       await saveKey('');
       return;
     }
-    if (!GEMINI_KEY.test(value)) {
-      note.textContent = '應以 AIza 開頭';
+    note.textContent = '檢查中…';
+    note.dataset.state = 'wait';
+    const result = await checkGeminiKey(value);
+    if (mine !== ticket) return;
+    if (result === 'invalid') {
+      note.textContent = '金鑰無效';
       note.dataset.state = 'bad';
       return;
     }
-    note.textContent = '已儲存';
+    note.textContent = result === 'valid' ? '已儲存' : '無法確認，已儲存';
     note.dataset.state = 'ok';
     await saveKey(value);
   };

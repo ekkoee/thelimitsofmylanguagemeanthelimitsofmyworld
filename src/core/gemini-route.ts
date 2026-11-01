@@ -70,14 +70,14 @@ async function callModel(
   bodyMs: number,
 ): Promise<unknown> {
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(opts.key)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const ctrl = new AbortController();
   const headerTimer = setTimeout(() => ctrl.abort(), headerMs);
   let res: Response;
   try {
     res = await fetchImpl(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': opts.key },
       body: JSON.stringify(opts.buildBody(model)),
       signal: ctrl.signal,
     });

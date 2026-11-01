@@ -56,7 +56,7 @@ function rpc(method, params = {}) {
 await rpc('Page.enable');
 await rpc('Runtime.enable');
 await rpc('Page.addScriptToEvaluateOnNewDocument', { source: `window.chrome = {
-  runtime: { getManifest: () => ({ version: '1.4.36' }), openOptionsPage() {}, sendMessage: async () => ({}) },
+  runtime: { getManifest: () => ({ version: '1.4.37' }), openOptionsPage() {}, sendMessage: async () => ({}) },
   storage: { sync: { get: async () => ({}), set: async () => {} }, onChanged: { addListener() {} } },
   tabs: { query: async () => [{ id: 1, url: 'https://example.com/story' }] },
   scripting: { executeScript: async () => {}, insertCSS: async () => {} },
