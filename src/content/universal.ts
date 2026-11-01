@@ -1,6 +1,7 @@
 import { Settings } from '../core/types';
 import { chineseShare, isAlreadyTargetLang, stripNoise } from '../core/segmentation';
 import { renderTranslationAfter } from './engine';
+import { isHeadingElement, isRowFit, pageFontPx } from './page-font';
 import { collectUnits, isInlinePostChrome, isSeeMoreLessControl } from './blocks';
 import { matchSiteRule } from './selectors';
 import { linkedInCollapsed, linkedInHost } from './linkedin';
@@ -296,14 +297,12 @@ export class UniversalTranslator {
     const block = renderTranslationAfter(node, text, { sig });
     if (block) {
       block.classList.add('ibt-uni');
-      const srcFs = parseFloat(getComputedStyle(node).fontSize) || 14;
-      const dense = isDenseRow(node);
-      // Inherit the block's size. Dense rows (a PR title) scale down slightly so
-      // the line fits under the title instead of blowing the row open.
-      const px = dense ? Math.max(11, Math.round(srcFs * 0.85)) : Math.max(12, Math.round(srcFs));
-      block.style.fontSize = `${px}px`;
+      // Same pixels as this source element. A one-line reply is not scaled.
+      block.style.fontSize = `${pageFontPx(node)}px`;
+      block.style.lineHeight = '1.5';
+      if (isHeadingElement(node)) block.classList.add('ibt-heading');
       block.style.maxWidth = '100%';
-      if (dense) {
+      if (isRowFit(node, location.hostname)) {
         block.classList.add('ibt-fit');
         // Keep the line inside the title's own box (the row), not as a flex sibling.
         if (node.tagName === 'A' || /^H[1-6]$/.test(node.tagName)) node.appendChild(block);
@@ -312,14 +311,6 @@ export class UniversalTranslator {
       this.blockBySource.set(node, block);
     }
   }
-}
-
-function isDenseRow(node: HTMLElement): boolean {
-  if (/^(P|LI|BLOCKQUOTE|PRE|FIGCAPTION)$/.test(node.tagName)) return false;
-  if (node.matches('a, .markdown-title, .js-issue-title, .commit-title, .gh-header-title')) return true;
-  const fs = parseFloat(getComputedStyle(node).fontSize) || 16;
-  const h = node.getBoundingClientRect().height;
-  return h > 0 && h < fs * 2.4;
 }
 
 // --- tiny transient toast (bottom-center) ---

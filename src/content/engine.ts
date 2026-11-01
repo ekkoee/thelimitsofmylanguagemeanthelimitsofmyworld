@@ -3,6 +3,24 @@ import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
 import { el, isProcessed, markProcessed } from '../utils/dom';
 import { sendMessage, isContextGoneError } from '../utils/runtime';
 import { insideXVideo } from './selectors';
+import { isHeadingElement, pageFontPx } from './page-font';
+
+const KEPT_CLASS = ['ibt-uni', 'ibt-fit', 'ibt-heading'];
+
+/** Swap loading/error classes without dropping the page-translation classes
+ *  added after this block was inserted. */
+function setBlockClass(block: HTMLElement, ...extra: string[]): void {
+  const keep = KEPT_CLASS.filter((c) => block.classList.contains(c));
+  block.className = ['ibt-block', ...extra, ...keep].join(' ');
+}
+
+function applyPageFont(block: HTMLElement, anchor: Node): void {
+  const src = anchor.nodeType === 1 ? anchor as HTMLElement : anchor.parentElement;
+  if (!src) return;
+  block.style.fontSize = `${pageFontPx(src)}px`;
+  block.style.lineHeight = '1.5';
+  if (isHeadingElement(src)) block.classList.add('ibt-heading');
+}
 
 export interface TextUnit { source: HTMLElement; text: string; }
 export interface SiteAdapter { id: string; collect(): TextUnit[]; }
@@ -67,7 +85,7 @@ async function translateBlock(text: string): Promise<AlignedPair[]> {
 }
 
 function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
-  block.className = 'ibt-block';
+  setBlockClass(block);
   block.textContent = '';
   // Our block holds ONLY the translation. The original stays as the page's own
   // text (rich: links/mentions/media intact); the 3-state view shows/hides that
@@ -84,13 +102,13 @@ function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
 // Shown when the extension context is gone (reload/update): a refresh reloads
 // the fresh content script and translation resumes.
 function showReloadHint(block: HTMLElement): void {
-  block.className = 'ibt-block';
+  setBlockClass(block);
   block.textContent = '';
   block.appendChild(el('span', 'ibt-error-msg', '擴充功能已更新，請重新整理此頁面以繼續翻譯。'));
 }
 
 function showError(block: HTMLElement, message: string, retry: () => void): void {
-  block.className = 'ibt-block ibt-error';
+  setBlockClass(block, 'ibt-error');
   block.textContent = '';
   // 429 = rate/quota limit: retries with backoff already happened inside the
   // provider, so this only shows when the quota is genuinely exhausted.
@@ -151,8 +169,10 @@ export function renderTranslationAfter(
     }
   }
 
+  applyPageFont(block, anchor);
+
   const run = async () => {
-    block.className = 'ibt-block ibt-loading';
+    setBlockClass(block, 'ibt-loading');
     block.textContent = '';
     block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
     try {

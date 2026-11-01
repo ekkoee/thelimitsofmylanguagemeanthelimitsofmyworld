@@ -2,6 +2,10 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.4.25] — 2026-11-01
+### 修正 Fixed
+- **網頁譯文跟原文一樣大。** 一行高的句子（Threads 短回覆、Facebook 粗體標題）以前被當成「密列」縮到 85%，所以同一串裡短句比長文小。現在每個譯文塊用那個原文元素自己的 computed font-size，不再依行數、長短或寬度縮放。標題（h1–h6、role=heading，或比旁邊內文更大又是粗體）跟標題一樣大，而且不會小於內文，字重 600；內文維持 400。GitHub 列表標題仍收在那一列裡，但字級跟標題一致，不再另外縮小。顏色、左標、字型沒改。影片字幕的演算法沒動。
+
 ## [1.4.24] — 2026-11-01
 ### 修正 Fixed
 - **Threads 含 @ 的回覆會翻。** 1.4.23 只把直接的 `<a>`／`<span>` 當成句中的小標籤。實頁上 @ 是 `div`（`display: inline-block`）包著 `a`，而且名字在 `<span translate="no">` 裡被拆成 `@` 和帳號。那個 div 被當成子區塊，整句就沒有翻譯單位。現在這種 div 留在句子裡，原文和譯文都保留 `@name`，連結仍可點。沒有 @ 的短回覆、X／LinkedIn／Facebook／GitHub 的切法沒改。沒有新增權限。

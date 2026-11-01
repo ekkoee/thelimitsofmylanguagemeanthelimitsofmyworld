@@ -155,16 +155,14 @@ function placeBlock(body: HTMLElement, text: string, sig: string): void {
     return;
   }
   block.classList.add('ibt-uni');
-  const fs = parseFloat(getComputedStyle(body).fontSize) || 14;
   // Inline, so the line stays inside the card even after the engine replaces
-  // className when the translation arrives. Color stays the page-translation blue.
+  // className when the translation arrives. Color stays the page-translation color.
   block.style.display = 'block';
   block.style.width = '100%';
   block.style.maxWidth = '100%';
   block.style.boxSizing = 'border-box';
   block.style.position = 'static';
   block.style.flex = '1 0 100%';
-  block.style.fontSize = `${Math.max(12, Math.round(fs))}px`;
 }
 
 function translateBody(body: HTMLElement, why: string): void {

@@ -58,9 +58,8 @@
   contain: none;
   position: static;
   white-space: normal;
-  line-height: 1.35;
+  line-height: 1.5;
 }
-.ibt-block.ibt-fit .ibt-trans { font-size: 1em; opacity: 0.82; }
 
 /* Left marker bar — user-configurable in options (style + color + hide). */
 :root[data-ibt-bar="thick"] .ibt-block { border-left-width: 6px; }
@@ -84,9 +83,10 @@
   font-weight: 400;
 }
 
-/* The title's translation block is projected into the title slot — give it a
-   touch more size/weight so it reads like the headline it translates. */
-.ibt-block[slot="title"] .ibt-trans { font-size: 1.25em; font-weight: 600; }
+/* Headings match the source heading's size (set on the block). Weight only —
+   a second size multiplier would draw the Chinese larger than the heading. */
+.ibt-block.ibt-heading .ibt-trans,
+.ibt-block[slot="title"] .ibt-trans { font-weight: 600; }
 
 /* When showing original too, allow flipping order (translation above original) */
 :root[data-ibt-layout="transTop"] .ibt-pair { flex-direction: column-reverse; }
@@ -272,7 +272,9 @@ video.ibt-x-hide-cue::cue {
    line-height → 0) while restoring our translation lines to a real size. */
 :root[data-ibt-view="zh"] [data-testid="tweetText"] { font-size: 0 !important; line-height: 0 !important; }
 :root[data-ibt-view="zh"] [data-testid="tweetText"] .ibt-block {
-  font-size: calc(1rem * var(--ibt-font-scale)) !important;
+  /* Size is the tweet's own computed size, set inline. Forcing 1rem here made
+     every Chinese line the same and ignored a larger title. line-height stays
+     so a font-size:0 parent cannot collapse the translation. */
   line-height: 1.5 !important;
 }
 
