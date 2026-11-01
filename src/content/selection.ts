@@ -4,6 +4,7 @@
 
 import { loadSettings } from '../core/storage';
 import { DictEntry } from '../core/types';
+import { findVocab, removeVocab, saveVocab } from '../core/vocab';
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -12,7 +13,6 @@ let button: HTMLButtonElement | null = null;
 let card: HTMLDivElement | null = null;
 let current = '';
 let req = 0;
-let pinned = false;
 let anchor: DOMRect | null = null;
 
 export function startSelectionTranslate(): void {
@@ -65,7 +65,7 @@ function grip(): SVGSVGElement {
 
 const ICONS = {
   mark: ['M4 7.5h7', 'M7.5 7.5c.1 3.6-1.7 5.6-4.4 7', 'M4.8 11h5.2', 'M13.5 16h6.2', 'M16.6 12.4v7'],
-  pin: ['M9 4.5h6l-1 5.5 2.8 2v2H7.2v-2l2.8-2z', 'M12 14v6'],
+  star: ['M12 3.4l2.2 4.6 5 .7-3.6 3.5.9 5L12 15.2 7.5 17.2l.9-5L4.8 8.7l5-.7z'],
   close: ['M7 7l10 10', 'M17 7L7 17'],
   copy: ['M9 9h10v10H9z', 'M5 15V5h10'],
   speak: ['M4 9.5v5h3.2L12 19V5L7.2 9.5z', 'M15.4 9.2a3.8 3.8 0 0 1 0 5.6', 'M17.6 7a6.5 6.5 0 0 1 0 10'],
@@ -123,7 +123,7 @@ async function onMouseUp(event: MouseEvent): Promise<void> {
   if (!hit) { hideButton(); return; }
   current = hit.text;
   anchor = hit.rect;
-  if (settings?.selectionInstant && !pinned) {
+  if (settings?.selectionInstant) {
     hideButton();
     showCard(hit.rect, hit.text);
     return;
@@ -137,7 +137,7 @@ function onMouseDown(event: MouseEvent): void {
     return;
   }
   hideButton();
-  if (!pinned) hideCard();
+  hideCard();
 }
 
 function onKey(event: KeyboardEvent): void {
@@ -145,7 +145,6 @@ function onKey(event: KeyboardEvent): void {
 }
 
 function onScroll(): void {
-  if (pinned) return;
   hideAll();
 }
 
@@ -187,25 +186,19 @@ function showCard(rect: DOMRect, text: string): void {
   card = host;
   host.className = pageIsDark() ? 'ibt-sel-card ibt-sel-dark' : 'ibt-sel-card';
   host.replaceChildren();
-  pinned = false;
 
   const head = document.createElement('div');
   head.className = 'ibt-sel-head';
   const gripEl = document.createElement('span');
   gripEl.className = 'ibt-sel-grip';
   gripEl.appendChild(grip());
-  const pin = iconButton('ibt-sel-pin', '釘選', ICONS.pin);
-  pin.setAttribute('aria-pressed', 'false');
-  pin.lastChild?.remove();
-  pin.onclick = (event) => {
-    event.preventDefault();
-    pinned = !pinned;
-    pin.setAttribute('aria-pressed', pinned ? 'true' : 'false');
-  };
+  const save = iconButton('ibt-sel-save', '收入單字本', ICONS.star);
+  save.setAttribute('aria-pressed', 'false');
+  save.lastChild?.remove();
   const close = iconButton('ibt-sel-x', '關閉', ICONS.close);
   close.lastChild?.remove();
   close.onclick = (event) => { event.preventDefault(); hideCard(); };
-  head.append(gripEl, pin, close);
+  head.append(gripEl, save, close);
   enableDrag(host, head);
 
   const original = document.createElement('div');
@@ -239,7 +232,7 @@ function showCard(rect: DOMRect, text: string): void {
     host.style.top = `${Math.max(8, rect.top - height - 8)}px`;
   }
   const id = ++req;
-  void fillCard(id, text, body, copy, (lang) => { sourceLang = lang; });
+  void fillCard(id, text, body, copy, save, (lang) => { sourceLang = lang; });
 }
 
 function enableDrag(host: HTMLDivElement, handle: HTMLElement): void {
@@ -267,11 +260,32 @@ function enableDrag(host: HTMLDivElement, handle: HTMLElement): void {
   handle.addEventListener('pointercancel', stop);
 }
 
+function contextOf(word: string): string {
+  const sel = window.getSelection();
+  const node = sel?.anchorNode;
+  const el = node instanceof Element ? node : node?.parentElement;
+  const block = el?.closest('p, li, blockquote, h1, h2, h3, [data-testid="tweetText"]') || el;
+  const blob = (block?.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!blob || blob === word) return '';
+  const at = blob.toLowerCase().indexOf(word.toLowerCase());
+  if (at < 0) return blob.slice(0, 240);
+  const start = Math.max(0, at - 80);
+  const end = Math.min(blob.length, at + word.length + 80);
+  return blob.slice(start, end);
+}
+
+function paintSaved(btn: HTMLButtonElement, on: boolean): void {
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  btn.setAttribute('aria-label', on ? '已收入單字本' : '收入單字本');
+  btn.querySelector('path')?.setAttribute('fill', on ? 'currentColor' : 'none');
+}
+
 async function fillCard(
   id: number,
   text: string,
   body: HTMLDivElement,
   copy: HTMLButtonElement,
+  save: HTMLButtonElement,
   setSourceLang: (lang: string) => void,
 ): Promise<void> {
   try {
@@ -306,6 +320,32 @@ async function fillCard(
     if (resp.lookup?.sourceLang) setSourceLang(resp.lookup.sourceLang);
     copy.disabled = !translation;
     copy.onclick = () => writeClipboard(translation);
+    const entries = (dict || []).slice(0, 4);
+    const pos = entries.map((entry) => entry.pos).filter(Boolean).join('、');
+    const meanings = entries.map((entry) => entry.terms.slice(0, 4).join('、')).filter(Boolean).join('；');
+    const existing = await findVocab(text).catch(() => null);
+    if (id !== req || !save.isConnected) return;
+    paintSaved(save, !!existing);
+    save.onclick = async (event) => {
+      event.preventDefault();
+      const on = save.getAttribute('aria-pressed') === 'true';
+      if (on) {
+        await removeVocab(text.trim().toLowerCase());
+        paintSaved(save, false);
+        return;
+      }
+      await saveVocab({
+        word: text,
+        translation,
+        pos,
+        meanings,
+        dict: entries.map((entry) => ({ pos: entry.pos, terms: entry.terms.slice(0, 6) })),
+        context: contextOf(text),
+        title: document.title || '',
+        url: location.href,
+      });
+      paintSaved(save, true);
+    };
   } catch (err) {
     if (id !== req || !body.isConnected) return;
     body.textContent = '無法取得譯文';
@@ -339,7 +379,6 @@ function hideButton(): void {
 
 function hideCard(): void {
   req += 1;
-  pinned = false;
   card?.remove();
   card = null;
 }

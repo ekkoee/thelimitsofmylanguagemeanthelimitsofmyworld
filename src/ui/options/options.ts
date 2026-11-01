@@ -1,6 +1,7 @@
 import { checkGeminiKey, normalizeGeminiKey } from '../../core/gemini-key';
 import { loadSettings, saveSettings } from '../../core/storage';
 import { DEFAULT_MODELS, DEFAULT_SETTINGS, ProviderId, Settings, normalizeTint } from '../../core/types';
+import { VocabEntry, clearVocab, listVocab, removeVocab, vocabToCsv, vocabToTxt } from '../../core/vocab';
 
 const LANGS: { code: string; name: string; label: string }[] = [
   { code: 'zh-TW', name: 'Traditional Chinese (zh-TW)', label: '繁體中文' },
@@ -44,9 +45,15 @@ async function init() {
 
   const font = $<HTMLInputElement>('fontScale');
   const fontVal = $('fontScaleVal');
+  const paintSize = (scale: number) => {
+    fontVal.textContent = `${scale.toFixed(2)}×`;
+    document.querySelectorAll<HTMLElement>('.tint-live .ibt-trans').forEach((node) => {
+      node.style.fontSize = `${Math.round(14 * scale)}px`;
+    });
+  };
   font.value = String(s.fontScale);
-  fontVal.textContent = `${Number(s.fontScale).toFixed(2)}×`;
-  font.addEventListener('input', () => { fontVal.textContent = `${Number(font.value).toFixed(2)}×`; });
+  paintSize(Number(s.fontScale) || 1);
+  font.addEventListener('input', () => { paintSize(Number(font.value) || 1); });
   font.addEventListener('change', () => { void save({ fontScale: Number(font.value) }); });
 
   const provider = $<HTMLSelectElement>('provider');
@@ -76,6 +83,7 @@ async function init() {
 
   bindGeminiKey(s.apiKeys.gemini);
   bindAppearance(s);
+  void bindVocab();
 }
 
 const STYLE_VALUES = ['plain', 'underline', 'dashed', 'dotted', 'wavy', 'solidBox', 'dashedBox', 'highlight', 'dim', 'italic', 'bold', 'blur'];
@@ -190,10 +198,77 @@ function bindAppearance(s: Settings) {
       transHighlight: true,
       transHighlightSet: true,
       highlightColor: '',
+      fontScale: 1,
     });
     location.reload();
   });
   syncPreview();
+}
+
+function download(name: string, text: string, mime: string): void {
+  const blob = new Blob([text], { type: mime });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+async function bindVocab(): Promise<void> {
+  const search = $<HTMLInputElement>('vocabSearch');
+  const sort = $<HTMLSelectElement>('vocabSort');
+  const list = $('vocabList');
+  const empty = $('vocabEmpty');
+  const confirm = $('vocabConfirm');
+  let items: VocabEntry[] = await listVocab();
+  const draw = () => {
+    const q = search.value.trim().toLowerCase();
+    const shown = items.filter((item) => {
+      if (!q) return true;
+      return [item.word, item.translation, item.meanings, item.context, item.title].join('\n').toLowerCase().includes(q);
+    });
+    shown.sort((a, b) => sort.value === 'az'
+      ? a.word.localeCompare(b.word, 'en')
+      : b.savedAt - a.savedAt);
+    list.replaceChildren();
+    empty.hidden = shown.length > 0;
+    for (const item of shown) {
+      const row = document.createElement('li');
+      const main = document.createElement('div');
+      const word = document.createElement('strong');
+      word.textContent = item.word;
+      const gloss = document.createElement('span');
+      gloss.textContent = item.translation;
+      const meta = document.createElement('em');
+      const when = new Date(item.savedAt).toISOString().slice(0, 10);
+      meta.textContent = [item.pos, item.meanings, when].filter(Boolean).join(' · ');
+      main.append(word, gloss, meta);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'text-btn';
+      del.textContent = '刪除';
+      del.addEventListener('click', async () => {
+        await removeVocab(item.id);
+        items = items.filter((entry) => entry.id !== item.id);
+        draw();
+      });
+      row.append(main, del);
+      list.appendChild(row);
+    }
+  };
+  search.addEventListener('input', draw);
+  sort.addEventListener('change', draw);
+  $('vocabCsv').addEventListener('click', () => download('單字本.csv', vocabToCsv(items), 'text/csv;charset=utf-8'));
+  $('vocabTxt').addEventListener('click', () => download('單字本.txt', vocabToTxt(items), 'text/plain;charset=utf-8'));
+  $('vocabClear').addEventListener('click', () => { confirm.hidden = false; });
+  $('vocabNo').addEventListener('click', () => { confirm.hidden = true; });
+  $('vocabYes').addEventListener('click', async () => {
+    await clearVocab();
+    items = [];
+    confirm.hidden = true;
+    draw();
+  });
+  draw();
 }
 
 function hexAlpha(hex: string, alpha: number): string {

@@ -85,19 +85,6 @@ async function translateBlock(text: string, retry = false): Promise<AlignedPair[
   return resp.pairs || [];
 }
 
-/** Full-width punctuation carries its own blank. Pull the chip in so both ends match. */
-function fillChip(span: HTMLElement, text: string): void {
-  const lead = text.match(/^[。，、！？：；…「」『』（）【】《》〈〉]+/);
-  const start = lead ? lead[0].length : 0;
-  const rest = text.slice(start);
-  const trail = rest.match(/[。，、！？：；…「」『』（）【】《》〈〉]+$/);
-  const core = trail ? rest.slice(0, rest.length - trail[0].length) : rest;
-  if (lead) span.appendChild(el('span', 'ibt-punct ibt-punct-lead', lead[0]));
-  if (core) span.appendChild(document.createTextNode(core));
-  if (trail) span.appendChild(el('span', 'ibt-punct ibt-punct-tail', trail[0]));
-  if (!span.childNodes.length) span.textContent = text;
-}
-
 function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
   setBlockClass(block);
   block.textContent = '';
@@ -110,9 +97,7 @@ function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
     // Same lang as the YouTube Chinese line, so Han fallback picks the same face.
     line.lang = document.documentElement.getAttribute('data-ibt-lang') === 'zh-CN' ? 'zh-CN' : 'zh-TW';
     // The span carries the tint so each sentence stays on its own line while a wrap still hugs.
-    const span = el('span');
-    fillChip(span, p.t);
-    line.appendChild(span);
+    line.appendChild(el('span', '', p.t));
     block.appendChild(line);
   }
 }

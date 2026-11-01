@@ -17,6 +17,12 @@
           <em id="version"></em>
         </div>
       </div>
+      <nav class="rail" aria-label="設定章節">
+        <a href="#general">翻譯</a>
+        <a href="#look">外觀</a>
+        <a href="#advanced">反白翻譯</a>
+        <a href="#vocab">單字本</a>
+      </nav>
       <a class="gh" href="https://github.com/ekkoee/thelimitsofmylanguagemeanthelimitsofmyworld" target="_blank" rel="noopener" aria-label="GitHub">
         <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
         <span>GitHub</span>
@@ -24,7 +30,7 @@
     </aside>
 
     <main>
-      <section class="card" data-panel="general">
+      <section class="card" id="general" data-panel="general">
         <h2>翻譯</h2>
         <label class="field">
           <span>引擎</span>
@@ -71,13 +77,9 @@
             <option value="enTop">英文在上</option>
           </select>
         </label>
-        <label class="field">
-          <span>字體大小 <b id="fontScaleVal"></b></span>
-          <input type="range" id="fontScale" min="0.8" max="1.6" step="0.05" />
-        </label>
       </section>
 
-      <section class="card" data-panel="look">
+      <section class="card" id="look" data-panel="look">
         <h2>外觀</h2>
         <label class="field">
           <span>譯文樣式</span>
@@ -141,6 +143,10 @@
             <input type="color" id="tintCustom" value="#5b8def" />
           </label>
         </div>
+        <label class="field font-field">
+          <span>字體大小 <b id="fontScaleVal"></b></span>
+          <input type="range" id="fontScale" min="0.8" max="1.6" step="0.05" />
+        </label>
         <div class="tint-live">
           <div class="tone-light">
             <p>Good design is quiet; it helps you read without getting in the way.</p>
@@ -161,7 +167,7 @@
         </div>
       </section>
 
-      <section class="card" data-panel="advanced">
+      <section class="card" id="advanced" data-panel="advanced">
         <h2>反白翻譯</h2>
         <div class="toggle">
           <span id="selectionLabel">反白翻譯功能</span>
@@ -170,6 +176,29 @@
         <div class="toggle">
           <span id="instantLabel">選取後立即顯示</span>
           <label class="switch"><input type="checkbox" id="selectionInstant" aria-labelledby="instantLabel" /><span class="slider"></span></label>
+        </div>
+      </section>
+
+      <section class="card" id="vocab" data-panel="vocab">
+        <h2>單字本</h2>
+        <div class="vocab-tools">
+          <input type="search" id="vocabSearch" placeholder="搜尋單字或譯文" />
+          <select id="vocabSort" aria-label="排序">
+            <option value="new">新到舊</option>
+            <option value="az">A–Z</option>
+          </select>
+        </div>
+        <p id="vocabEmpty" class="hint">還沒有存下的字。</p>
+        <ul id="vocabList" class="vocab-list"></ul>
+        <div class="vocab-actions">
+          <button type="button" id="vocabCsv" class="ghost-btn">匯出 CSV</button>
+          <button type="button" id="vocabTxt" class="ghost-btn">匯出 TXT</button>
+          <button type="button" id="vocabClear" class="ghost-btn">清除全部</button>
+          <span id="vocabConfirm" hidden>
+            <span>清除單字本裡的全部單字？</span>
+            <button type="button" id="vocabYes" class="ghost-btn">確定</button>
+            <button type="button" id="vocabNo" class="ghost-btn">取消</button>
+          </span>
         </div>
       </section>
     </main>

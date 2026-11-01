@@ -70,23 +70,25 @@
 :root[data-ibt-bar="dashed"] .ibt-block { border-left-style: dashed; }
 :root[data-ibt-bar="none"] .ibt-block { border-left: 0; padding-left: 0; }
 
-/* 淡底色. Line-height is unchanged. Light text (a dark page) mixes to a grey veil.
-   Yellow is applied only after the surface is confirmed light. */
+/* 淡底色. One span holds every glyph, including 「 。 …….
+   A little extra line-height keeps the equal padding from touching the next line. */
+:root[data-ibt-highlight="on"] .ibt-trans,
+.ibt-highlight .ibt-trans {
+  line-height: 1.65;
+}
 :root[data-ibt-highlight="on"] .ibt-trans > span,
 :root[data-ibt-highlight="on"] span.ibt-trans,
 .ibt-highlight .ibt-trans > span,
 .ibt-highlight span.ibt-trans {
   display: inline;
-  padding: 0.03em 0.3em;
-  border-radius: 0.38em;
+  padding: 0.16em 0.18em;
+  border-radius: 0.36em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   text-spacing-trim: trim-both;
   font-feature-settings: "halt" 1, "chws" 1;
   background: color-mix(in srgb, currentColor 14%, transparent);
 }
-.ibt-punct-lead { margin-inline-start: -0.5em; }
-.ibt-punct-tail { margin-inline-end: -0.5em; }
 :root[data-ibt-highlight="on"] .ibt-trans[data-ibt-on="light"] > span,
 :root[data-ibt-highlight="on"] span.ibt-trans[data-ibt-on="light"],
 .ibt-highlight .ibt-trans[data-ibt-on="light"] > span,
@@ -302,8 +304,8 @@
 }
 .ibt-sel-card.ibt-sel-drag .ibt-sel-head { cursor: grabbing; }
 .ibt-sel-grip { display: grid; color: #6b7287; }
-.ibt-sel-pin { margin-left: auto; }
-.ibt-sel-pin,
+.ibt-sel-save { margin-left: auto; }
+.ibt-sel-save,
 .ibt-sel-x,
 .ibt-sel-copy,
 .ibt-sel-speak {
@@ -319,20 +321,20 @@
   padding: 6px;
 }
 .ibt-sel-dark .ibt-sel-grip,
-.ibt-sel-dark .ibt-sel-pin,
+.ibt-sel-dark .ibt-sel-save,
 .ibt-sel-dark .ibt-sel-x,
 .ibt-sel-dark .ibt-sel-copy,
 .ibt-sel-dark .ibt-sel-speak { color: #9aa3b8; }
-.ibt-sel-pin:hover,
+.ibt-sel-save:hover,
 .ibt-sel-x:hover,
 .ibt-sel-copy:hover,
 .ibt-sel-speak:hover { background: rgba(108, 122, 255, 0.12); color: #6c7aff; }
-.ibt-sel-dark .ibt-sel-pin:hover,
+.ibt-sel-dark .ibt-sel-save:hover,
 .ibt-sel-dark .ibt-sel-x:hover,
 .ibt-sel-dark .ibt-sel-copy:hover,
 .ibt-sel-dark .ibt-sel-speak:hover { background: rgba(108, 122, 255, 0.18); color: #8ea2ff; }
-.ibt-sel-pin[aria-pressed="true"] { background: rgba(108, 122, 255, 0.16); color: #6c7aff; }
-.ibt-sel-dark .ibt-sel-pin[aria-pressed="true"] { color: #c5cdff; }
+.ibt-sel-save[aria-pressed="true"] { background: rgba(108, 122, 255, 0.16); color: #6c7aff; }
+.ibt-sel-dark .ibt-sel-save[aria-pressed="true"] { color: #c5cdff; }
 .ibt-sel-orig {
   display: flex;
   align-items: flex-start;
@@ -535,6 +537,9 @@ video.ibt-x-hide-cue::cue {
      every Chinese line the same and ignored a larger title. line-height stays
      so a font-size:0 parent cannot collapse the translation. */
   line-height: 1.5 !important;
+}
+:root[data-ibt-highlight="on"][data-ibt-view="zh"] [data-testid="tweetText"] .ibt-block {
+  line-height: 1.65 !important;
 }
 
 /* Movie mode hides YouTube's native caption while our overlay is showing
