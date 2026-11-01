@@ -1,4 +1,5 @@
 import { renderTranslationAfter } from './engine';
+import { protectFlow } from './x-chips';
 import { SELECTORS, insideXVideo, queryFirst } from './selectors';
 import { isProcessed, markProcessed } from '../utils/dom';
 import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
@@ -29,8 +30,6 @@ const ARTICLE_LEAF = 'h1,h2,h3,h4,p,li,blockquote,div';
 // editor with contenteditable="false" — a bare [contenteditable] selector would
 // (wrongly) match that and skip the whole article body.
 const ARTICLE_SKIP = 'script,style,noscript,nav,aside,header,button,textarea,a,time,[role="group"],[contenteditable="true"],[data-testid="tweetText"],.ibt-block';
-
-interface Line { anchor: Node; text: string }
 
 function isIbt(n: Node): boolean {
   return n.nodeType === 1 && (((n as Element).className as any)?.toString?.() || '').startsWith('ibt-');
@@ -100,106 +99,6 @@ function ensureSplitWatcher(): void {
   splitWatcher.observe(document.body, { characterData: true, subtree: true });
 }
 
-// Split a tweet into PARAGRAPHS (not single lines), so each block keeps its
-// context when sent to translate. A single break (one <br> or one '\n') is a
-// SOFT wrap → same paragraph; a blank line (<br><br>, '\n\n', or a mix of
-// consecutive breaks) is a paragraph boundary. Each returned Line is one whole
-// paragraph; the Google endpoint still returns per-sentence [zh, src] pairs, so
-// fillPairs keeps sentence-level interleaving WITHIN the paragraph.
-function splitParagraphs(tt: HTMLElement): Line[] {
-  // Phase 1: build the sequence of PHYSICAL lines (same break logic as before),
-  // but KEEP empty lines — they're what marks a paragraph boundary. Each line
-  // records the anchor of its terminating break: the <br>, the text node ending
-  // in '\n', or tt for the trailing line.
-  interface Phys { text: string; anchor: Node }
-  const phys: Phys[] = [];
-  let buf = '';
-  const pushLine = (anchor: Node) => {
-    phys.push({ text: buf.replace(/\s+/g, ' ').trim(), anchor });
-    buf = '';
-  };
-
-  // Snapshot text nodes + <br> in document order (we'll split text nodes after).
-  const items: Node[] = [];
-  const tw = document.createTreeWalker(tt, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
-    acceptNode(n) {
-      if (n.nodeType === 1) {
-        if (isIbt(n)) return NodeFilter.FILTER_REJECT;            // skip our own nodes
-        return n.nodeName === 'BR' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
-      }
-      return NodeFilter.FILTER_ACCEPT;                            // text node
-    },
-  });
-  let c: Node | null;
-  while ((c = tw.nextNode())) items.push(c);
-
-  const recs = ((tt as SplitHost).__ibtSplits ??= []);
-  for (const node of items) {
-    if (node.nodeName === 'BR') { pushLine(node); continue; }
-    let tn = node as Text;
-    let val = tn.nodeValue || '';
-    let nl = val.indexOf('\n');
-    let rec: SplitRec | null = null;
-    while (nl !== -1) {
-      buf += val.slice(0, nl);
-      if (nl + 1 >= val.length) {          // '\n' is the last char → no split needed
-        pushLine(tn);
-        val = '';
-        break;
-      }
-      const rest = tn.splitText(nl + 1);   // tn now ends with the '\n'
-      if (!rec) {
-        rec = { tt, node: tn, created: [], value: '' };
-        recs.push(rec);
-        (tn as SplitText).__ibtRec = rec;
-      }
-      rec.created.push(rest);
-      pushLine(tn);
-      tn = rest; val = rest.nodeValue || ''; nl = val.indexOf('\n');
-    }
-    buf += val;
-    if (rec) rec.value = (node as Text).nodeValue || '';
-  }
-  pushLine(tt); // trailing physical line → maps to after the whole tweet text
-
-  // Phase 2: coalesce runs of non-empty physical lines into one paragraph; a
-  // blank line flushes the current paragraph. The paragraph's anchor is its
-  // LAST non-empty line's anchor → its translation lands after the paragraph's
-  // last line of text, before the blank line. Consecutive blanks collapse into
-  // one boundary (an empty pbuf flush is a no-op), so no empty paragraphs.
-  //
-  // List items are the exception: a physical line that starts a numbered /
-  // bulleted item ("1. ", "2) ", "- ", "• "…) becomes its OWN unit with its own
-  // anchor, so its translation is inserted right after the item instead of
-  // being crammed together with the whole list below. Items are short and
-  // self-contained, so this costs no extra LLM calls (the batcher merges them).
-  const LIST_ITEM_RE = /^(?:\d{1,3}(?:[.)]\s+|、)|[-•*·]\s+)/;
-  const out: Line[] = [];
-  let pbuf: string[] = [];
-  let panchor: Node | null = null;
-  const flushPara = () => {
-    if (pbuf.length && panchor) {
-      const text = pbuf.join(' ').replace(/\s+/g, ' ').trim();
-      if (text) out.push({ anchor: panchor, text });
-    }
-    pbuf = [];
-    panchor = null;
-  };
-  for (const p of phys) {
-    if (p.text) {
-      if (LIST_ITEM_RE.test(p.text)) {
-        flushPara();
-        out.push({ anchor: p.anchor, text: p.text });
-      } else {
-        pbuf.push(p.text); panchor = p.anchor;
-      }
-    }
-    else flushPara();
-  }
-  flushPara();
-  return out;
-}
-
 // Viewport gating for X: observe the tweetText element (anchors can be Text/BR nodes,
 // which IntersectionObserver cannot observe) and run its translation jobs on first sight.
 type JobbedElement = HTMLElement & { __ibtJobs?: (() => void)[] };
@@ -246,16 +145,13 @@ export function scanTwitter(s: Settings): void {
     (tt as JobbedElement).__ibtJobs = [];
     tt.setAttribute(SPLIT, sig);
     try {
-      const lines = splitParagraphs(tt);
-      if (lines.length <= 1) {
-        const text = tt.innerText?.trim() ?? '';
-        if (text && hasTranslatableText(text) && !isAlreadyTargetLang(text, s.targetLangCode)) deferX(tt, s, () => renderTranslationAfter(tt, text));
-      } else {
-        for (const ln of lines) {
-          if (!hasTranslatableText(ln.text) || isAlreadyTargetLang(ln.text, s.targetLangCode)) continue; // nothing to translate / already Chinese → skip
-          deferX(tt, s, () => renderTranslationAfter(ln.anchor, ln.text));
-        }
-      }
+      // One flowing paragraph. @ # and URLs are tokens here, restored as the
+      // original anchors after translation. Soft wraps are spaces, not lines.
+      const flow = protectFlow(tt);
+      const prose = flow.text.replace(/⟦\d+⟧/g, ' ');
+      if (!hasTranslatableText(prose) && !flow.chips.length) continue;
+      if (isAlreadyTargetLang(prose, s.targetLangCode) && !flow.chips.length) continue;
+      deferX(tt, s, () => renderTranslationAfter(tt, flow.text, { chips: flow.chips }));
     } catch {
       // never let a DOM quirk break the page; leave this tweet untranslated
     }

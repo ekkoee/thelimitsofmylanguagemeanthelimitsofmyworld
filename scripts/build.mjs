@@ -43,6 +43,7 @@ const iifeEntries = {
   'yt-main': 'src/content/yt-main.ts',
   'x-main': 'src/content/x-main.ts',
   'universal-inject': 'src/content/universal-inject.ts',
+  'image-inject': 'src/content/image-inject.ts',
   'popup': 'src/ui/popup/popup.ts',
   'options': 'src/ui/options/options.ts',
 };

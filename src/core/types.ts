@@ -119,4 +119,15 @@ export interface LookupResponse {
   error?: string;
 }
 
-export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage;
+export interface FetchImageMessage {
+  type: 'ibt-fetch-image';
+  url: string;
+}
+export interface CaptureTabMessage { type: 'ibt-capture-tab' }
+export interface TranslateImageMessage {
+  type: 'ibt-translate-image';
+  mime: string;
+  data: string;
+}
+
+export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage | FetchImageMessage | CaptureTabMessage | TranslateImageMessage;

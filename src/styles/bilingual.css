@@ -75,6 +75,13 @@
 :root[data-ibt-show-original="true"] .ibt-orig { display: block; }
 
 .ibt-trans { color: var(--ibt-trans-color); }
+.ibt-trans.ibt-flow { white-space: pre-line; }
+.ibt-trans .ibt-chip {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
 /* Beat a host `.markdown-body *` / tweet font without !important. Weight 400
    is the caption weight; the title (600) and the bold style (700) stay more
    specific, so they still win. */
@@ -100,6 +107,54 @@
 .ibt-loading-dot { font-size: 0.85em; opacity: 0.7; }
 .ibt-block.ibt-error { border-left-color: rgba(220, 80, 80, 0.7); }
 .ibt-error-msg { font-size: 0.85em; opacity: 0.85; }
+/* Image translation. Below uses .ibt-block. Overlay covers the image and does not
+   take space in the flow. Hover or hold 「原文」 to see the picture again. */
+.ibt-img-overlay {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  pointer-events: auto;
+  overflow: hidden;
+}
+.ibt-img-panel,
+.ibt-img-region {
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--ibt-trans-color, #f2d492);
+  font-family: var(--ibt-zh-font);
+  font-weight: 400;
+}
+.ibt-img-panel {
+  height: 100%;
+  padding: 26px 10px 10px;
+  overflow: auto;
+}
+.ibt-img-region {
+  position: absolute;
+  padding: 2px 4px;
+  overflow: auto;
+}
+.ibt-img-bar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+.ibt-img-x,
+.ibt-img-peek {
+  font: 12px/1 sans-serif;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border: 0;
+  border-radius: 4px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+.ibt-img-overlay.is-peek .ibt-img-panel,
+.ibt-img-overlay.is-peek .ibt-img-region { opacity: 0; }
+
 .ibt-retry {
   margin-left: 8px; font-size: 0.8em; padding: 1px 8px; cursor: pointer;
   border-radius: 6px; border: 1px solid currentColor; background: transparent; color: inherit;

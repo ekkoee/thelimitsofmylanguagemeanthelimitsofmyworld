@@ -9,6 +9,7 @@ import { toTraditional } from '../core/st2t';
 import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
 import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
+import { translateImage } from '../providers/gemini';
 
 const queue = new TaskQueue(4);
 
@@ -78,8 +79,37 @@ const llmBatcher = new LlmBatcher({
   })))),
 }, { windowMs: 60, maxSentences: 10, maxChars: 1600 });
 
-chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); });
-chrome.runtime.onStartup.addListener(() => { reconcileDblClick(); });
+chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); ensureImageMenu(); });
+chrome.runtime.onStartup.addListener(() => { reconcileDblClick(); ensureImageMenu(); });
+ensureImageMenu();
+
+function ensureImageMenu(): void {
+  chrome.contextMenus.create({
+    id: 'ibt-translate-image',
+    title: '翻譯這張圖片',
+    contexts: ['image'],
+  }, () => void chrome.runtime.lastError);
+}
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== 'ibt-translate-image' || !tab?.id) return;
+  void deliverImageClick(tab.id, info.srcUrl || '');
+});
+
+async function deliverImageClick(tabId: number, srcUrl: string): Promise<void> {
+  const send = () => chrome.tabs.sendMessage(tabId, { type: 'ibt-image', srcUrl });
+  try {
+    await send();
+    return;
+  } catch { /* the page has no content script yet */ }
+  try {
+    await chrome.scripting.insertCSS({ target: { tabId }, files: ['bilingual.css'] });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['image-inject.js'] });
+    await send();
+  } catch (err) {
+    console.log('[IBT] image inject failed', err);
+  }
+}
 
 // If the user revokes <all_urls> from chrome://extensions, drop the dynamic
 // registration and flip the setting off so state stays consistent (least privilege).
@@ -150,6 +180,27 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
       .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateBatchResponse));
     return true; // async response
   }
+  if (msg?.type === 'ibt-fetch-image') {
+    fetchImageBytes(msg.url)
+      .then((got) => sendResponse(got ? { ok: true, ...got } : { ok: false }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg?.type === 'ibt-capture-tab') {
+    const windowId = _sender.tab?.windowId;
+    chrome.tabs.captureVisibleTab(windowId ?? chrome.windows.WINDOW_ID_CURRENT, { format: 'png' }, (dataUrl) => {
+      const err = chrome.runtime.lastError;
+      if (err || !dataUrl) sendResponse({ ok: false, error: err?.message || 'capture failed' });
+      else sendResponse({ ok: true, dataUrl });
+    });
+    return true;
+  }
+  if (msg?.type === 'ibt-translate-image') {
+    translateImageMessage(msg.mime, msg.data)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) }));
+    return true;
+  }
   if (msg?.type === 'lookup') {
     handleLookup(msg.text)
       .then((lookup) => sendResponse({ ok: true, lookup } satisfies LookupResponse))
@@ -158,6 +209,43 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
   }
   return false;
 });
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+async function fetchImageBytes(url: string): Promise<{ mime: string; data: string } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.log('[IBT] image fetch failed', res.status, url.slice(0, 120));
+      return null;
+    }
+    const mime = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+    if (!mime.startsWith('image/')) return null;
+    const data = bytesToBase64(new Uint8Array(await res.arrayBuffer()));
+    console.log('[IBT] image fetch ok', mime, data.length);
+    return { mime, data };
+  } catch (err) {
+    console.log('[IBT] image fetch blocked', String((err as Error)?.message || err).slice(0, 140), url.slice(0, 120));
+    return null;
+  }
+}
+
+async function translateImageMessage(mime: string, data: string) {
+  const settings = await loadSettings();
+  return translateImage({
+    mime,
+    data,
+    key: settings.apiKeys.gemini || '',
+    model: settings.model,
+  });
+}
 
 async function handleTranslate(
   text: string,

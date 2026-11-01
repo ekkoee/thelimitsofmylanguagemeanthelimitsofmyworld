@@ -14,8 +14,10 @@ import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
 import { isAltA } from './alt-a-key';
 import { startLinkedIn } from './linkedin';
+import { startImageTranslate } from './image-translate';
 
 console.log('[IBT] content script loaded', location.hostname, location.href);
+startImageTranslate();
 
 const AUTO_SITE_RE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
 if (AUTO_SITE_RE.test(location.href)) {
