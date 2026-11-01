@@ -21,3 +21,4 @@ yarn-debug.log*
 .keys/
 .env.*
 .ibt-quota.json
+*.traineddata
