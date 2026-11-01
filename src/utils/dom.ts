@@ -1,4 +1,4 @@
-import { DEFAULT_TRANS_COLOR } from '../core/types';
+import { DEFAULT_TRANS_COLOR, normalizeTint } from '../core/types';
 
 export const NS = 'ibt'; // injected-node class/attribute namespace
 
@@ -139,6 +139,14 @@ export function watchTransSurfaces(): void {
   }).observe(document.documentElement, { childList: true, subtree: true });
 }
 
+function hexAlpha(hex: string, alpha: number): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function applyRootState(s: {
   enabled: boolean; showOriginal: boolean; layout: string; fontScale: number;
   targetLangCode?: string; transStyle?: string; transColor?: string;
@@ -176,8 +184,20 @@ export function applyRootState(s: {
   if (s.barColor) r.style.setProperty('--ibt-bar-color', s.barColor);
   else r.style.removeProperty('--ibt-bar-color');
   r.setAttribute('data-ibt-highlight', s.transHighlight ? 'on' : 'off');
-  if (s.highlightColor) r.style.setProperty('--ibt-highlight', s.highlightColor);
-  else r.style.removeProperty('--ibt-highlight');
+  const tint = normalizeTint(s.highlightColor);
+  if (!tint) {
+    r.removeAttribute('data-ibt-tint');
+    r.style.removeProperty('--ibt-tint-light');
+    r.style.removeProperty('--ibt-tint-dark');
+  } else if (tint.startsWith('#')) {
+    r.setAttribute('data-ibt-tint', 'custom');
+    r.style.setProperty('--ibt-tint-light', hexAlpha(tint, 0.45));
+    r.style.setProperty('--ibt-tint-dark', hexAlpha(tint, 0.42));
+  } else {
+    r.setAttribute('data-ibt-tint', tint);
+    r.style.removeProperty('--ibt-tint-light');
+    r.style.removeProperty('--ibt-tint-dark');
+  }
   refreshTransSurfaces();
   rootApplied = true;
 }

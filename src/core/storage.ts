@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, LEGACY_DEFAULT_COLOR, Settings } from './types';
+import { DEFAULT_SETTINGS, LEGACY_DEFAULT_COLOR, Settings, normalizeTint } from './types';
 
 const SETTINGS_KEY = 'ibt_settings';
 
@@ -34,7 +34,11 @@ function barChoice(value: string | undefined): string {
   return value === 'bar' || value === 'thick' || value === 'dashed' || value === 'none' ? value : 'none';
 }
 
-function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; dblClickTranslate?: unknown; transHighlightSet?: unknown; transColorSet?: unknown }): Settings {
+function instantChosen(stored: object): boolean {
+  return Object.prototype.hasOwnProperty.call(stored, 'selectionInstantSet');
+}
+
+function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; dblClickTranslate?: unknown; transHighlightSet?: unknown; transColorSet?: unknown; selectionInstantSet?: unknown }): Settings {
   const isGemini = s.provider === 'gemini';
   // The LinkedIn expand toggle was removed. A stored false must not survive on the object.
   const rest = { ...s };
@@ -46,7 +50,7 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; db
     model: isGemini && !/^gemini/i.test(s.model || '') ? 'gemini-3.5-flash-lite' : s.model || '',
     imageModel: s.imageModel === 'gemini' || (s.imageModel || '').startsWith('gemini-') ? 'gemini' : 'local',
     selectionTranslate: s.selectionTranslate !== false,
-    selectionInstant: s.selectionInstant === true,
+    selectionInstant: instantChosen(s) ? s.selectionInstant === true : true,
     sourceLang: 'auto',
     translateOnVisible: true,
     cacheEnabled: true,
@@ -56,7 +60,7 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; db
     barStyle: barChoice(s.barStyle),
     barColor: /^#[0-9a-fA-F]{6}$/.test(s.barColor || '') ? s.barColor : '',
     transHighlight: highlightChosen(s) ? s.transHighlight === true : true,
-    highlightColor: /^#[0-9a-fA-F]{6}$/.test(s.highlightColor || '') ? s.highlightColor : '',
+    highlightColor: normalizeTint(s.highlightColor),
     transColor: colorChosen(s)
       ? (/^#[0-9a-fA-F]{6}$/.test(s.transColor || '') ? s.transColor : '')
       : migrateDefaultColor(s.transColor),

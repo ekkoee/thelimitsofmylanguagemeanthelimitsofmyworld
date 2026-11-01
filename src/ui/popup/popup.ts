@@ -41,6 +41,23 @@ async function init() {
     } catch { /* not scriptable */ }
   });
 
+  const lang = $<HTMLSelectElement>('lang');
+  const codes = [...lang.options].map((opt) => opt.value);
+  lang.value = codes.includes(s.targetLangCode) ? s.targetLangCode : 'zh-TW';
+  lang.addEventListener('change', () => {
+    const names: Record<string, string> = {
+      'zh-TW': 'Traditional Chinese (zh-TW)',
+      'zh-CN': 'Simplified Chinese (zh-CN)',
+      en: 'English',
+      ja: 'Japanese',
+      ko: 'Korean',
+      es: 'Spanish',
+      fr: 'French',
+      de: 'German',
+    };
+    void saveSettings({ targetLangCode: lang.value, targetLang: names[lang.value] || lang.value });
+  });
+
   const open = $('openOptions');
   const needsKey = s.provider === 'gemini' && !normalizeGeminiKey(s.apiKeys.gemini);
   open.textContent = needsKey ? '貼上 Gemini 金鑰' : '設定';

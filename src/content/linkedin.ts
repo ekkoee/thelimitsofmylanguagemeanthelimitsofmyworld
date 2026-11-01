@@ -2,6 +2,7 @@
 // Translating the clamped preview spends a request and then goes stale when the
 // reader expands the post, so expansion itself is what translates that card.
 import { renderTranslationAfter } from './engine';
+import { pageFontPx } from './page-font';
 
 const POST = [
   '.feed-shared-update-v2',
@@ -79,7 +80,7 @@ export function controlFromElement(el: Element | null): LiControl {
   return 'ignore';
 }
 
-function commentaryRoot(el: Element): HTMLElement | null {
+export function commentaryRoot(el: Element): HTMLElement | null {
   return (el.closest(LI_BODY) as HTMLElement) || (el.matches(LI_BODY) ? el as HTMLElement : null);
 }
 
@@ -145,52 +146,97 @@ function linkedInOwnTranslation(scope: ParentNode): boolean {
 
 const pending = new WeakMap<HTMLElement, number>();
 
-function placeBlock(body: HTMLElement, text: string, sig: string): void {
-  body.nextElementSibling?.classList.contains('ibt-block') && body.nextElementSibling.remove();
-  body.dataset.ibtLiSig = sig;
-  console.log('[IBT] request sent (LinkedIn expand)', text.slice(0, 80));
-  const block = renderTranslationAfter(body, text, { sig });
-  if (!block) {
-    console.log('[IBT] LinkedIn request not inserted');
-    return;
+export interface LiLine { anchor: Node; text: string }
+
+/** One unit per <br> or blank line inside a LinkedIn commentary. */
+export function linkedInLines(root: HTMLElement): LiLine[] {
+  const items: Node[] = [];
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode(n) {
+      if (n.nodeType === 1) {
+        const el = n as Element;
+        if (el.classList.contains('ibt-block') || el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return el.tagName === 'BR' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let node: Node | null;
+  while ((node = tw.nextNode())) items.push(node);
+
+  const lines: LiLine[] = [];
+  let buf = '';
+  const flush = (anchor: Node) => {
+    const text = buf.replace(/\s+/g, ' ').trim();
+    buf = '';
+    if (text) lines.push({ anchor, text });
+  };
+  for (const item of items) {
+    if (item.nodeName === 'BR') {
+      flush(item);
+      continue;
+    }
+    const raw = item.nodeValue || '';
+    const parts = raw.split(/\n\s*\n/);
+    for (let i = 0; i < parts.length; i++) {
+      buf += parts[i];
+      if (i < parts.length - 1) flush(item);
+    }
   }
-  block.classList.add('ibt-uni');
-  // Inline, so the line stays inside the card even after the engine replaces
-  // className when the translation arrives. Color stays the page-translation color.
-  block.style.display = 'block';
-  block.style.width = '100%';
-  block.style.maxWidth = '100%';
-  block.style.boxSizing = 'border-box';
-  block.style.position = 'static';
-  block.style.flex = '1 0 100%';
+  flush(root);
+  return lines;
+}
+
+function clearLinkedInBlocks(body: HTMLElement): void {
+  body.querySelectorAll('.ibt-block').forEach((n) => n.remove());
+  let sib = body.nextElementSibling;
+  while (sib && sib.classList.contains('ibt-block')) {
+    const next = sib.nextElementSibling;
+    sib.remove();
+    sib = next;
+  }
+}
+
+/** Auto-translate and the expand click both use this. One translation under each line. */
+export function translateLinkedInCommentary(body: HTMLElement): void {
+  const lines = linkedInLines(body);
+  const sig = lines.map((l) => l.text).join('\n');
+  if (!sig || sig.replace(/\s/g, '').length < 8) return;
+  if (body.dataset.ibtLiSig === sig && (body.querySelector('.ibt-block') || body.nextElementSibling?.classList.contains('ibt-block'))) return;
+  clearLinkedInBlocks(body);
+  body.dataset.ibtLiSig = sig;
+  const font = `${pageFontPx(body)}px`;
+  for (const line of lines) {
+    const block = renderTranslationAfter(line.anchor, line.text);
+    if (!block) continue;
+    block.classList.add('ibt-uni');
+    block.style.display = 'block';
+    block.style.width = '100%';
+    block.style.maxWidth = '100%';
+    block.style.boxSizing = 'border-box';
+    block.style.position = 'static';
+    block.style.flex = '1 0 100%';
+    block.style.fontSize = font;
+    block.style.lineHeight = '1.5';
+  }
 }
 
 function translateBody(body: HTMLElement, why: string): void {
   const post = postOf(body) || body;
   if (linkedInOwnTranslation(post)) {
-    const next = body.nextElementSibling;
-    if (next?.classList.contains('ibt-block')) next.remove();
+    clearLinkedInBlocks(body);
     delete body.dataset.ibtLiSig;
     console.log('[IBT] LinkedIn skip, own translation present');
     return;
   }
-  const text = commentaryText(body);
-  if (text.length < 8) {
-    console.log('[IBT] LinkedIn skip, empty body');
-    return;
-  }
-  const sig = `${text.length}|${text.slice(0, 24)}`;
-  if (body.dataset.ibtLiSig === sig && body.nextElementSibling?.classList.contains('ibt-block')) {
-    console.log('[IBT] LinkedIn already translated');
-    return;
-  }
-  console.log('[IBT] LinkedIn translate', why, text.slice(0, 80));
-  placeBlock(body, text, sig);
+  console.log('[IBT] LinkedIn translate', why);
+  translateLinkedInCommentary(body);
 }
 
 function clearBody(body: HTMLElement): void {
-  const next = body.nextElementSibling;
-  if (next?.classList.contains('ibt-block')) next.remove();
+  clearLinkedInBlocks(body);
   delete body.dataset.ibtLiSig;
 }
 
@@ -247,9 +293,8 @@ export function startLinkedIn(): void {
           const post = (el.closest(POST) || (el.matches?.(POST) ? el : null)) as HTMLElement | null;
           if (post && linkedInOwnTranslation(post)) {
             const body = bodyOf(post, el);
-            if (body?.nextElementSibling?.classList.contains('ibt-block')) {
-              body.nextElementSibling.remove();
-              delete body.dataset.ibtLiSig;
+            if (body) {
+              clearBody(body);
               console.log('[IBT] LinkedIn own translation appeared, removed ours');
             }
           }

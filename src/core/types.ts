@@ -35,8 +35,10 @@ export interface Settings {
   imageModel: string;
   /** Show a 「譯」 button beside a text selection. Default on. */
   selectionTranslate: boolean;
-  /** Open the selection card immediately, without the button. */
+  /** Open the selection card immediately, without the button. On unless the user turned it off. */
   selectionInstant: boolean;
+  /** Set once the user toggles 選取後立即顯示. */
+  selectionInstantSet?: boolean;
   apiKeys: Record<ProviderId, string>;
   ollamaEndpoint: string;
   cacheEnabled: boolean;
@@ -48,6 +50,16 @@ export const DEFAULT_TRANS_COLOR = '#f2d492';
 export const DEFAULT_BAR_COLOR = '#f2d492';
 /** Stored before 1.4.18 when the picker saved the old blue default. Treated as "never customized". */
 export const LEGACY_DEFAULT_COLOR = '#6c7aff';
+
+export const TINT_HUES = ['blue', 'green', 'amber', 'orange', 'red', 'violet'] as const;
+
+export function normalizeTint(value: string | undefined): string {
+  const raw = (value || '').trim();
+  const name = raw.toLowerCase();
+  if ((TINT_HUES as readonly string[]).includes(name)) return name;
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw;
+  return '';
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
@@ -71,7 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: '',
   imageModel: 'local',
   selectionTranslate: true,
-  selectionInstant: false,
+  selectionInstant: true,
   apiKeys: { google: '', microsoft: '', openai: '', gemini: '', ollama: '' },
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,

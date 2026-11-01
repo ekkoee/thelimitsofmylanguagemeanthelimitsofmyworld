@@ -4,7 +4,7 @@ import { renderTranslationAfter } from './engine';
 import { isHeadingElement, isRowFit, pageFontPx } from './page-font';
 import { collectUnits, isInlinePostChrome, isSeeMoreLessControl } from './blocks';
 import { matchSiteRule } from './selectors';
-import { linkedInCollapsed, linkedInHost } from './linkedin';
+import { commentaryRoot, linkedInCollapsed, linkedInHost, translateLinkedInCommentary } from './linkedin';
 
 const UNI_ATTR = 'data-ibt-uni'; // cheap hint we've handled a source (teardown aid)
 
@@ -287,6 +287,14 @@ export class UniversalTranslator {
   }
 
   private render(node: HTMLElement): void {
+    if (linkedInHost()) {
+      const body = commentaryRoot(node);
+      if (body) {
+        translateLinkedInCommentary(body);
+        this.processed.add(node);
+        return;
+      }
+    }
     // Drop any prior block for this source before inserting (handles a re-render
     // whose text changed — no stale block left behind, no DOM leak).
     const old = this.blockBySource.get(node);
