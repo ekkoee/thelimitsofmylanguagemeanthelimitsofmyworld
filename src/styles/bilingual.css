@@ -5,6 +5,16 @@
   --ibt-font-scale: 1;
   /* Settings-page default. A saved color overwrites this from chrome.storage. */
   --ibt-trans-color: #6c7aff;
+  /* One family for every Chinese translation: YouTube captions, X video subs,
+     tweets, GitHub, LinkedIn, and other page text. The first eight names are
+     YouTube's .ytp-caption-segment stack (weight 400). "YouTube Noto" and
+     Roboto are Latin webfonts YouTube loads only on youtube.com; they have no
+     CJK, so Han walks past them. "Arial Unicode Ms" is next, and YouTube uses
+     it when Office left it installed. Otherwise Han lands on the same face
+     Chrome's zh-TW sans-serif uses on Windows: Microsoft JhengHei. PingFang TC
+     is that face on macOS. Noto Sans TC is only after those, so a Windows
+     machine that also has Noto still draws JhengHei, matching the caption. */
+  --ibt-zh-font: "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", sans-serif;
 }
 
 .ibt-block {
@@ -66,6 +76,13 @@
 :root[data-ibt-show-original="true"] .ibt-orig { display: block; }
 
 .ibt-trans { color: var(--ibt-trans-color); }
+/* Beat a host `.markdown-body *` / tweet font without !important. Weight 400
+   is the caption weight; the title (600) and the bold style (700) stay more
+   specific, so they still win. */
+.ibt-block .ibt-trans {
+  font-family: var(--ibt-zh-font);
+  font-weight: 400;
+}
 
 /* The title's translation block is projected into the title slot — give it a
    touch more size/weight so it reads like the headline it translates. */
@@ -125,14 +142,12 @@
   line-height: 1.35;
   white-space: pre-wrap;
 }
-/* YouTube subtitles use YouTube's own caption typeface so the Chinese line looks like the native
-   captions. content.js copies the live native font into --ibt-yt-font; the stack below is only the
-   fallback until a native caption has been on screen. (The page-translation CJK font rules further
-   down deliberately do not apply here.) Weight 400 = the native caption weight.
-   X video Chinese uses this same stack, weight, and the subtitle color (default white). */
+/* Same --ibt-zh-font as page translations. On YouTube, content.js copies the live
+   caption font-family into that variable and keeps the CJK tail above. */
 .ibt-yt-overlay,
-.ibt-x-overlay {
-  font-family: var(--ibt-yt-font, "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", sans-serif);
+.ibt-x-overlay,
+.ibt-yt-line > span {
+  font-family: var(--ibt-zh-font);
 }
 .ibt-yt-overlay .ibt-yt-zh,
 .ibt-x-overlay .ibt-yt-zh { font-weight: 400; color: var(--ibt-sub-color, #fff); }
@@ -258,19 +273,6 @@ video.ibt-x-hide-cue::cue {
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 .ibt-toast.ibt-toast-show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-/* ============================================================
-   Consistent CJK font per target language (fixes mixed bold/thin
-   glyphs when the page's own font doesn't fully cover the script).
-   One complete font → every character renders the same weight. */
-:root[data-ibt-lang="zh-CN"] .ibt-trans {
-  font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
-    "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", sans-serif;
-}
-:root[data-ibt-lang="zh-TW"] .ibt-trans {
-  font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC",
-    "Source Han Sans TC", "Segoe UI", sans-serif;
-}
 
 /* ============================================================
    Translated-text display styles (chosen in the options page).

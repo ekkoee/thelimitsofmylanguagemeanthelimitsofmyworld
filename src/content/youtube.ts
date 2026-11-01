@@ -13,6 +13,16 @@ const CHUNK = 16;               // normal refill: at most this many cues per req
 const URGENT_CHUNK = 4;         // the cue on screen right now: tiny request so it shows fast
 const REFILL_BELOW = 12;        // only ask for more once the translated runway drops below this
 const AHEAD_THROTTLE_MS = 400;
+// Faces after YouTube's Latin stack. Must stay in this order: JhengHei is the
+// Windows zh-TW face the caption actually draws; Noto is only a later fallback.
+const ZH_CJK_TAIL = '"Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", sans-serif';
+
+export function withCjkTail(specified: string): string {
+  const ff = specified.trim().replace(/;$/, '');
+  if (/Microsoft JhengHei/i.test(ff)) return ff;
+  if (/sans-serif\s*$/i.test(ff)) return ff.replace(/sans-serif\s*$/i, ZH_CJK_TAIL);
+  return `${ff}, ${ZH_CJK_TAIL}`;
+}
 
 interface Word { t: number; w: string }
 interface Cue {
@@ -439,7 +449,9 @@ class TrackCaptions {
     const ff = getComputedStyle(seg).fontFamily;
     if (ff && ff !== this.nativeFont) {
       this.nativeFont = ff;
-      this.overlay.style.setProperty('--ibt-yt-font', ff);
+      // Page translations on this tab share the caption stack. Keep the CJK
+      // tail so Han still resolves to Microsoft JhengHei after the Latin faces.
+      document.documentElement.style.setProperty('--ibt-zh-font', withCjkTail(ff));
     }
   }
 
@@ -539,7 +551,12 @@ class DomCaptions {
     return (tb?.parentElement as HTMLElement) || win;
   }
   private ensureLine(win: HTMLElement): void {
-    if (!this.lineEl) { this.lineEl = el('div', 'ibt-yt-line'); this.spanEl = el('span'); this.lineEl.appendChild(this.spanEl); }
+    if (!this.lineEl) {
+      this.lineEl = el('div', 'ibt-yt-line');
+      this.spanEl = el('span');
+      this.spanEl.lang = this.settings.targetLangCode || 'zh-TW';
+      this.lineEl.appendChild(this.spanEl);
+    }
     const host = this.host(win);
     if (this.lineEl.isConnected && this.lineEl.parentElement === host) return;
     const tb = win.querySelector('.captions-text') as HTMLElement | null;

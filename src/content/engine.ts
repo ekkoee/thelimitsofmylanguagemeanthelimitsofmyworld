@@ -74,7 +74,10 @@ function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
   // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
   for (const p of pairs) {
     if (isPureUrl(p.o) || !hasTranslatableText(p.o)) continue;   // just a URL / @mention → no useful translation
-    block.appendChild(el('div', 'ibt-trans', p.t));
+    const line = el('div', 'ibt-trans', p.t);
+    // Same lang as the YouTube Chinese line, so Han fallback picks the same face.
+    line.lang = document.documentElement.getAttribute('data-ibt-lang') === 'zh-CN' ? 'zh-CN' : 'zh-TW';
+    block.appendChild(line);
   }
 }
 

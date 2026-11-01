@@ -18,10 +18,15 @@ execSync(
   'npx esbuild src/content/universal.ts --bundle --platform=node --format=esm --outfile=/tmp/universal.test.mjs --log-level=error',
   { cwd: root, stdio: 'inherit' },
 );
+execSync(
+  'npx esbuild src/content/youtube.ts --bundle --platform=node --format=esm --outfile=/tmp/youtube.test.mjs --log-level=error',
+  { cwd: root, stdio: 'inherit' },
+);
 const { isShortLabel, isShortcutHint } = await import('/tmp/blocks.test.mjs');
 const { isAltA } = await import('/tmp/alt-a-key.test.mjs');
 const { controlFromElement, linkedInCollapsed, commentaryText } = await import('/tmp/linkedin.test.mjs');
 const { chineseSkipReason } = await import('/tmp/universal.test.mjs');
+const { withCjkTail } = await import('/tmp/youtube.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -53,6 +58,13 @@ const zhShell = `首頁 人脈 職缺 訊息 通知 顯示翻譯 讚 留言 轉�
 check('english post is not skipped on linkedin zh shell', chineseSkipReason('www.linkedin.com', post, zhShell, 'zh-TW') === '');
 check('same english post is skipped on github zh shell', chineseSkipReason('github.com', post, zhShell, 'zh-TW') === 'shell');
 check('chinese unit is skipped on linkedin', chineseSkipReason('www.linkedin.com', '牧野這次展示大型航太鋁件的加工節拍可以再縮短，而且精度維持得住。', zhShell, 'zh-TW') === 'target');
+
+const ytStack = '"YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", sans-serif';
+const tailed = withCjkTail(ytStack);
+check('cjk tail keeps YouTube faces first', tailed.startsWith('"YouTube Noto", Roboto, "Arial Unicode Ms"'));
+check('jhenghei comes after the latin stack', tailed.indexOf('Microsoft JhengHei') > tailed.indexOf('PT Sans Caption'));
+check('noto tc does not jump ahead of jhenghei', tailed.indexOf('Noto Sans TC') > tailed.indexOf('Microsoft JhengHei'));
+check('cjk tail is not doubled', withCjkTail(tailed) === tailed);
 
 let parseHTML = null;
 try {

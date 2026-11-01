@@ -62,7 +62,7 @@ export function applyRootState(s: {
   r.setAttribute('data-ibt-show-original', String(s.showOriginal));
   r.setAttribute('data-ibt-layout', s.layout);
   r.style.setProperty('--ibt-font-scale', String(s.fontScale));
-  // Simplified vs Traditional → pick a complete CJK font so glyphs don't mix
+  // lang on each translation node. The face itself is --ibt-zh-font for both.
   r.setAttribute('data-ibt-lang', s.targetLangCode === 'zh-CN' ? 'zh-CN' : 'zh-TW');
   // translated-text visual style
   r.setAttribute('data-ibt-style', s.transStyle || 'plain');

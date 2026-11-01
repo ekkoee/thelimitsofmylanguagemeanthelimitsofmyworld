@@ -2,6 +2,11 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.4.17] — 2026-11-01
+### 變更 Changed
+- **所有中文譯文跟 YouTube 字幕同一套字。** 變數 `--ibt-zh-font`：`"YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, "PT Sans Caption", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", sans-serif`，字重 400。推文、GitHub、LinkedIn、一般網頁、YouTube 標題與留言、以及 X／YouTube 影片字幕都用它。顏色、字級、位置沒改。
+- **Windows 上的漢字是 Microsoft JhengHei。** YouTube Noto 與 Roboto 沒有漢字，而且只在 youtube.com 當網頁字型載入。清單裡下一個有漢字的是 Arial Unicode MS（有裝 Office 舊版才有）。一般 Windows 繁中 Chrome 沒有它，漢字落到 Chrome 的 zh-TW `sans-serif`，也就是微軟正黑體。Noto Sans TC 排在正黑體後面，避免裝了 Noto 的 Windows 跟 YouTube 字幕不一致。
+
 ## [1.4.16] — 2026-10-31
 ### 修正 Fixed
 - **LinkedIn 的 Alt+A。** 快捷鍵有進到頁面。失敗點在掃描：繁體中文介面（導覽、「顯示翻譯」、讚／留言）落在 `<main>` 裡，整段被當成一篇中文文章，英文貼文全部跳過，所以畫面上什麼都沒有。現在 LinkedIn 只看貼文自己的文字；其他網站（含 GitHub）仍會略過包在中文文章裡的英文。主控台會印出腳本載入、按鍵、候選數、送出請求。
