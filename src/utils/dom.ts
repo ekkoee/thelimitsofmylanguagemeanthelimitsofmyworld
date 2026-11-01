@@ -121,8 +121,10 @@ export function applyRootState(s: {
     r.style.removeProperty('--ibt-trans-color');
     r.style.removeProperty('--ibt-sub-color');
   }
-  r.setAttribute('data-ibt-bar', 'none');
-  r.style.removeProperty('--ibt-bar-color');
+  const bar = s.barStyle === 'bar' || s.barStyle === 'thick' || s.barStyle === 'dashed' || s.barStyle === 'none' ? s.barStyle : 'none';
+  r.setAttribute('data-ibt-bar', bar);
+  if (s.barColor) r.style.setProperty('--ibt-bar-color', s.barColor);
+  else r.style.removeProperty('--ibt-bar-color');
   r.setAttribute('data-ibt-highlight', s.transHighlight ? 'on' : 'off');
   if (s.highlightColor) r.style.setProperty('--ibt-highlight', s.highlightColor);
   else r.style.removeProperty('--ibt-highlight');

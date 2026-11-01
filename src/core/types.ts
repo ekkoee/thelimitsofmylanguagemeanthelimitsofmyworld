@@ -14,8 +14,10 @@ export interface Settings {
   subtitleOrder: SubtitleOrder; // YouTube subtitle order (both languages shown); default Chinese on top
   transStyle: string;           // visual style of the translated text (underline / box / blur / …)
   transColor: string;           // '' = inherit the page text. A saved hex is a deliberate custom color.
-  barStyle: string;             // always 'none'; the left bar was removed
-  barColor: string;             // unused; kept so old stored settings still parse
+  /** Set once the user picks a text color or 「跟頁面顏色」, so a later gold pick is kept. */
+  transColorSet?: boolean;
+  barStyle: string;             // none | bar | thick | dashed. Default none.
+  barColor: string;             // '' uses the mark's fallback color when a bar is shown.
   /** Translucent chip behind the translated words. On unless the user turned it off. */
   transHighlight: boolean;
   /** Set once the user toggles 淡底色, so the 1.4.36 default-on migration does not undo them. */

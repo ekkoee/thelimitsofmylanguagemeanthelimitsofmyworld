@@ -9,20 +9,6 @@ async function init() {
   const version = $('version');
   try { version.textContent = chrome.runtime.getManifest().version; } catch { version.textContent = ''; }
 
-  const reader = $('reader');
-  const readerZh = $('readerZh');
-  const readerDark = $<HTMLInputElement>('readerDark');
-  const themeDark = window.matchMedia('(prefers-color-scheme: dark)');
-  const applyReader = (): void => {
-    const dark = readerDark.checked || themeDark.matches;
-    if (readerDark.checked) reader.dataset.tone = 'dark';
-    else delete reader.dataset.tone;
-    readerZh.dataset.ibtOn = dark ? 'dark' : 'light';
-  };
-  readerDark.addEventListener('change', applyReader);
-  themeDark.addEventListener('change', applyReader);
-  applyReader();
-
   const lang = $<HTMLSelectElement>('lang');
   lang.value = s.targetLangCode === 'zh-CN' ? 'zh-CN' : 'zh-TW';
   lang.addEventListener('change', () => {
@@ -74,12 +60,63 @@ async function init() {
   bindAppearance(s);
 }
 
+const STYLE_VALUES = ['plain', 'underline', 'dashed', 'dotted', 'wavy', 'solidBox', 'dashedBox', 'highlight', 'dim', 'italic', 'bold', 'blur'];
+const BAR_VALUES = ['none', 'bar', 'thick', 'dashed'];
+const INHERIT_SWATCH = '#1c1c1c';
+const BAR_SWATCH = '#6c7aff';
+
 function bindAppearance(s: Settings) {
+  const style = $<HTMLSelectElement>('transStyle');
+  const transColor = $<HTMLInputElement>('transColor');
+  const barStyle = $<HTMLSelectElement>('barStyle');
+  const barColor = $<HTMLInputElement>('barColor');
   const highlight = $<HTMLInputElement>('transHighlight');
+  let textColor = /^#[0-9a-fA-F]{6}$/.test(s.transColor || '') ? s.transColor : '';
+  let markColor = /^#[0-9a-fA-F]{6}$/.test(s.barColor || '') ? s.barColor : '';
+
   const syncPreview = () => {
-    document.documentElement.setAttribute('data-ibt-highlight', highlight.checked ? 'on' : 'off');
-    document.documentElement.setAttribute('data-ibt-lang', 'zh-TW');
+    const root = document.documentElement;
+    root.setAttribute('data-ibt-style', style.value || 'plain');
+    root.setAttribute('data-ibt-bar', barStyle.value || 'none');
+    root.setAttribute('data-ibt-highlight', highlight.checked ? 'on' : 'off');
+    root.setAttribute('data-ibt-lang', 'zh-TW');
+    if (textColor) {
+      root.setAttribute('data-ibt-custom-color', 'on');
+      root.style.setProperty('--ibt-trans-color', textColor);
+    } else {
+      root.removeAttribute('data-ibt-custom-color');
+      root.style.removeProperty('--ibt-trans-color');
+    }
+    if (markColor) root.style.setProperty('--ibt-bar-color', markColor);
+    else root.style.removeProperty('--ibt-bar-color');
   };
+
+  style.value = STYLE_VALUES.includes(s.transStyle) ? s.transStyle : 'plain';
+  style.addEventListener('change', () => { save({ transStyle: style.value }); syncPreview(); });
+
+  transColor.value = textColor || INHERIT_SWATCH;
+  transColor.addEventListener('input', () => { textColor = transColor.value; syncPreview(); });
+  transColor.addEventListener('change', () => save({ transColor: textColor, transColorSet: true }));
+  $('transColorReset').addEventListener('click', () => {
+    textColor = '';
+    transColor.value = INHERIT_SWATCH;
+    save({ transColor: '', transColorSet: true });
+    syncPreview();
+  });
+
+  barStyle.value = BAR_VALUES.includes(s.barStyle) ? s.barStyle : 'none';
+  barStyle.addEventListener('change', () => { save({ barStyle: barStyle.value }); syncPreview(); });
+
+  barColor.value = markColor || BAR_SWATCH;
+  barColor.addEventListener('input', () => { markColor = barColor.value; syncPreview(); });
+  barColor.addEventListener('change', () => save({ barColor: markColor }));
+  $('barColorReset').addEventListener('click', () => {
+    markColor = '';
+    barColor.value = BAR_SWATCH;
+    save({ barColor: '' });
+    syncPreview();
+  });
+
   highlight.checked = s.transHighlight === true;
   highlight.addEventListener('change', () => {
     save({ transHighlight: highlight.checked, transHighlightSet: true });

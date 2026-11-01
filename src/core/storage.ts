@@ -26,7 +26,15 @@ function highlightChosen(stored: object): boolean {
   return Object.prototype.hasOwnProperty.call(stored, 'transHighlightSet');
 }
 
-function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; dblClickTranslate?: unknown; transHighlightSet?: unknown }): Settings {
+function colorChosen(stored: object): boolean {
+  return Object.prototype.hasOwnProperty.call(stored, 'transColorSet');
+}
+
+function barChoice(value: string | undefined): string {
+  return value === 'bar' || value === 'thick' || value === 'dashed' || value === 'none' ? value : 'none';
+}
+
+function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; dblClickTranslate?: unknown; transHighlightSet?: unknown; transColorSet?: unknown }): Settings {
   const isGemini = s.provider === 'gemini';
   // The LinkedIn expand toggle was removed. A stored false must not survive on the object.
   const rest = { ...s };
@@ -45,20 +53,21 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; db
     sites: { x: true, reddit: true, youtube: true, netflix: true },
     // '' is "never chosen". Do not coerce it to 'both' — X video treats unset as Chinese-only.
     viewMode: s.viewMode === 'zh' || s.viewMode === 'both' || s.viewMode === 'orig' ? s.viewMode : '',
-    barStyle: 'none',
-    barColor: '',
+    barStyle: barChoice(s.barStyle),
+    barColor: /^#[0-9a-fA-F]{6}$/.test(s.barColor || '') ? s.barColor : '',
     transHighlight: highlightChosen(s) ? s.transHighlight === true : true,
     highlightColor: /^#[0-9a-fA-F]{6}$/.test(s.highlightColor || '') ? s.highlightColor : '',
-    transColor: migrateDefaultColor(s.transColor),
+    transColor: colorChosen(s)
+      ? (/^#[0-9a-fA-F]{6}$/.test(s.transColor || '') ? s.transColor : '')
+      : migrateDefaultColor(s.transColor),
   };
 }
 
 export async function loadSettings(): Promise<Settings> {
   const raw = await chrome.storage.sync.get(SETTINGS_KEY);
-  const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings> & { linkedinExpandTranslate?: unknown; transHighlightSet?: boolean };
+  const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings> & { linkedinExpandTranslate?: unknown; transHighlightSet?: boolean; transColorSet?: boolean };
   const dropLinkedIn = Object.prototype.hasOwnProperty.call(stored, 'linkedinExpandTranslate');
-  const hadLegacy = isLegacyDefaultColor(stored.transColor) || isLegacyDefaultColor(stored.barColor);
-  const hadBar = stored.barStyle !== 'none' || !!(stored.barColor && stored.barColor !== '');
+  const needColor = !colorChosen(stored) && isLegacyDefaultColor(stored.transColor);
   const needTint = !highlightChosen(stored);
   // deep-ish merge so new default keys appear after upgrades
   const merged = {
@@ -73,12 +82,13 @@ export async function loadSettings(): Promise<Settings> {
   }
   const next = normalizeSettings(merged);
   // Drop a stored #6c7aff so the new default shows up, without rewriting other fields.
-  if (hadLegacy || hadBar || needTint || dropLinkedIn) {
-    const patched = { ...stored } as Partial<Settings> & { transHighlightSet?: boolean; linkedinExpandTranslate?: unknown };
+  if (needColor || needTint || dropLinkedIn) {
+    const patched = { ...stored } as Partial<Settings> & { transHighlightSet?: boolean; transColorSet?: boolean; linkedinExpandTranslate?: unknown };
     delete patched.linkedinExpandTranslate;
-    if (isLegacyDefaultColor(stored.transColor)) patched.transColor = '';
-    patched.barStyle = 'none';
-    patched.barColor = '';
+    if (needColor) {
+      patched.transColor = '';
+      patched.transColorSet = true;
+    }
     if (needTint) {
       patched.transHighlight = true;
       patched.transHighlightSet = true;

@@ -1,6 +1,6 @@
 // 劃詞翻譯. A round control sits at the end of a finished selection. The card
-// shows the source, the translation, copy and speak, the engine name, and can
-// be pinned or dragged. Inputs and editable fields are left alone.
+// shows the source, the translation, and copy. Speaking reads the original.
+// Inputs and editable fields are left alone.
 
 import { loadSettings } from '../core/storage';
 import { DictEntry } from '../core/types';
@@ -125,7 +125,7 @@ async function onMouseUp(event: MouseEvent): Promise<void> {
   anchor = hit.rect;
   if (settings?.selectionInstant && !pinned) {
     hideButton();
-    showCard(hit.rect, hit.text, engineName(settings?.provider));
+    showCard(hit.rect, hit.text);
     return;
   }
   showButton(hit.rect);
@@ -149,10 +149,6 @@ function onScroll(): void {
   hideAll();
 }
 
-function engineName(provider: string | undefined): string {
-  return provider === 'gemini' ? 'Gemini' : 'Google 翻譯';
-}
-
 function showButton(rect: DOMRect): void {
   const btn = button ?? document.createElement('button');
   button = btn;
@@ -173,8 +169,7 @@ function showButton(rect: DOMRect): void {
 }
 
 async function openFromButton(): Promise<void> {
-  const settings = await loadSettings().catch(() => null);
-  showCard(anchor || new DOMRect(8, 8, 0, 0), current, engineName(settings?.provider));
+  showCard(anchor || new DOMRect(8, 8, 0, 0), current);
 }
 
 function iconButton(className: string, label: string, paths: string[]): HTMLButtonElement {
@@ -186,7 +181,7 @@ function iconButton(className: string, label: string, paths: string[]): HTMLButt
   return btn;
 }
 
-function showCard(rect: DOMRect, text: string, engine: string): void {
+function showCard(rect: DOMRect, text: string): void {
   hideButton();
   const host = card ?? document.createElement('div');
   card = host;
@@ -199,9 +194,6 @@ function showCard(rect: DOMRect, text: string, engine: string): void {
   const gripEl = document.createElement('span');
   gripEl.className = 'ibt-sel-grip';
   gripEl.appendChild(grip());
-  const name = document.createElement('span');
-  name.className = 'ibt-sel-engine';
-  name.textContent = engine;
   const pin = iconButton('ibt-sel-pin', '釘選', ICONS.pin);
   pin.setAttribute('aria-pressed', 'false');
   pin.lastChild?.remove();
@@ -213,22 +205,26 @@ function showCard(rect: DOMRect, text: string, engine: string): void {
   const close = iconButton('ibt-sel-x', '關閉', ICONS.close);
   close.lastChild?.remove();
   close.onclick = (event) => { event.preventDefault(); hideCard(); };
-  head.append(gripEl, name, pin, close);
+  head.append(gripEl, pin, close);
   enableDrag(host, head);
 
   const original = document.createElement('div');
   original.className = 'ibt-sel-orig';
-  original.textContent = text;
+  const source = document.createElement('span');
+  source.textContent = text;
+  const speak = iconButton('ibt-sel-speak', '朗讀原文', ICONS.speak);
+  speak.lastChild?.remove();
+  let sourceLang = 'en-US';
+  speak.onclick = (event) => { event.preventDefault(); speakText(text, sourceLang); };
+  original.append(source, speak);
   const body = document.createElement('div');
   body.className = 'ibt-sel-body';
   body.textContent = '翻譯中…';
   const actions = document.createElement('div');
   actions.className = 'ibt-sel-actions';
   const copy = iconButton('ibt-sel-copy', '複製', ICONS.copy);
-  const speak = iconButton('ibt-sel-speak', '朗讀', ICONS.speak);
   copy.disabled = true;
-  speak.disabled = true;
-  actions.append(copy, speak);
+  actions.append(copy);
   host.append(head, original, body, actions);
 
   const width = Math.min(360, window.innerWidth - 16);
@@ -243,7 +239,7 @@ function showCard(rect: DOMRect, text: string, engine: string): void {
     host.style.top = `${Math.max(8, rect.top - height - 8)}px`;
   }
   const id = ++req;
-  void fillCard(id, text, body, copy, speak);
+  void fillCard(id, text, body, copy, (lang) => { sourceLang = lang; });
 }
 
 function enableDrag(host: HTMLDivElement, handle: HTMLElement): void {
@@ -276,7 +272,7 @@ async function fillCard(
   text: string,
   body: HTMLDivElement,
   copy: HTMLButtonElement,
-  speak: HTMLButtonElement,
+  setSourceLang: (lang: string) => void,
 ): Promise<void> {
   try {
     const word = isWord(text);
@@ -307,10 +303,9 @@ async function fillCard(
       }
       body.appendChild(list);
     }
+    if (resp.lookup?.sourceLang) setSourceLang(resp.lookup.sourceLang);
     copy.disabled = !translation;
-    speak.disabled = !translation;
     copy.onclick = () => writeClipboard(translation);
-    speak.onclick = () => speakText(translation, resp.lookup?.sourceLang);
   } catch (err) {
     if (id !== req || !body.isConnected) return;
     body.textContent = '無法取得譯文';
@@ -323,7 +318,7 @@ function speakText(text: string, sourceLang?: string): void {
   if (!synth || !text) return;
   synth.cancel();
   const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = /[\u4e00-\u9fff]/.test(text) ? 'zh-TW' : (sourceLang || 'en-US');
+  utter.lang = sourceLang && sourceLang !== 'auto' ? sourceLang : 'en-US';
   synth.speak(utter);
 }
 

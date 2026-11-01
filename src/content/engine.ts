@@ -4,7 +4,6 @@ import { el, isProcessed, markProcessed } from '../utils/dom';
 import { sendMessage, isContextGoneError } from '../utils/runtime';
 import { insideXVideo } from './selectors';
 import { isHeadingElement, pageFontPx } from './page-font';
-import { expandChips, TextChip, tidyChipText } from './x-chips';
 import { friendlyTranslateError } from '../core/errors';
 
 const KEPT_CLASS = ['ibt-uni', 'ibt-fit', 'ibt-heading'];
@@ -86,25 +85,19 @@ async function translateBlock(text: string, retry = false): Promise<AlignedPair[
   return resp.pairs || [];
 }
 
-function fillPairs(block: HTMLElement, pairs: AlignedPair[], chips?: TextChip[]): void {
+function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
   setBlockClass(block);
   block.textContent = '';
   // Our block holds ONLY the translation. The original stays as the page's own
   // text (rich: links/mentions/media intact); the 3-state view shows/hides that
   // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
-  if (chips?.length) {
-    const line = el('div', 'ibt-trans ibt-flow');
-    line.lang = document.documentElement.getAttribute('data-ibt-lang') === 'zh-CN' ? 'zh-CN' : 'zh-TW';
-    const joined = tidyChipText(pairs.map((p) => p.t || '').filter(Boolean).join(''));
-    for (const node of expandChips(joined, chips)) line.appendChild(node);
-    block.appendChild(line);
-    return;
-  }
   for (const p of pairs) {
     if (isPureUrl(p.o) || !hasTranslatableText(p.o)) continue;   // just a URL / @mention → no useful translation
-    const line = el('div', 'ibt-trans', p.t);
+    const line = el('div', 'ibt-trans');
     // Same lang as the YouTube Chinese line, so Han fallback picks the same face.
     line.lang = document.documentElement.getAttribute('data-ibt-lang') === 'zh-CN' ? 'zh-CN' : 'zh-TW';
+    // The span carries the tint so each sentence stays on its own line while a wrap still hugs.
+    line.appendChild(el('span', '', p.t));
     block.appendChild(line);
   }
 }
@@ -142,7 +135,7 @@ function adjacentBlock(anchor: Node): HTMLElement | null {
 }
 
 export function renderTranslationAfter(
-  anchor: Node, text: string, opts?: { sig?: string; chips?: TextChip[] },
+  anchor: Node, text: string, opts?: { sig?: string },
 ): HTMLElement | null {
   if (!hasTranslatableText(text)) return null;
   // The "From @account" chip and the rest of the player overlay are not prose.
@@ -182,7 +175,7 @@ export function renderTranslationAfter(
     block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
     try {
       const pairs = await translateBlock(text, retry);
-      fillPairs(block, pairs, opts?.chips);
+      fillPairs(block, pairs);
     } catch (err: any) {
       // Extension was reloaded/updated → quiet "refresh" hint, no retry spam.
       if (isContextGoneError(err)) { showReloadHint(block); return; }
