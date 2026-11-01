@@ -9,9 +9,7 @@ import { segment } from '../core/segmentation';
 // NOTE: this is an unofficial endpoint. It can rate-limit (HTTP 429) or change.
 // If that ever happens, switch the engine to Gemini (free tier key) in options.
 const ENDPOINT = 'https://translate.googleapis.com/translate_a/single';
-const ALT_ENDPOINT = 'https://translate.googleapis.com/translate_a/single';
-const MAX_CHUNK = 420; // short requests are less likely to be answered with 429
-const GAP_MS = 280;
+const MAX_CHUNK = 1000; // keep each request's text short to avoid endpoint limits
 
 export const googleProvider: TranslationProvider = {
   id: 'google',
@@ -35,8 +33,8 @@ export const googleProvider: TranslationProvider = {
     const sl = settings.sourceLang || 'auto';
     const withDict = wantsDict(text);
     const dt = withDict ? 'dt=t&dt=bd' : 'dt=t';
-    const q = `sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(tl)}&${dt}&q=${encodeURIComponent(text)}`;
-    const data = await gtxGet([`${ENDPOINT}?client=gtx&${q}`]);
+    const url = `${ENDPOINT}?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(tl)}&${dt}&q=${encodeURIComponent(text)}`;
+    const data = await gtxGet(url);
     const segs: any[] = Array.isArray(data?.[0]) ? data[0] : [];
     const translation = segs.map((s) => String(s?.[0] ?? '')).join('').trim();
     // data[2] is Google's detected source language (e.g. 'en', 'ja'); fall back to an
@@ -48,57 +46,26 @@ export const googleProvider: TranslationProvider = {
 };
 
 async function fetchChunk(text: string, sl: string, tl: string): Promise<AlignedPair[]> {
-  const q = `sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
-  const data = await gtxGet([
-    `${ENDPOINT}?client=gtx&${q}`,
-    `${ALT_ENDPOINT}?client=at&dj=1&${q}`,
-  ]);
-  const pairs = pairsFrom(data, text);
+  const url = `${ENDPOINT}?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
+  const data = await gtxGet(url);
+  const segs: any[] = Array.isArray(data?.[0]) ? data[0] : [];
+  const pairs = segs
+    .map((s) => ({ t: String(s?.[0] ?? '').trim(), o: String(s?.[1] ?? '').trim() }))
+    .filter((p) => p.o);
+  // fallback: if the endpoint returned nothing useful, keep original as a single pair
   return pairs.length ? pairs : [{ o: text.trim(), t: '' }];
 }
 
-function pairsFrom(data: any, text: string): AlignedPair[] {
-  if (Array.isArray(data?.sentences)) {
-    return data.sentences
-      .map((s: any) => ({ t: String(s?.trans ?? '').trim(), o: String(s?.orig ?? '').trim() }))
-      .filter((p: AlignedPair) => p.o && p.t);
+// One request, on its own. A 429 or 403 waits and tries that same request again.
+// Nothing is queued behind a global gap, and nothing retries forever.
+async function gtxGet(url: string, attempt = 0): Promise<any> {
+  const res = await fetch(url, { method: 'GET' });
+  if ((res.status === 429 || res.status === 403) && attempt < 2) {
+    await sleep(400 * (attempt + 1));
+    return gtxGet(url, attempt + 1);
   }
-  const segs: any[] = Array.isArray(data?.[0]) ? data[0] : [];
-  return segs
-    .map((s) => ({ t: String(s?.[0] ?? '').trim(), o: String(s?.[1] ?? '').trim() }))
-    .filter((p) => p.o);
-}
-
-// One free-engine request at a time. A 429 waits and tries again, then the
-// other client, and then stops. Nothing here retries forever.
-let gate: Promise<void> = Promise.resolve();
-let nextAt = 0;
-function schedule<T>(fn: () => Promise<T>): Promise<T> {
-  const run = gate.then(async () => {
-    const wait = nextAt - Date.now();
-    if (wait > 0) await sleep(wait);
-    nextAt = Date.now() + GAP_MS;
-    return fn();
-  });
-  gate = run.then(() => undefined, () => undefined);
-  return run;
-}
-
-async function gtxGet(urls: string[]): Promise<any> {
-  let last = 0;
-  for (const url of urls) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const res = await schedule(() => fetch(url, { method: 'GET' }));
-      if (res.status === 429 || res.status === 403) {
-        last = res.status;
-        await sleep(700 * 2 ** attempt);
-        continue;
-      }
-      if (!res.ok) throw new Error(`Google ${res.status}`);
-      return res.json();
-    }
-  }
-  throw new Error(`Google ${last || 429}`);
+  if (!res.ok) throw new Error(`Google ${res.status}`);
+  return res.json();
 }
 
 // Only ask for dictionary data on a single token: no internal whitespace and short.
