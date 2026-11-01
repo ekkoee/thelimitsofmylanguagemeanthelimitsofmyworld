@@ -1,148 +1,193 @@
-# 雙語對照翻譯 · Bilingual Reader
+[繁體中文](#zh-hant) · [English](#english)
 
-> A free, open-source Chrome extension (Manifest V3) for **line-by-line bilingual reading** — original on one line, translation on the next — on X/Twitter, Reddit, YouTube, and any web page. No API key required.
+<a id="zh-hant"></a>
 
-把外文內容變成「**原文一行、中文一行**」的對照閱讀,幫你更快讀懂、順便學語言。
-**完全免費、預設免 API 金鑰、裝上就能用**:內建**兩個免費引擎**(Google,偶爾被限流時自動切換 Microsoft),並**自動偵測任何來源語言**(英文、日文、韓文…皆可)翻成中文。想要更高品質可在設定頁改用 Gemini / OpenAI / 本地 Ollama。
+# 雙語對照翻譯
 
----
+把正在讀的外文，排成原文一行、譯文一行。網頁、YouTube、Netflix 與 X 的影片字幕都能對照。預設走免費的 Google 翻譯，不必申請 API 金鑰。
 
-## ✨ 功能特色
+## 主要功能
 
-- **多語言來源**:自動偵測英文、日文、韓文…等任何來源語言並翻成中文。
-- **兩個免費引擎**:預設 Google 免費端點,偶爾被限流時自動切換到 Microsoft 免費端點,翻譯不中斷(皆免金鑰)。
-- **AI／科技術語校正**:免費引擎翻譯完後,自動把常見術語翻成業界標準說法(例如「開放重量機型」→「開放權重」),只對繁體中文目標啟用。
-- **X / Twitter、Reddit**:開啟後自動以雙語顯示,逐行對照。
-- **YouTube**:電影模式雙語字幕——攔截原字幕、合併成自然句子、跟著聲音一句一句出現,中文在上、英文在下(可調整)。
-- **任何網頁**:點工具列圖示 →「翻譯這個網頁」,或按 `Alt+A`,一鍵整頁雙語;再操作一次即關閉。通用版面偵測,連 Facebook 等以 div/span 排版的現代網站也能抓到內文。
-- **雙擊單字浮窗**(選用,預設關閉):任何網頁雙擊單字或反白詞句,就地浮出原文＋🔊 朗讀、翻譯,單字附**字典卡**;開啟時才請求「所有網站」權限,關閉即一併撤除。
-- **顯示 / 隱藏切換**:在 X / Reddit / YouTube 按 `Alt+A`(或按鈕)可隨時隱藏譯文、切回原文。
-- **繁體 / 簡體中文**一鍵切換。
-- **多種譯文樣式**:底線、虛線、波浪線、框線、醒目提示、斜體、粗體,以及「**學習模式**」(中文先模糊,滑過才顯示,逼自己先讀原文)。
-- **可自訂**譯文顏色與字體大小,設定頁有即時預覽。
-- **頁面上下文感知**:翻譯時參考頁面標題,專有名詞與產品名翻譯更準確。
-- **Twitter / X 段落分組翻譯**:推文改以段落為單位翻譯,跨行語意更連貫。
-- **Reddit 長貼文對照穩定度改善**:長串貼文的雙語對照更穩定。
+- **網頁雙語。** X 與 Reddit 開啟後即逐行、逐句對照。LinkedIn 與其他網站按 `Alt+A`，或點工具列的「翻譯這個網頁」。
+- **三種呈現。** 原文加譯文、只顯示譯文、只顯示原文。
+- **影片字幕。** YouTube、Netflix 觀看頁，以及 X 推文裡的影片，可顯示雙語字幕。可選譯文在上或原文在上。燒在畫面裡、沒有文字軌的字幕無法翻譯。
+- **反白翻譯。** 選取一段文字可看譯文。單字附簡短字義，以及那一句的譯文。可複製、朗讀原文、拖曳。按 Esc 或點到別處即關閉。
+- **單字本。** 星星把單字存在這台電腦。設定頁可搜尋、排序、刪除，並匯出 CSV 或 TXT。
+- **圖片翻譯。** 在圖片上按右鍵。預設在本機辨識文字再翻譯；也可改用自己的 Gemini 金鑰看圖。
+- **引擎。** 預設免費 Google。Google 失敗時，同一段自動改問 Microsoft，仍免金鑰。想換模型時，貼上自己的 Gemini 金鑰即可。
+- **翻譯成**繁體中文、简体中文、English、日本語、한국어、Español、Français、Deutsch。已經是目標語言的句子會略過。
+- **介面語言八種**，或跟隨瀏覽器：繁體中文、简体中文、English、日本語、한국어、Deutsch、Français、Español。
+- **外觀。** 譯文樣式、譯文顏色、左側標記、淡底色與字級。設定頁有即時預覽。翻成繁體時，免費引擎會把常見科技用語改成較通行的說法。
 
----
+## 安裝
 
-## 🚀 安裝
+### Chrome 線上應用程式商店
 
-> 目前還在等 Chrome 線上應用程式商店審核,先用下面方式手動安裝。**全程免費、不用註冊、不用填任何 key。**
+即將上架。
 
-### A. 一般使用者(推薦,3 分鐘)
-1. 到本專案的 [Releases](../../releases) 下載最新版 zip。
-2. 解壓縮,會得到一個資料夾(裡面有 `manifest.json`)。**不要刪掉或搬走它。**
-3. 開啟 `chrome://extensions`,打開右上角「**開發人員模式 / Developer mode**」。
-4. 點「**載入未封裝項目 / Load unpacked**」→ 選**剛剛解壓出來的那個資料夾**。
+### 載入未封裝項目
 
-打開 x.com / reddit.com / youtube.com 就會自動雙語。其他網頁按 `Alt+A` 或點工具列圖示 →「翻譯這個網頁」。
+1. 到 [Releases](https://github.com/ekkoee/thelimitsofmylanguagemeanthelimitsofmyworld/releases) 下載 zip，解壓縮。資料夾裡要有 `manifest.json`，請把整個資料夾留在原處。
+2. 開啟 `chrome://extensions`，打開右上角的「開發人員模式」。
+3. 點「載入未封裝項目」，選剛剛解壓的資料夾。
 
-> 💡 Chrome 每次開機可能跳「要停用開發人員模式擴充功能嗎?」,按「**保留 / Keep**」即可(手動安裝的正常現象)。
+從原始碼建置時，載入的是下面產生的 `dist/`。
 
-### B. 從原始碼建置(開發者)
+Chrome 有時會在啟動時詢問是否停用開發人員模式擴充功能。手動安裝時按「保留」即可。
+
+## 使用與快捷鍵
+
+| 你想做的事 | 怎麼做 |
+|---|---|
+| 翻譯目前網頁，或在三種呈現之間切換 | `Alt+A`，或點工具列圖示裡的「翻譯這個網頁」 |
+| 改目標語言或呈現方式 | 點工具列圖示 |
+| 引擎、外觀、單字本、介面語言 | 點「設定」 |
+| 翻譯圖片 | 在圖片上按右鍵 |
+| 關掉反白卡片 | Esc，或點頁面其他地方 |
+
+清單裡唯一向 Chrome 登記的快速鍵是 `Alt+A`（命令名稱 `toggle-page-translation`）。載入未封裝項目時，Chrome 有時不會自動綁上。若按了沒反應，到 `chrome://extensions/shortcuts` 自行指定。Esc 只關掉畫面上的反白卡片，不是 Chrome 快速鍵。
+
+X、Reddit、YouTube 會自動處理頁面或字幕。Netflix 只在觀看頁自動顯示字幕；瀏覽頁和其他網站用 `Alt+A`。
+
+## 隱私
+
+- 沒有分析、沒有廣告。擴充套件不會把瀏覽紀錄另存一份送出去。
+- 你按下翻譯、反白，或打開有字幕的影片時，那段文字會送到 Google 的翻譯接口。Google 失敗時，同一段會改送到 Microsoft（`edge.microsoft.com`）。
+- 只有在你貼上自己的 Gemini 金鑰，並選用 Gemini 時，文字才會送到 Gemini。頁面標題只在這時當作用語上下文，不會被當成要翻譯的正文。看圖模式才會把圖片像素送到 Gemini。
+- 本機圖片辨識在你的電腦上進行。辨出的文字再依上面的規則送去翻譯。第一次辨識英文時，會從 jsDelivr 下載一份語言資料，核對 SHA-256 後存在本機。那是資料檔，不是遠端程式。
+- 單字本與翻譯快取只在這台電腦的 `chrome.storage.local`。
+- 設定與 Gemini 金鑰存在 `chrome.storage.sync`。若你開啟 Chrome 同步，它們會跟著 Google 帳號到其他裝置。金鑰只會傳給 Gemini 的 API。
+
+## 權限
+
+| 權限 | 為什麼需要 |
+|---|---|
+| `storage` | 設定與金鑰存 `chrome.storage.sync`。單字本、翻譯快取與額度狀態存 `chrome.storage.local`。 |
+| `activeTab` | 你點工具列或按下已綁定的 `Alt+A` 時，只對目前分頁插入譯文。 |
+| `scripting` | 插入翻譯樣式與頁面腳本。 |
+| `contextMenus` | 圖片上的右鍵「翻譯這張圖片」。 |
+| `offscreen` | 在背景文件裡跑本機文字辨識，避免擋住網頁。 |
+| `https://x.com/*`、`https://twitter.com/*` | X 的貼文與影片字幕。 |
+| `https://www.reddit.com/*` | Reddit 貼文。 |
+| `https://www.youtube.com/*` | YouTube 字幕。 |
+| `https://www.netflix.com/*`、`https://netflix.com/*` | Netflix 觀看頁字幕。 |
+| `https://translate.googleapis.com/*` | 預設的免費 Google 翻譯。 |
+| `https://edge.microsoft.com/*` | Google 失敗時的免費備援。 |
+| `https://generativelanguage.googleapis.com/*` | 僅在你提供自己的 Gemini 金鑰時使用。 |
+| `https://cdn.jsdelivr.net/*` | 第一次本機辨識時下載英文語言資料。 |
+| 所有 http／https 網站的內容腳本 | 讓 `Alt+A`、反白翻譯與右鍵圖片翻譯在任意網頁可用。不會因此把每個網頁的全文自動送出。 |
+
+## 從原始碼建置
+
+需要 Node.js。
+
 ```bash
 npm install
-npm run build      # 產生 dist/
-```
-然後依上面步驟 3–4 載入 **`dist/`** 資料夾。
-
----
-
-## 🕹️ 使用方式
-
-| 情境 | 操作 |
-|---|---|
-| X / Reddit / YouTube | 自動翻譯。按 `Alt+A` 或工具列按鈕可隱藏／顯示譯文。 |
-| 其他任何網頁 | 點工具列圖示 →「翻譯這個網頁」,或按 `Alt+A`;再按一次關閉。 |
-| 切換繁／簡、樣式、顏色、引擎 | 點工具列圖示開設定,進階選項按「完整設定 / API key →」。 |
-
-> `Alt+A` 是 Chrome 快速鍵。載入未封裝擴充功能時 Chrome 有時不會自動綁定,可到 `chrome://extensions/shortcuts` 手動設定。
-
----
-
-## 🔧 翻譯引擎
-
-| 引擎 | 免費? | 需要 key? | 說明 |
-|---|---|---|---|
-| **Google(預設)** | ✅ 完全免費 | ❌ 不用 | 免費端點,回傳本身就逐句對齊。少數情況可能被限流。 |
-| **Microsoft(免費後備)** | ✅ 完全免費 | ❌ 不用 | Edge 免金鑰端點。Google 被限流(403/429)時自動切換,也可手動選用。 |
-| Gemini | 有免費額度 | 需免費 key | 到 aistudio.google.com 拿免費 key;預設 `gemini-2.5-flash-lite`。 |
-| OpenAI | 付費 | 需 key | 品質高、要付費。 |
-| Ollama | ✅ 免費 | ❌ 不用 | 本地模型,需自行安裝 Ollama 並下載模型。 |
-
----
-
-## 🧩 權限(最小化)
-
-| 權限 | 用途 |
-|---|---|
-| `storage` | 設定與金鑰存於 `chrome.storage.sync`(開啟 Chrome 同步時會隨 Google 帳號同步到其他裝置)；翻譯快存於 `chrome.storage.local`(僅本機)。 |
-| `activeTab` + `scripting` | 按 `Alt+A`／按鈕時,**僅暫時**存取當前分頁以插入譯文。預設安裝不要求「所有網站」權限。 |
-| 選用 `<all_urls>`(預設關閉) | 僅當你開啟「雙擊單字浮窗」時於點擊當下請求,用於在任意網頁顯示浮窗;關閉功能即撤除。 |
-| 主機權限:`x.com` / `twitter.com` / `reddit.com` / `youtube.com` | 在這四個網站自動顯示雙語。 |
-| 主機權限:`translate.googleapis.com`(Google 免費)、`edge.microsoft.com`(Microsoft 免費後備) | 預設免費引擎,傳送選取文字取得譯文。 |
-| 主機權限:`generativelanguage.googleapis.com`、`api.openai.com`、`localhost`／`127.0.0.1` | 選用引擎(Gemini／OpenAI 需自備金鑰;Ollama 為本機,資料不離開裝置)。 |
-
----
-
-## 🔒 隱私
-
-- 不追蹤、不投放廣告、不販售資料。
-- 設定與 API 金鑰存在 `chrome.storage.sync`：開啟 Chrome 同步的話，它們會隨你的 Google 帳號同步到其他裝置。翻譯快取只存本機，不同步。
-- 金鑰只會傳送給你選擇的服務(Gemini 金鑰只傳給 Google 的 Gemini API)，絕不經過其他伺服器。
-- 只有在你觸發翻譯時,才會把該段文字送到**你所選擇**的翻譯服務以取得譯文。
-- 所有外部 API 呼叫都在 background service worker,content script 不持有金鑰,也避開 CORS。
-
----
-
-## 🏗️ 開發
-
-### 指令
-| 指令 | 作用 |
-|---|---|
-| `npm run build` | 產生 `dist/`(unpacked 載入用) |
-| `npm run watch` | 監看原始碼自動重建 |
-| `npm run typecheck` | 只跑 TypeScript 型別檢查 |
-| `npm run smoke` | 實測免費端點是否可用 |
-| `npm run zip` | 把 `dist/` 打包成 zip(上架／發佈用) |
-
-技術:**TypeScript + esbuild**(零外掛相依,直建 `dist/`)。
-
-### 架構
-```
-src/
-├─ background/service-worker.ts   訊息入口:快取 → 佇列 → provider;Alt+A 命令注入整頁翻譯
-├─ content/
-│  ├─ index.ts                    站點偵測 + 啟動對應 adapter;Alt+A 顯示/隱藏切換
-│  ├─ engine.ts                   收集節點、可見才翻、插入雙語區塊
-│  ├─ twitter.ts / reddit.ts      各站 adapter(要翻哪些節點)
-│  ├─ blocks.ts                   通用版面偵測(getComputedStyle 判區塊/行內 + 內容/雜訊過濾)
-│  ├─ universal.ts                整頁翻譯器(通用偵測 + 可見才翻 + SPA 去重)
-│  ├─ universal-inject.ts         由 background 在使用者按 Alt+A 時注入當前分頁
-│  ├─ youtube.ts                  攔截字幕 → 合併句子 → 電影模式雙語字幕
-│  ├─ yt-main.ts                  MAIN world 橋接,攔截 YouTube timedtext 回應
-│  └─ selectors.ts                ⚠️ 所有站點 selector 集中於此,改版只改這裡
-├─ core/
-│  ├─ types.ts                    型別 + 預設設定
-│  ├─ storage.ts                  chrome.storage 設定讀寫(含新鍵自動套用)
-│  ├─ segmentation.ts             英文斷句(逐句對齊用)
-│  ├─ cache.ts                    記憶體 + chrome.storage.local 雙層快取
-│  └─ queue.ts                    併發上限佇列(控成本／速率)
-├─ providers/                     翻譯引擎抽象:base 介面 + google / microsoft / openai / gemini / ollama
-├─ ui/popup, ui/options           快速控制 + 完整設定(含樣式即時預覽)
-├─ styles/bilingual.css           注入頁面的雙語樣式(深色友善、多種樣式)
-└─ utils/                         site 偵測、DOM、MutationObserver / URL 變化
+npm run build       # 產生 dist/
+npm run typecheck   # tsc --noEmit
+npm run watch       # 改檔後重建
+npm run smoke       # 探測免費翻譯接口是否可連
+npm run zip         # 把 dist/ 包成專案根目錄的 immersive-bilingual.zip
 ```
 
-### 設計重點
-- **逐句對齊**:content 端先斷句,整批送進 provider,要求回傳「同長度同順序」的 JSON,確保每句英文對得回每句中文,而非「整段 → 一坨」。
-- **成本控制**:相同句子先查雙層快取;未命中才打 API,且經過併發上限佇列;預設只翻譯捲到可見範圍的內容。
-- **顯示切換全靠 CSS**:顯示模式／上下順序／字體大小／顏色寫在 `<html>` 的 `data-ibt-*` 屬性與 CSS 變數,切換即時、不需重新翻譯。
-- **YouTube 第一原則**:絕不弄丟字幕——只有在自己的字幕確認顯示後,才隱藏原生字幕。
+在 `chrome://extensions` 載入 `dist/`。`manifest.json` 必須在所選資料夾的最外層。
 
----
+## 授權
 
-## 📄 授權
+[MIT](LICENSE)。Copyright (c) 2026 ekko@keemail.me。
 
-[MIT](LICENSE) — 自由使用、修改、散布。
+<a id="english"></a>
+
+# Bilingual Translate
+
+Read foreign text as the original on one line and the translation on the next. It covers web pages and captions on YouTube, Netflix, and videos inside X posts. The default engine is free Google Translate, and it does not ask for an API key.
+
+## Features
+
+- **Pages.** X and Reddit translate line by line as you open them. On LinkedIn and any other site, press `Alt+A` or use “Translate this page” in the toolbar popup.
+- **Three views.** Original and translation, translation only, or original only.
+- **Video captions.** YouTube, a Netflix watch page, and videos in X posts can show bilingual captions. Put the translation above or below the original. Captions burned into the picture, with no text track, cannot be translated.
+- **Selection.** Select text to see a translation. A word includes a short gloss and a translation of its sentence. Copy, speak the original, or drag the card. Esc or a click elsewhere closes it.
+- **Word list.** A star saves the word on this computer. Search, sort, delete, and export CSV or TXT from the options page.
+- **Images.** Right-click an image. The default path recognizes text on your computer, then translates it. You can switch to Gemini vision with your own key.
+- **Engines.** Free Google is the default. If Google fails, that same passage is sent to Microsoft, still with no key. Paste your own Gemini key if you want that engine instead.
+- **Target languages:** Traditional Chinese, Simplified Chinese, English, Japanese, Korean, Spanish, French, and German. Lines that are already in the target language are skipped.
+- **Eight interface languages,** or follow the browser: Traditional Chinese, Simplified Chinese, English, Japanese, Korean, German, French, and Spanish.
+- **Appearance.** Translation style, color, a left-hand mark, a tint behind the translation, and font size, with a live preview. When the target is Traditional Chinese, the free engine also replaces common technology terms with the usual wording.
+
+## Install
+
+### Chrome Web Store
+
+Coming soon.
+
+### Load unpacked
+
+1. Download the zip from [Releases](https://github.com/ekkoee/thelimitsofmylanguagemeanthelimitsofmyworld/releases) and unzip it. Keep the folder that contains `manifest.json`.
+2. Open `chrome://extensions` and turn on Developer mode.
+3. Choose Load unpacked and select that folder.
+
+If you build from source, load the `dist/` folder produced below.
+
+Chrome may ask on startup whether to disable a developer-mode extension. For a manual install, choose Keep.
+
+## Use and shortcuts
+
+| Goal | Action |
+|---|---|
+| Translate the current page, or cycle the three views | `Alt+A`, or “Translate this page” in the toolbar popup |
+| Change the target language or the view | Open the toolbar popup |
+| Engine, appearance, word list, interface language | Open Settings |
+| Translate an image | Right-click the image |
+| Close the selection card | Esc, or click elsewhere on the page |
+
+The only shortcut registered with Chrome is `Alt+A` (`toggle-page-translation`). An unpacked install sometimes does not bind it. If the key does nothing, set it at `chrome://extensions/shortcuts`. Esc only closes the selection card. It is not a Chrome command.
+
+X, Reddit, and YouTube start on their own. Netflix captions start on a watch page. Browse pages and every other site use `Alt+A`.
+
+## Privacy
+
+- No analytics and no ads. The extension does not ship a copy of your browsing history.
+- When you translate, select text, or play a video that has captions, that text is sent to Google’s translate endpoints. If Google fails, the same text is sent to Microsoft (`edge.microsoft.com`).
+- Text is sent to Gemini only after you paste your own key and choose Gemini. In that mode the page title may be included as context for wording. It is not translated as its own passage. Image pixels are sent to Gemini only if you choose Gemini for images.
+- Local image recognition runs on your computer. The recognized text is then translated under the rules above. The first English recognition downloads a language-data file from jsDelivr, checks its SHA-256, and stores it locally. That file is data, not remote code.
+- The word list and the translation cache stay in `chrome.storage.local` on this computer.
+- Settings and the Gemini key live in `chrome.storage.sync`. If Chrome Sync is on, they follow your Google account to other devices. The key is sent only to the Gemini API.
+
+## Permissions
+
+| Permission | Why |
+|---|---|
+| `storage` | Settings and the key in `chrome.storage.sync`. Word list, translation cache, and quota state in `chrome.storage.local`. |
+| `activeTab` | A click on the toolbar, or a bound `Alt+A`, injects the translation into the current tab only. |
+| `scripting` | Inserts the translation stylesheet and page scripts. |
+| `contextMenus` | The “Translate this image” item. |
+| `offscreen` | Runs local text recognition in a background document so the page stays responsive. |
+| `https://x.com/*`, `https://twitter.com/*` | Posts and video captions on X. |
+| `https://www.reddit.com/*` | Reddit posts. |
+| `https://www.youtube.com/*` | YouTube captions. |
+| `https://www.netflix.com/*`, `https://netflix.com/*` | Captions on a Netflix watch page. |
+| `https://translate.googleapis.com/*` | The default free Google engine. |
+| `https://edge.microsoft.com/*` | Free fallback when Google fails. |
+| `https://generativelanguage.googleapis.com/*` | Used only when you supply your own Gemini key. |
+| `https://cdn.jsdelivr.net/*` | Downloads English recognition data on first local OCR. |
+| Content scripts on all http/https sites | Makes `Alt+A`, selection translation, and image translation available on any page. It does not automatically upload the full text of every page. |
+
+## Build from source
+
+Node.js is required.
+
+```bash
+npm install
+npm run build       # writes dist/
+npm run typecheck   # tsc --noEmit
+npm run watch       # rebuilds on change
+npm run smoke       # checks that the free translate endpoint answers
+npm run zip         # packs dist/ into immersive-bilingual.zip at the repo root
+```
+
+Load `dist/` at `chrome://extensions`. `manifest.json` has to sit at the top of the folder you select.
+
+## License
+
+[MIT](LICENSE). Copyright (c) 2026 ekko@keemail.me.
