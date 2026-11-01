@@ -22,8 +22,8 @@ export function startSelectionTranslate(): void {
   if (listening) return;
   listening = true;
   document.addEventListener('mouseup', onMouseUp, true);
-  document.addEventListener('mousedown', onMouseDown, true);
-  document.addEventListener('keydown', onKey, true);
+  window.addEventListener('pointerdown', onPointerDown, true);
+  window.addEventListener('keydown', onKey, true);
   window.addEventListener('scroll', onScroll, true);
 }
 
@@ -115,12 +115,28 @@ function pageIsDark(): boolean {
   return y < 150;
 }
 
+let downX = 0;
+let downY = 0;
+let downText = '';
+
+function onPointerDown(event: PointerEvent): void {
+  downX = event.clientX;
+  downY = event.clientY;
+  downText = (window.getSelection()?.toString() || '').replace(/\s+/g, ' ').trim();
+  if (ours(event.target)) return;
+  hideButton();
+  hideCard();
+}
+
 async function onMouseUp(event: MouseEvent): Promise<void> {
   if (event.button !== 0 || ours(event.target)) return;
   const settings = await loadSettings().catch(() => null);
   if (settings && settings.selectionTranslate === false) { hideAll(); return; }
   const hit = selectedText();
   if (!hit) { hideButton(); return; }
+  const moved = Math.hypot(event.clientX - downX, event.clientY - downY) > 5;
+  // A click that leaves the same selection up (X's left rail, blank page) must not reopen.
+  if (!moved && hit.text === downText) { hideButton(); return; }
   current = hit.text;
   anchor = hit.rect;
   if (settings?.selectionInstant) {
@@ -129,15 +145,6 @@ async function onMouseUp(event: MouseEvent): Promise<void> {
     return;
   }
   showButton(hit.rect);
-}
-
-function onMouseDown(event: MouseEvent): void {
-  if (ours(event.target)) {
-    event.preventDefault();
-    return;
-  }
-  hideButton();
-  hideCard();
 }
 
 function onKey(event: KeyboardEvent): void {
@@ -192,13 +199,16 @@ function showCard(rect: DOMRect, text: string): void {
   const gripEl = document.createElement('span');
   gripEl.className = 'ibt-sel-grip';
   gripEl.appendChild(grip());
+  const copy = iconButton('ibt-sel-copy', '複製', ICONS.copy);
+  copy.lastChild?.remove();
+  copy.disabled = true;
   const save = iconButton('ibt-sel-save', '收入單字本', ICONS.star);
   save.setAttribute('aria-pressed', 'false');
   save.lastChild?.remove();
   const close = iconButton('ibt-sel-x', '關閉', ICONS.close);
   close.lastChild?.remove();
   close.onclick = (event) => { event.preventDefault(); hideCard(); };
-  head.append(gripEl, save, close);
+  head.append(gripEl, copy, save, close);
   enableDrag(host, head);
 
   const original = document.createElement('div');
@@ -213,12 +223,10 @@ function showCard(rect: DOMRect, text: string): void {
   const body = document.createElement('div');
   body.className = 'ibt-sel-body';
   body.textContent = '翻譯中…';
-  const actions = document.createElement('div');
-  actions.className = 'ibt-sel-actions';
-  const copy = iconButton('ibt-sel-copy', '複製', ICONS.copy);
-  copy.disabled = true;
-  actions.append(copy);
-  host.append(head, original, body, actions);
+  const example = document.createElement('div');
+  example.className = 'ibt-sel-ex';
+  example.hidden = true;
+  host.append(head, original, body, example);
 
   const width = Math.min(360, window.innerWidth - 16);
   host.style.width = `${width}px`;
@@ -232,7 +240,7 @@ function showCard(rect: DOMRect, text: string): void {
     host.style.top = `${Math.max(8, rect.top - height - 8)}px`;
   }
   const id = ++req;
-  void fillCard(id, text, body, copy, save, (lang) => { sourceLang = lang; });
+  void fillCard(id, text, body, copy, save, example, (lang) => { sourceLang = lang; });
 }
 
 function enableDrag(host: HTMLDivElement, handle: HTMLElement): void {
@@ -260,18 +268,59 @@ function enableDrag(host: HTMLDivElement, handle: HTMLElement): void {
   handle.addEventListener('pointercancel', stop);
 }
 
-function contextOf(word: string): string {
+const sentenceCache = new Map<string, string>();
+
+/** The sentence on the page that contains the selection. Empty inside inputs. */
+function sourceSentence(word: string): string {
   const sel = window.getSelection();
-  const node = sel?.anchorNode;
-  const el = node instanceof Element ? node : node?.parentElement;
-  const block = el?.closest('p, li, blockquote, h1, h2, h3, [data-testid="tweetText"]') || el;
-  const blob = (block?.textContent || '').replace(/\s+/g, ' ').trim();
-  if (!blob || blob === word) return '';
-  const at = blob.toLowerCase().indexOf(word.toLowerCase());
-  if (at < 0) return blob.slice(0, 240);
-  const start = Math.max(0, at - 80);
-  const end = Math.min(blob.length, at + word.length + 80);
-  return blob.slice(start, end);
+  if (!sel || sel.rangeCount < 1) return '';
+  const range = sel.getRangeAt(0);
+  if (editable(range.startContainer)) return '';
+  const node = range.startContainer;
+  const el = node instanceof Element ? node : node.parentElement;
+  const block = (el?.closest('p, li, blockquote, h1, h2, h3, [data-testid="tweetText"]') || el) as HTMLElement | null | undefined;
+  const blob = (block?.innerText || block?.textContent || '').replace(/\s+/g, ' ').trim();
+  const needle = word.trim();
+  if (!blob || !needle || blob.toLowerCase() === needle.toLowerCase()) return '';
+  const at = blob.toLowerCase().indexOf(needle.toLowerCase());
+  if (at < 0) return '';
+  const parts = blob.match(/[^.!?。！？]*[.!?。！？]+(?:["”’)\]]+)?|[^.!?。！？]+$/g) || [blob];
+  let cursor = 0;
+  for (const part of parts) {
+    const start = blob.indexOf(part, cursor);
+    const from = start < 0 ? cursor : start;
+    const end = from + part.length;
+    cursor = end;
+    if (at >= from && at < end) return part.trim();
+  }
+  return blob.trim();
+}
+
+function highlightWord(sentence: string, word: string): DocumentFragment {
+  const frag = document.createDocumentFragment();
+  const at = sentence.toLowerCase().indexOf(word.trim().toLowerCase());
+  if (at < 0) {
+    frag.append(document.createTextNode(sentence));
+    return frag;
+  }
+  const mark = document.createElement('span');
+  mark.className = 'ibt-sel-hit';
+  mark.textContent = sentence.slice(at, at + word.trim().length);
+  frag.append(document.createTextNode(sentence.slice(0, at)), mark, document.createTextNode(sentence.slice(at + word.trim().length)));
+  return frag;
+}
+
+async function translateSentence(sentence: string): Promise<string> {
+  const key = sentence.trim();
+  const cached = sentenceCache.get(key);
+  if (cached) return cached;
+  const resp = await chrome.runtime.sendMessage({ type: 'translate', text: key, mode: 'prose' }) as {
+    ok?: boolean;
+    pairs?: { t?: string }[];
+  };
+  const zh = (resp?.ok ? resp.pairs || [] : []).map((p) => p.t || '').join('').trim();
+  if (zh) sentenceCache.set(key, zh);
+  return zh;
 }
 
 function paintSaved(btn: HTMLButtonElement, on: boolean): void {
@@ -286,6 +335,7 @@ async function fillCard(
   body: HTMLDivElement,
   copy: HTMLButtonElement,
   save: HTMLButtonElement,
+  example: HTMLDivElement,
   setSourceLang: (lang: string) => void,
 ): Promise<void> {
   try {
@@ -319,7 +369,37 @@ async function fillCard(
     }
     if (resp.lookup?.sourceLang) setSourceLang(resp.lookup.sourceLang);
     copy.disabled = !translation;
-    copy.onclick = () => writeClipboard(translation);
+    copy.onclick = (event) => { event.preventDefault(); writeClipboard(translation); };
+    const sentence = sourceSentence(text);
+    let sentenceZh = '';
+    if (sentence) {
+      example.hidden = false;
+      example.replaceChildren();
+      const label = document.createElement('div');
+      label.className = 'ibt-sel-ex-label';
+      label.textContent = '例句';
+      const en = document.createElement('p');
+      en.className = 'ibt-sel-ex-en';
+      en.append(highlightWord(sentence, text));
+      const sk = document.createElement('div');
+      sk.className = 'ibt-sel-sk';
+      example.append(label, en, sk);
+      void translateSentence(sentence).then(async (zh) => {
+        if (id !== req || !example.isConnected) return;
+        sk.remove();
+        sentenceZh = zh;
+        if (zh) {
+          const line = document.createElement('p');
+          line.className = 'ibt-sel-ex-zh';
+          line.textContent = zh;
+          example.append(line);
+        }
+        if (save.getAttribute('aria-pressed') === 'true') {
+          const stored = await findVocab(text).catch(() => null);
+          if (stored) await saveVocab({ ...stored, context: sentence, contextZh: zh });
+        }
+      }).catch(() => { if (example.isConnected) sk.remove(); });
+    }
     const entries = (dict || []).slice(0, 4);
     const pos = entries.map((entry) => entry.pos).filter(Boolean).join('、');
     const meanings = entries.map((entry) => entry.terms.slice(0, 4).join('、')).filter(Boolean).join('；');
@@ -340,7 +420,8 @@ async function fillCard(
         pos,
         meanings,
         dict: entries.map((entry) => ({ pos: entry.pos, terms: entry.terms.slice(0, 6) })),
-        context: contextOf(text),
+        context: sentence,
+        contextZh: sentenceZh,
         title: document.title || '',
         url: location.href,
       });

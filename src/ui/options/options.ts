@@ -225,7 +225,7 @@ async function bindVocab(): Promise<void> {
     const q = search.value.trim().toLowerCase();
     const shown = items.filter((item) => {
       if (!q) return true;
-      return [item.word, item.translation, item.meanings, item.context, item.title].join('\n').toLowerCase().includes(q);
+      return [item.word, item.translation, item.meanings, item.context, item.contextZh, item.title].join('\n').toLowerCase().includes(q);
     });
     shown.sort((a, b) => sort.value === 'az'
       ? a.word.localeCompare(b.word, 'en')
@@ -243,6 +243,18 @@ async function bindVocab(): Promise<void> {
       const when = new Date(item.savedAt).toISOString().slice(0, 10);
       meta.textContent = [item.pos, item.meanings, when].filter(Boolean).join(' · ');
       main.append(word, gloss, meta);
+      if (item.context) {
+        const en = document.createElement('p');
+        en.className = 'vocab-ex';
+        en.textContent = item.context;
+        main.append(en);
+        if (item.contextZh) {
+          const zh = document.createElement('p');
+          zh.className = 'vocab-ex';
+          zh.textContent = item.contextZh;
+          main.append(zh);
+        }
+      }
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'vocab-del';

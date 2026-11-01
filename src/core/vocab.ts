@@ -13,6 +13,7 @@ export interface VocabEntry {
   meanings: string;
   dict: VocabDict[];
   context: string;
+  contextZh: string;
   title: string;
   url: string;
   savedAt: number;
@@ -66,13 +67,14 @@ function csvCell(value: string): string {
 }
 
 export function vocabToCsv(list: VocabEntry[]): string {
-  const header = ['單字', '譯文', '詞性', '字義', '上下文', '頁面', '網址', '日期'];
+  const header = ['單字', '譯文', '詞性', '字義', '例句', '例句譯文', '頁面', '網址', '日期'];
   const rows = list.map((item) => [
     item.word,
     item.translation,
     item.pos,
     item.meanings,
     item.context,
+    item.contextZh || '',
     item.title,
     item.url,
     new Date(item.savedAt).toISOString().slice(0, 10),
@@ -89,6 +91,7 @@ export function vocabToTxt(list: VocabEntry[]): string {
       item.translation,
       sense,
       item.context,
+      item.contextZh || '',
       [item.title, item.url].filter(Boolean).join(' '),
       when,
     ].filter(Boolean).join('\n');

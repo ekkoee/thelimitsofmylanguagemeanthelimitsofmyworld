@@ -272,7 +272,7 @@
   width: max-content;
   min-width: 240px;
   max-width: 360px;
-  max-height: min(340px, 72vh);
+  max-height: min(440px, 72vh);
   overflow: auto;
   box-sizing: border-box;
   padding: 12px 14px 14px;
@@ -305,7 +305,8 @@
 .ibt-sel-card.ibt-sel-drag .ibt-sel-head { cursor: grabbing; }
 .ibt-sel-grip { display: inline-flex; flex: none; width: 16px; height: 16px; color: #8b93a7; }
 .ibt-sel-grip svg { display: block; }
-.ibt-sel-save { margin-left: auto; }
+.ibt-sel-head .ibt-sel-copy { margin-left: auto; width: 28px; height: 28px; padding: 0; justify-content: center; }
+.ibt-sel-save { margin-left: 0; }
 .ibt-sel-save,
 .ibt-sel-x {
   display: inline-flex;
@@ -367,6 +368,18 @@
   line-height: 1.5;
 }
 .ibt-sel-orig > span { flex: 1; min-width: 0; }
+.ibt-sel-ex { margin-top: 10px; }
+.ibt-sel-ex-label { margin-bottom: 6px; color: #9aa3b8; font-size: 12px; }
+.ibt-sel-ex-en, .ibt-sel-ex-zh { margin: 0; font-size: 13px; line-height: 1.55; }
+.ibt-sel-ex-zh { margin-top: 4px; color: #6b7287; }
+.ibt-sel-dark .ibt-sel-ex-zh { color: #9aa3b8; }
+.ibt-sel-hit { color: #6c7aff; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.ibt-sel-sk {
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 6px;
+  background: rgba(154, 163, 184, 0.28);
+}
 .ibt-sel-dark .ibt-sel-orig { color: #9aa3b8; }
 .ibt-sel-body {
   margin-top: 8px;
