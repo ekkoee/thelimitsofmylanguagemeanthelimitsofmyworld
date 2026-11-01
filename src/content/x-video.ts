@@ -11,6 +11,7 @@
 // Those cannot be translated.
 import { Settings, TranslateBatchResponse, TranslateResponse } from '../core/types';
 import { sendMessage } from '../utils/runtime';
+import { langTag } from '../core/lang-tag';
 import { el } from '../utils/dom';
 import { Rect, XCue, captionTextMatches, hidesNativeCaption, isXCaptionText, mediaIdFromUrl, overlayUsedWidth, xCaptionBox, xCaptionFontPx, xVideoView } from './x-vtt';
 
@@ -291,7 +292,7 @@ function showCue(b: Bound, en: string, zh: string): void {
   const mode = xVideoView(settingsRef().viewMode);
   b.zh.style.order = order ? '0' : '1';
   b.en.style.order = order ? '1' : '0';
-  b.zh.lang = settingsRef().targetLangCode || 'zh-TW';
+  b.zh.lang = langTag(settingsRef().targetLangCode);
   if (b.en.textContent !== en) b.en.textContent = en;
   if (b.zh.textContent !== zh) b.zh.textContent = zh;
   b.zh.style.display = zh ? '' : 'none';

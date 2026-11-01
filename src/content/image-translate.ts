@@ -3,6 +3,7 @@
 // sits under the image when the layout can grow, and on top of it when it cannot.
 
 import { setUiLang, t, watchUiLang } from '../core/i18n';
+import { langTag } from '../core/lang-tag';
 import { applyRootState } from '../utils/dom';
 import { loadSettings } from '../core/storage';
 import { pageFontPx } from './page-font';
@@ -184,8 +185,11 @@ function mountBelow(img: ImgHit, text: string): HTMLElement {
   const host = img.parentElement || document.body;
   block.style.fontSize = `${pageFontPx(host)}px`;
   block.style.lineHeight = '1.5';
+  const lang = langTag(document.documentElement.getAttribute('data-ibt-target'));
+  block.lang = lang;
   const line = document.createElement('div');
   line.className = 'ibt-img-caption';
+  line.lang = lang;
   line.textContent = text;
   block.appendChild(line);
   const anchor = belowAnchor(img as HTMLElement);

@@ -1,6 +1,7 @@
 import { AlignedPair, Settings, TranslateBatchResponse, TranslateResponse } from '../core/types';
 import { SELECTORS, queryFirst } from './selectors';
 import { onUrlChange } from '../utils/observer';
+import { langTag } from '../core/lang-tag';
 import { el } from '../utils/dom';
 import { extensionAlive, isContextGoneError, sendMessage } from '../utils/runtime';
 import { xCaptionFontPx } from './x-vtt';
@@ -464,7 +465,7 @@ class TrackCaptions {
     if (this.enEl) this.enEl.style.fontSize = `${size}px`;
     if (this.zhEl) {
       this.zhEl.style.fontSize = `${size}px`;
-      this.zhEl.lang = this.settings.targetLangCode || 'zh-TW';
+      this.zhEl.lang = langTag(this.settings.targetLangCode);
     }
     this.syncNativeFont();
   }
@@ -585,7 +586,8 @@ class DomCaptions {
     if (!this.lineEl) {
       this.lineEl = el('div', 'ibt-yt-line');
       this.spanEl = el('span');
-      this.spanEl.lang = this.settings.targetLangCode || 'zh-TW';
+      this.lineEl.lang = langTag(this.settings.targetLangCode);
+      this.spanEl.lang = this.lineEl.lang;
       this.lineEl.appendChild(this.spanEl);
     }
     const host = this.host(win);
@@ -596,6 +598,9 @@ class DomCaptions {
   }
   private applyFont(): void {
     if (!this.spanEl) return;
+    const tag = langTag(this.settings.targetLangCode);
+    this.spanEl.lang = tag;
+    if (this.lineEl) this.lineEl.lang = tag;
     const base = Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
     this.spanEl.style.fontSize = `${Math.round(base * this.settings.fontScale)}px`;
   }

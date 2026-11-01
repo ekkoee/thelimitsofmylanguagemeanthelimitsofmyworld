@@ -9,6 +9,7 @@
 // [IBT nf-cap] logs.
 import { Settings, TranslateResponse } from '../core/types';
 import { sendMessage } from '../utils/runtime';
+import { langTag } from '../core/lang-tag';
 import { el } from '../utils/dom';
 import { onUrlChange } from '../utils/observer';
 import { overlayUsedWidth, xCaptionFontPx } from './x-vtt';
@@ -196,7 +197,7 @@ function show(en: string, zh: string): void {
   const order = settingsRef().subtitleOrder !== 'enTop';
   zhEl.style.order = order ? '0' : '1';
   enEl.style.order = order ? '1' : '0';
-  zhEl.lang = settingsRef().targetLangCode || 'zh-TW';
+  zhEl.lang = langTag(settingsRef().targetLangCode);
   zhEl.textContent = zh;
   enEl.textContent = en;
   zhEl.style.display = zh ? '' : 'none';

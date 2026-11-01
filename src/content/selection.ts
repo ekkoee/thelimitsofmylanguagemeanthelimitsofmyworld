@@ -3,6 +3,7 @@
 // Inputs and editable fields are left alone.
 
 import { t } from '../core/i18n';
+import { langTag } from '../core/lang-tag';
 import { loadSettings } from '../core/storage';
 import { DictEntry } from '../core/types';
 import { findVocab, removeVocab, saveVocab } from '../core/vocab';
@@ -225,6 +226,8 @@ function showCard(rect: DOMRect, text: string): void {
   original.append(source, speak);
   const body = document.createElement('div');
   body.className = 'ibt-sel-body';
+  const tag = langTag(document.documentElement.getAttribute('data-ibt-target'));
+  body.lang = tag;
   body.dataset.i18n = 'translating';
   body.textContent = t('translating');
   const example = document.createElement('div');
@@ -399,6 +402,7 @@ async function fillCard(
         if (zh) {
           const line = document.createElement('p');
           line.className = 'ibt-sel-ex-zh';
+          line.lang = langTag(document.documentElement.getAttribute('data-ibt-target'));
           line.textContent = zh;
           example.append(line);
         }

@@ -119,6 +119,32 @@
 :root[data-ibt-show-original="true"] .ibt-orig { display: block; }
 
 .ibt-trans { color: inherit; }
+/* Korean is written with spaces. Break there, and only split a token that
+   cannot fit. Chinese stays on the browser default (a break between characters). */
+.ibt-block:lang(ko),
+.ibt-trans:lang(ko),
+.ibt-yt-zh:lang(ko),
+.ibt-yt-line:lang(ko),
+.ibt-yt-line:lang(ko) > span,
+.ibt-sel-body:lang(ko),
+.ibt-sel-ex-zh:lang(ko),
+.ibt-img-caption:lang(ko),
+[data-preview="trans"]:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+/* Japanese keeps the default word-break and follows kinsoku. */
+.ibt-block:lang(ja),
+.ibt-trans:lang(ja),
+.ibt-yt-zh:lang(ja),
+.ibt-yt-line:lang(ja),
+.ibt-yt-line:lang(ja) > span,
+.ibt-sel-body:lang(ja),
+.ibt-sel-ex-zh:lang(ja),
+.ibt-img-caption:lang(ja),
+[data-preview="trans"]:lang(ja) {
+  line-break: strict;
+}
 :root[data-ibt-custom-color="on"] .ibt-trans { color: var(--ibt-trans-color); }
 .ibt-trans.ibt-flow { white-space: pre-line; }
 .ibt-trans .ibt-chip {

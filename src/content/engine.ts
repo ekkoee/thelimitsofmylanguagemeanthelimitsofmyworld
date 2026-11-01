@@ -1,4 +1,5 @@
 import { t } from '../core/i18n';
+import { langTag } from '../core/lang-tag';
 import { AlignedPair, Settings, TranslateResponse } from '../core/types';
 import { hasTranslatableText, isAlreadyTargetLang, sameMeaning } from '../core/segmentation';
 import { el, isProcessed, markProcessed } from '../utils/dom';
@@ -96,6 +97,8 @@ function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
   setBlockClass(block);
   block.textContent = '';
   const lang = pageTarget();
+  const tag = langTag(lang);
+  block.lang = tag;
   // Our block holds ONLY the translation. The original stays as the page's own
   // text (rich: links/mentions/media intact); the 3-state view shows/hides that
   // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
@@ -103,10 +106,11 @@ function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
     if (isPureUrl(p.o) || !hasTranslatableText(p.o)) continue;   // just a URL / @mention → no useful translation
     if (isAlreadyTargetLang(p.o, lang) || sameMeaning(p.o, p.t, lang)) continue;
     const line = el('div', 'ibt-trans');
-    // Same lang as the YouTube Chinese line, so Han fallback picks the same face.
-    line.lang = document.documentElement.getAttribute('data-ibt-lang') === 'zh-CN' ? 'zh-CN' : 'zh-TW';
+    line.lang = tag;
     // The span carries the tint so each sentence stays on its own line while a wrap still hugs.
-    line.appendChild(el('span', '', p.t));
+    const chip = el('span', '', p.t);
+    chip.lang = tag;
+    line.appendChild(chip);
     block.appendChild(line);
   }
 }
@@ -156,6 +160,7 @@ export function renderTranslationAfter(
   const existing = adjacentBlock(anchor);
   if (existing) return existing;
   const block = el('div', 'ibt-block ibt-loading');
+  block.lang = langTag(pageTarget());
   block.dataset.ibtOut = '1';
   if (opts?.sig) block.dataset.ibtSig = opts.sig;
   const loading = el('span', 'ibt-loading-dot', t('translating'));

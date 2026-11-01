@@ -1,5 +1,6 @@
 import { checkGeminiKey, normalizeGeminiKey } from '../../core/gemini-key';
 import { applyI18n, getUiLang, setUiLang, t, watchUiLang } from '../../core/i18n';
+import { langTag } from '../../core/lang-tag';
 import { loadSettings, saveSettings } from '../../core/storage';
 import { DEFAULT_MODELS, DEFAULT_SETTINGS, ProviderId, Settings, normalizeTint } from '../../core/types';
 import { VocabEntry, clearVocab, listVocab, removeVocab, vocabToCsv, vocabToTxt } from '../../core/vocab';
@@ -117,7 +118,11 @@ function paintPreview(): void {
   const englishUi = lang === 'en';
   const orig = englishUi ? ZH_TW_SENTENCE : EN_SENTENCE;
   const trans = PREVIEW_TRANS[lang] || EN_SENTENCE;
+  const tag = langTag(lang);
   document.querySelectorAll<HTMLElement>('[data-preview="orig"]').forEach((node) => { node.textContent = orig; });
+  document.querySelectorAll<HTMLElement>('.tint-live .ibt-block, .tint-live .ibt-trans, [data-preview="trans"]').forEach((node) => {
+    node.lang = tag;
+  });
   document.querySelectorAll<HTMLElement>('[data-preview="trans"]').forEach((node) => { node.textContent = trans; });
   document.documentElement.setAttribute('data-ibt-lang', lang === 'zh-CN' ? 'zh-CN' : 'zh-TW');
 }
