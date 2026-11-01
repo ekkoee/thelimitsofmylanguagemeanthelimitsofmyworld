@@ -33,7 +33,19 @@
           <label for="model">模型</label>
           <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
         </div>
-        <small class="hint">預設 <b>gemini-3.5-flash-lite</b>（速度快、免費額度較高），一般不用改，只有 Google 汰換模型時才需要換。實際額度以 <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener">Google 官方額度說明</a>為準。</small>
+        <small class="hint">預設 <b>gemini-3.5-flash-lite</b>。要較好的譯文可填 <b>gemini-3.5-flash</b>（免費方案一天約 20 次，用完自動改走 flash-lite）。這 20 次留給網頁翻譯，圖片翻譯預設不使用。</small>
+
+        <div class="field">
+          <label for="imageModel">圖片翻譯模型</label>
+          <select id="imageModel">
+            <option value="auto">自動</option>
+            <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+          </select>
+        </div>
+        <small class="hint">自動使用 <b>gemini-2.5-flash-lite</b>。它沒有每分鐘額度時才改走 gemini-2.5-flash。不會動到 3.5-flash 的每日額度。</small>
+        <p id="quotaStatus" class="hint"></p>
       </div>
     </fieldset>
 

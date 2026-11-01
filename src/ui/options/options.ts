@@ -2,6 +2,7 @@ import { loadSettings, saveSettings } from '../../core/storage';
 import { clearPersistentCache } from '../../core/cache';
 import { disableDblClick, registerDblClick, requestAllUrls } from '../../core/dblclick';
 import { DEFAULT_BAR_COLOR, DEFAULT_MODELS, DEFAULT_TRANS_COLOR, ProviderId, Settings } from '../../core/types';
+import { normalizeQuotaState, quotaStatusText } from '../../core/quota-router';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -30,6 +31,15 @@ async function init() {
     await save({ provider: provider.value as ProviderId, model: model.value.trim() });
   });
   model.addEventListener('change', () => save({ model: model.value.trim() }));
+
+  const imageModel = $<HTMLSelectElement>('imageModel');
+  const known = ['auto', 'gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+  imageModel.value = known.includes(s.imageModel) ? s.imageModel : 'auto';
+  imageModel.addEventListener('change', () => save({ imageModel: imageModel.value }));
+  void renderQuota();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.ibt_quota) void renderQuota();
+  });
 
   bindKey('key_gemini', s.apiKeys.gemini, 'gemini');
 
@@ -113,6 +123,13 @@ function bindKey(id: string, value: string, provider: ProviderId) {
     const cur = await loadSettings();
     await save({ apiKeys: { ...cur.apiKeys, [provider]: input.value.trim() } });
   });
+}
+
+async function renderQuota(): Promise<void> {
+  const raw = await chrome.storage.local.get('ibt_quota');
+  const el = $('quotaStatus');
+  if (!el) return;
+  el.textContent = quotaStatusText(normalizeQuotaState(raw?.ibt_quota), Date.now());
 }
 
 async function save(patch: Partial<Settings>) {

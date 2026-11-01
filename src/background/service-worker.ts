@@ -11,6 +11,7 @@ import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblcli
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 import { friendlyTranslateError } from '../core/errors';
 import { echoesEnglish, translateImageSequential } from '../providers/gemini-image';
+import { bindQuota, emptyQuotaState, normalizeQuotaState, setQuotaReady, QuotaState } from '../core/quota-router';
 
 const queue = new TaskQueue(4);
 
@@ -89,7 +90,20 @@ const llmBatcher = new LlmBatcher({
     });
     return pairs;
   })))),
-}, { windowMs: 60, maxSentences: 10, maxChars: 1600 });
+}, { windowMs: 200, maxSentences: 30, maxChars: 5000 });
+
+const QUOTA_KEY = 'ibt_quota';
+let quotaState: QuotaState = emptyQuotaState();
+function persistQuota(): void {
+  void chrome.storage.local.set({ [QUOTA_KEY]: quotaState });
+}
+const quotaReady = chrome.storage.local.get(QUOTA_KEY).then((raw) => {
+  quotaState = normalizeQuotaState(raw?.[QUOTA_KEY]);
+  bindQuota({ state: quotaState, persist: persistQuota, waitForImage: () => imageGate });
+}).catch(() => {
+  bindQuota({ state: quotaState, persist: persistQuota, waitForImage: () => imageGate });
+});
+setQuotaReady(quotaReady);
 
 chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); ensureImageMenu(); });
 chrome.runtime.onStartup.addListener(() => { reconcileDblClick(); ensureImageMenu(); });
@@ -262,8 +276,15 @@ async function translateImageMessage(mime: string, data: string) {
     return hit;
   }
   const job = withImageLock(async () => {
+    await quotaReady;
     const got = await translateImageSequential({
-      key, model: settings.model, mime, data,
+      key,
+      model: settings.model,
+      imageModel: settings.imageModel,
+      mime,
+      data,
+      quotaState,
+      onQuota: persistQuota,
     });
     const regions = [];
     for (const region of got.regions) {

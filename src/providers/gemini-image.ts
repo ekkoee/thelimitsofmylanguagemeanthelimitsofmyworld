@@ -1,15 +1,16 @@
-// One Gemini vision call per image. No parallel model race.
-// Primary model, one delayed retry on 429/5xx/timeout, then the next model.
+// One Gemini vision call per image. The router skips a model whose free-tier
+// quota is already spent instead of waiting on it.
 
-import { friendlyTranslateError, retrySeconds } from '../core/errors';
+import { friendlyTranslateError } from '../core/errors';
+import { executeGeminiRoute } from '../core/gemini-route';
+import { QuotaState, emptyQuotaState, imageModelChain as routedImageChain } from '../core/quota-router';
 
 export { friendlyTranslateError };
 
-export const IMAGE_PRIMARY_DEFAULT = 'gemini-3.5-flash';
+export const IMAGE_PRIMARY_DEFAULT = 'gemini-2.5-flash-lite';
 export const IMAGE_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 export const IMAGE_MAX_EDGE = 1600;
 export const IMAGE_JPEG_QUALITY = 0.85;
-const IMAGE_TIMEOUT_MS = 20000;
 
 export interface ImageRegion {
   textEn: string;
@@ -39,16 +40,8 @@ const IMAGE_PROMPT = [
   'Return ONLY JSON: {"regions":[{"box_2d":[0,0,40,1000],"text_en":"...","text_zh":"..."}]}',
 ].join('\n');
 
-export function imageModelChain(model?: string): string[] {
-  const primary = model && /^gemini/i.test(model) ? model : IMAGE_PRIMARY_DEFAULT;
-  const chain = [primary, ...IMAGE_FALLBACKS];
-  const seen = new Set<string>();
-  return chain.filter((m) => {
-    const k = m.toLowerCase();
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+export function imageModelChain(_model?: string, imageModel?: string): string[] {
+  return routedImageChain({ imageModel: imageModel || 'auto' });
 }
 
 export function buildImageBody(opts: { mime: string; data: string; model: string }): Record<string, unknown> {
@@ -253,99 +246,50 @@ export class GeminiStatusError extends Error {
   }
 }
 
-function isRetryable(err: unknown): boolean {
-  if (err instanceof GeminiStatusError) return err.status === 429 || err.status >= 500;
-  const msg = String((err as { message?: unknown })?.message ?? err);
-  return /\b(429|500|502|503|504)\b/.test(msg) || /timeout|timed out|abort/i.test(msg);
-}
-
-async function callOnce(
-  fetchImpl: typeof fetch,
-  key: string,
-  model: string,
-  mime: string,
-  data: string,
-  log: (line: string) => void,
-): Promise<{ text: string; regions: ImageRegion[] }> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
-  const body = buildImageBody({ mime, data, model });
-  log(`[IBT] image gemini ${new Date().toISOString()} model=${model} bytes=${data.length} mime=${mime}`);
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), IMAGE_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetchImpl(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-  } catch (err) {
-    clearTimeout(timer);
-    throw new GeminiStatusError(`Gemini timeout ${String((err as Error)?.message || err)}`, 504, null);
-  }
-  clearTimeout(timer);
-  if (!res.ok) {
-    const raw = await res.text().catch(() => '');
-    const retryHeader = Number(res.headers.get('retry-after'));
-    const retrySec = Number.isFinite(retryHeader) && retryHeader > 0
-      ? Math.ceil(retryHeader)
-      : retrySeconds(raw);
-    log(`[IBT] image gemini fail model=${model} status=${res.status} retry=${retrySec ?? '-'} ${raw.slice(0, 300)}`);
-    throw new GeminiStatusError(`Gemini ${res.status} retry=${retrySec ?? 0}`, res.status, retrySec);
-  }
-  const json = await res.json();
-  const content: string = json?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') ?? '';
-  return parseImageTranslation(content);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 /**
- * Primary model, then one wait-and-retry, then each fallback in order.
- * Never two models at once. `log` receives one line per HTTP call.
+ * Best available model, one call at a time. A daily-exhausted model is skipped.
+ * A silent socket is aborted after 15s. The chain stops within 20s.
  */
 export async function translateImageSequential(opts: {
   key: string;
   model?: string;
+  imageModel?: string;
   mime: string;
   data: string;
   fetchImpl?: typeof fetch;
   log?: (line: string) => void;
+  quotaState?: QuotaState;
+  onQuota?: (state: QuotaState) => void;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  budgetMs?: number;
+  headerTimeoutMs?: number;
 }): Promise<ImageTranslation> {
   const key = opts.key.trim();
   if (!key) throw new Error('NO_API_KEY:image');
-  const fetchImpl = opts.fetchImpl ?? fetch;
-  const log = opts.log ?? ((line) => console.log(line));
-  const chain = imageModelChain(opts.model);
-  let last: unknown = new Error('圖片翻譯失敗');
-  const t0 = Date.now();
-  for (let i = 0; i < chain.length; i++) {
-    const model = chain[i];
-    try {
-      const got = await callOnce(fetchImpl, key, model, opts.mime, opts.data, log);
-      log(`[IBT] image gemini done model=${model} ${Date.now() - t0}ms`);
-      return { ...got, model };
-    } catch (err) {
-      last = err;
-      if (!isRetryable(err)) break;
-      if (i === 0) {
-        const sec = err instanceof GeminiStatusError ? err.retrySec : retrySeconds(String((err as Error)?.message || ''));
-        const wait = Math.min(8, Math.max(1, sec || 2));
-        log(`[IBT] image gemini retry model=${model} in ${wait}s`);
-        await sleep(wait * 1000);
-        try {
-          const got = await callOnce(fetchImpl, key, model, opts.mime, opts.data, log);
-          log(`[IBT] image gemini done model=${model} ${Date.now() - t0}ms`);
-          return { ...got, model };
-        } catch (again) {
-          last = again;
-          if (!isRetryable(again)) break;
-        }
-      }
-    }
+  const log = opts.log ?? ((line: string) => console.log(line));
+  const state = opts.quotaState ?? emptyQuotaState();
+  const chain = imageModelChain(opts.model, opts.imageModel);
+  try {
+    const routed = await executeGeminiRoute({
+      key,
+      chain,
+      purpose: 'image',
+      state,
+      onState: (next) => opts.onQuota?.(next),
+      now: opts.now,
+      sleep: opts.sleep,
+      fetchImpl: opts.fetchImpl,
+      budgetMs: opts.budgetMs,
+      headerTimeoutMs: opts.headerTimeoutMs,
+      log: (line) => log(line.includes('model=') ? line.replace('model=', `bytes=${opts.data.length} mime=${opts.mime} model=`) : line),
+      buildBody: (model) => buildImageBody({ mime: opts.mime, data: opts.data, model }),
+    });
+    const json = routed.json as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    const content = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') ?? '';
+    const got = parseImageTranslation(content);
+    return { ...got, model: routed.model };
+  } catch (err) {
+    throw new Error(friendlyTranslateError(err, 'image'));
   }
-  throw new Error(friendlyTranslateError(last, 'image'));
 }

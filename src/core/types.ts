@@ -23,6 +23,8 @@ export interface Settings {
   translateOnVisible: boolean;  // only translate elements scrolled into view
   provider: ProviderId;
   model: string;                // ignored by the free Google engine
+  /** Image translation model. 'auto' picks the best model that still has free-tier quota. */
+  imageModel: string;
   apiKeys: Record<ProviderId, string>;
   ollamaEndpoint: string;
   cacheEnabled: boolean;
@@ -54,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   translateOnVisible: true,
   provider: 'google',          // ← FREE by default, no API key required
   model: '',
+  imageModel: 'auto',
   apiKeys: { google: '', microsoft: '', openai: '', gemini: '', ollama: '' },
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,

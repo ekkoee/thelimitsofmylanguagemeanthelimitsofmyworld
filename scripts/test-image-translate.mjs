@@ -53,9 +53,9 @@ if (process.argv.includes('--self-test')) {
   check('pad is about 12% of the box height on every side', Math.abs(padded[0] * 1000 - (100 - padPx)) < 0.6 && Math.abs(padded[1] * 500 - (50 - padPx)) < 0.6);
   check('english echo is detected', api.echoesEnglish('TRUE.', 'TRUE.'));
   check('chinese is not an echo', !api.echoesEnglish('TRUE.', '真實。'));
-  const raw = 'Gemini 429 retry=12: {"error":{"code":429,"message":"You exceeded your current quota","retryDelay":"12s"}}';
+  const raw = 'Gemini 429 retry=12: {"error":{"code":429,"message":"You exceeded your current quota","status":"RESOURCE_EXHAUSTED","details":[{"violations":[{"quotaId":"GenerateRequestsPerMinutePerProjectPerModel-FreeTier","quotaValue":"5","quotaDimensions":{"model":"gemini-2.5-flash"}}]},{"retryDelay":"12s"}]}}';
   const quota = api.friendlyTranslateError(raw, 'image');
-  check('429 is a short Chinese line', quota.includes('額度不足') && quota.includes('12') && !quota.includes('{') && !quota.includes('exceeded'));
+  check('429 is a specific minute line', quota.includes('請求太頻繁') && quota.includes('12') && quota.includes('自動重試') && !quota.includes('請稍後再試') && !quota.includes('{'));
   check('no key is a Chinese prompt', api.friendlyTranslateError('NO_API_KEY:image', 'image').includes('Gemini 金鑰'));
   await sequence();
   if (process.exitCode) process.exit(process.exitCode);
@@ -71,10 +71,17 @@ async function sequence() {
     calls.push({ model, at: Date.now(), bytes: body.contents[0].parts[1].inline_data.data.length });
     const primary = calls.filter((c) => c.model === 'gemini-3.5-flash').length;
     if (model === 'gemini-3.5-flash' && primary === 1) {
-      return new Response(JSON.stringify({ error: { code: 429, message: 'You exceeded your current quota', retryDelay: '1s' } }), {
-        status: 429,
-        headers: { 'retry-after': '1', 'content-type': 'application/json' },
-      });
+      return new Response(JSON.stringify({
+        error: {
+          code: 429,
+          message: 'You exceeded your current quota',
+          status: 'RESOURCE_EXHAUSTED',
+          details: [
+            { violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '20', quotaDimensions: { model: 'gemini-3.6-flash' } }] },
+            { retryDelay: '86306s' },
+          ],
+        },
+      }), { status: 429, headers: { 'content-type': 'application/json' } });
     }
     return new Response(JSON.stringify({
       candidates: [{ content: { parts: [{ text: JSON.stringify({ regions: [{ text_en: 'HELLO', text_zh: '你好' }] }) }] } }],
@@ -84,15 +91,14 @@ async function sequence() {
   const got = await api.translateImageSequential({
     key: 'test-key',
     model: 'gemini-3.5-flash',
+    imageModel: 'gemini-3.5-flash',
     mime: 'image/jpeg',
     data: 'abc',
     fetchImpl,
     log: (line) => console.log(line),
   });
-  const overlap = calls.length >= 2 && calls[1].at < calls[0].at + 500;
-  check('429 retries the same model once, not a second model in parallel', calls.length === 2 && calls[0].model === calls[1].model && !overlap);
-  check('retry waited about a second', Date.now() - t0 >= 900);
-  check('chinese came back from the retry', got.text === '你好' && got.model === 'gemini-3.5-flash');
+  check('daily 429 skips that model instead of waiting', calls.length === 2 && calls[0].model === 'gemini-3.5-flash' && calls[1].model !== calls[0].model && Date.now() - t0 < 800);
+  check('chinese came back from the next model', got.text === '你好' && got.model !== 'gemini-3.5-flash');
 }
 
 const key = process.env.GEMINI_API_KEY || '';
@@ -105,16 +111,35 @@ if (!file) {
   console.error('Usage: GEMINI_API_KEY=... node scripts/test-image-translate.mjs image.png');
   process.exit(1);
 }
+execSync(
+  'npx esbuild src/core/quota-router.ts --bundle --platform=node --format=esm --outfile=/tmp/ibt-quota.mjs --log-level=error',
+  { cwd: root, stdio: 'inherit' },
+);
+const quotaApi = await import(pathToFileURL('/tmp/ibt-quota.mjs').href);
+const quotaPath = resolve(root, '.ibt-quota.json');
+const quotaState = existsSync(quotaPath)
+  ? quotaApi.normalizeQuotaState(JSON.parse(readFileSync(quotaPath, 'utf8')))
+  : quotaApi.emptyQuotaState();
+console.log(quotaApi.quotaStatusText(quotaState));
 const bytes = readFileSync(file);
 const mime = file.endsWith('.png') ? 'image/png' : file.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
 const t0 = Date.now();
-const got = await api.translateImageSequential({
-  key,
-  model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
-  mime,
-  data: bytes.toString('base64'),
-  log: (line) => console.log(line),
-});
+let got;
+try {
+  got = await api.translateImageSequential({
+    key,
+    model: process.env.GEMINI_MODEL || '',
+    imageModel: process.env.GEMINI_IMAGE_MODEL || 'auto',
+    mime,
+    data: bytes.toString('base64'),
+    quotaState,
+    onQuota: () => writeFileSync(quotaPath, JSON.stringify(quotaState)),
+    log: (line) => console.log(line),
+  });
+} finally {
+  writeFileSync(quotaPath, JSON.stringify(quotaState));
+  console.log(`quota file: ${quotaPath}`);
+}
 console.log(`model: ${got.model}`);
 console.log(`latency_ms: ${Date.now() - t0}`);
 for (const region of got.regions) {

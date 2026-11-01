@@ -29,6 +29,7 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown }):
     ...rest,
     provider: isGemini ? 'gemini' : 'google',
     model: isGemini && !/^gemini/i.test(s.model || '') ? 'gemini-3.5-flash-lite' : s.model || '',
+    imageModel: !s.imageModel || s.imageModel === 'auto' ? 'auto' : s.imageModel,
     sourceLang: 'auto',
     translateOnVisible: true,
     cacheEnabled: true,
