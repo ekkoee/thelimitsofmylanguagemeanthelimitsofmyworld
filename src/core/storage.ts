@@ -64,6 +64,9 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; db
     transColor: colorChosen(s)
       ? (/^#[0-9a-fA-F]{6}$/.test(s.transColor || '') ? s.transColor : '')
       : migrateDefaultColor(s.transColor),
+    slopButton: s.slopButton === true,
+    slopApi: s.slopApi === true,
+    slopApiKey: typeof s.slopApiKey === 'string' ? s.slopApiKey : '',
   };
 }
 

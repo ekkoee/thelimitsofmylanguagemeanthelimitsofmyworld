@@ -40,6 +40,11 @@ export interface Settings {
   /** Set once the user toggles 選取後立即顯示. */
   selectionInstantSet?: boolean;
   apiKeys: Record<ProviderId, string>;
+  /** Per-tweet AI-content button on X. Off until the user turns it on. */
+  slopButton: boolean;
+  /** Optional Sapling check. Off by default; uses the user's own key. */
+  slopApi: boolean;
+  slopApiKey: string;
   ollamaEndpoint: string;
   cacheEnabled: boolean;
 }
@@ -85,6 +90,9 @@ export const DEFAULT_SETTINGS: Settings = {
   selectionTranslate: true,
   selectionInstant: true,
   apiKeys: { google: '', microsoft: '', openai: '', gemini: '', ollama: '' },
+  slopButton: false,
+  slopApi: false,
+  slopApiKey: '',
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,
 };
@@ -164,5 +172,6 @@ export interface OcrTranslateMessage {
   mime: string;
   data: string;
 }
+export interface SlopCheckMessage { type: 'slopCheck'; text: string }
 
-export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage | FetchImageMessage | CaptureTabMessage | TranslateImageMessage | OcrTranslateMessage;
+export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage | FetchImageMessage | CaptureTabMessage | TranslateImageMessage | OcrTranslateMessage | SlopCheckMessage;

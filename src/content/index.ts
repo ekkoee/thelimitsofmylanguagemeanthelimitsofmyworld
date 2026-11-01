@@ -4,6 +4,7 @@ import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
 import { observeMutations, onUrlChange } from '../utils/observer';
 import { Engine } from './engine';
 import { scanTwitter } from './twitter';
+import { clearSlopButtons, ensureSlopButtons, harvestProfile } from '../slop/x-extract';
 import { redditAdapter } from './reddit';
 import { startYouTube, updateYouTubeSettings } from './youtube';
 import { startXVideo, updateXVideoSettings } from './x-video';
@@ -65,7 +66,11 @@ import { Settings } from '../core/types';
   if (site === 'x') {
     let live = settings;
     startXVideo(() => live);
-    const scan = () => scanTwitter(live);
+    const scan = () => {
+      scanTwitter(live);
+      if (live.slopButton) { harvestProfile(); ensureSlopButtons(); }
+      else clearSlopButtons();
+    };
     scan();
     observeMutations(document.body, scan, 300);
     onUrlChange(() => setTimeout(scan, 400));

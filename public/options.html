@@ -21,6 +21,7 @@
         <a href="#general">翻譯</a>
         <a href="#look">外觀</a>
         <a href="#advanced">反白翻譯</a>
+        <a href="#slop">AI 內容偵測</a>
         <a href="#vocab">單字本</a>
       </nav>
       <a class="gh" href="https://github.com/ekkoee/thelimitsofmylanguagemeanthelimitsofmyworld" target="_blank" rel="noopener" aria-label="GitHub">
@@ -176,6 +177,25 @@
         <div class="toggle">
           <span id="instantLabel">選取後立即顯示</span>
           <label class="switch"><input type="checkbox" id="selectionInstant" aria-labelledby="instantLabel" /><span class="slider"></span></label>
+        </div>
+      </section>
+
+      <section class="card" id="slop" data-panel="slop">
+        <h2>AI 內容偵測</h2>
+        <div class="toggle">
+          <span id="slopButtonLabel">推文偵測按鈕</span>
+          <label class="switch"><input type="checkbox" id="slopButton" aria-labelledby="slopButtonLabel" /><span class="slider"></span></label>
+        </div>
+        <div class="toggle">
+          <span id="slopApiLabel">使用 Sapling 線上偵測</span>
+          <label class="switch"><input type="checkbox" id="slopApi" aria-labelledby="slopApiLabel" /><span class="slider"></span></label>
+        </div>
+        <div id="slopKeyBlock" hidden>
+          <label class="field">
+            <span>Sapling API Key</span>
+            <input type="password" id="slopApiKey" placeholder="貼上金鑰" autocomplete="off" spellcheck="false" />
+          </label>
+          <p class="hint">這是你自己的免費金鑰，只存在這台電腦。</p>
         </div>
       </section>
 

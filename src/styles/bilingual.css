@@ -674,3 +674,45 @@ video.ibt-x-hide-cue::cue {
 
 /* allow hover-to-reveal on the video subtitle when learning mode is on */
 :root[data-ibt-style="blur"] .ibt-yt-overlay { pointer-events: auto; }
+
+/* AI content check. Does not style translations. */
+.ibt-slop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgb(113, 118, 123);
+  cursor: pointer;
+}
+.ibt-slop-btn:hover { color: #6c7aff; background: rgba(108, 122, 255, 0.12); }
+.ibt-slop-card {
+  position: fixed;
+  z-index: 2147483646;
+  width: 280px;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  color: #1a1d29;
+  box-shadow: 0 1px 2px rgba(16, 20, 40, 0.06), 0 12px 32px rgba(16, 20, 40, 0.12);
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+.ibt-slop-card.ibt-slop-dark {
+  background: #151824;
+  color: #e8eaf2;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.46);
+}
+.ibt-slop-level { font-size: 14px; font-weight: 600; }
+.ibt-slop-score { margin-top: 2px; color: #6b7287; font-size: 12px; }
+.ibt-slop-dark .ibt-slop-score { color: #9aa3b8; }
+.ibt-slop-reasons { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.ibt-slop-reasons li { color: #6b7287; }
+.ibt-slop-dark .ibt-slop-reasons li { color: #9aa3b8; }

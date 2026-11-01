@@ -84,6 +84,7 @@ async function init() {
   bindGeminiKey(s.apiKeys.gemini);
   bindAppearance(s);
   void bindVocab();
+  bindSlop(s);
 }
 
 const STYLE_VALUES = ['plain', 'underline', 'dashed', 'dotted', 'wavy', 'solidBox', 'dashedBox', 'highlight', 'dim', 'italic', 'bold', 'blur'];
@@ -203,6 +204,35 @@ function bindAppearance(s: Settings) {
     location.reload();
   });
   syncPreview();
+}
+
+function bindSlop(s: Settings): void {
+  const button = $<HTMLInputElement>('slopButton');
+  const api = $<HTMLInputElement>('slopApi');
+  const key = $<HTMLInputElement>('slopApiKey');
+  const block = $('slopKeyBlock');
+  button.checked = s.slopButton === true;
+  api.checked = s.slopApi === true;
+  key.value = s.slopApiKey || '';
+  const sync = () => { block.hidden = !api.checked; };
+  sync();
+  button.addEventListener('change', () => { void save({ slopButton: button.checked }); });
+  api.addEventListener('change', async () => {
+    if (api.checked) {
+      let granted = false;
+      try {
+        granted = await chrome.permissions.request({ origins: ['https://api.sapling.ai/*'] });
+      } catch { granted = false; }
+      if (!granted) {
+        api.checked = false;
+        sync();
+        return;
+      }
+    }
+    await save({ slopApi: api.checked });
+    sync();
+  });
+  key.addEventListener('change', () => { void save({ slopApiKey: key.value.trim() }); });
 }
 
 function download(name: string, text: string, mime: string): void {

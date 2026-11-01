@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "雙語對照翻譯 — 網頁與 YouTube 字幕",
-  "version": "1.4.48",
+  "version": "1.4.49",
   "description": "免費網頁雙語對照：原文一行、譯文一行。支援任何網頁（Alt+A）、X、Reddit、YouTube 與 Netflix 字幕。預設免費引擎、免 API 金鑰，繁簡中文皆可。",
   "icons": {
     "16": "icons/icon16.png",
@@ -39,6 +39,9 @@
     "https://edge.microsoft.com/*",
     "https://generativelanguage.googleapis.com/*",
     "https://cdn.jsdelivr.net/*"
+  ],
+  "optional_host_permissions": [
+    "https://api.sapling.ai/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
