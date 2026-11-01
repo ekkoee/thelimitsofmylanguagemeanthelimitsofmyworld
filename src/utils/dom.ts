@@ -51,41 +51,91 @@ function parseBg(bg: string): { r: number; g: number; b: number; a: number } | n
   return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]), a: m[4] == null ? 1 : Number(m[4]) };
 }
 
-/** Walk up until a painted background shows whether the page is dark. */
+function channel(v: number): number {
+  const c = v / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/** 0–1 relative luminance. Light text on a dark page is above 0.6. */
+function luminance(r: number, g: number, b: number): number {
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function parseColor(value: string): { r: number; g: number; b: number; a: number } | null {
+  return parseBg(value);
+}
+
+/** Page text color first. A painted ancestor background only when the ink is mid-grey. */
 export function darkSurface(el: Element): boolean {
-  let node: Element | null = el.parentElement;
+  const probe = el.closest('.ibt-block') || el.parentElement || el;
+  const ink = parseColor(getComputedStyle(probe).color || '');
+  if (ink && ink.a > 0.5) {
+    const y = luminance(ink.r, ink.g, ink.b);
+    if (y > 0.6) return true;
+    if (y < 0.45) return false;
+  }
+  let node: Element | null = el;
   while (node) {
     const parsed = parseBg(getComputedStyle(node).backgroundColor || '');
-    if (parsed && parsed.a > 0.45) {
-      const y = 0.2126 * parsed.r + 0.7152 * parsed.g + 0.0722 * parsed.b;
-      return y < 150;
-    }
+    if (parsed && parsed.a > 0.45) return luminance(parsed.r, parsed.g, parsed.b) < 0.35;
     node = node.parentElement;
   }
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
+const seen = new WeakSet<Element>();
+let surfaceIo: IntersectionObserver | null = null;
+
+function tagOne(el: HTMLElement): void {
+  const next = darkSurface(el) ? 'dark' : 'light';
+  if (el.getAttribute('data-ibt-on') !== next) el.setAttribute('data-ibt-on', next);
+  if (!seen.has(el)) {
+    seen.add(el);
+    surfaceIo?.observe(el);
+  }
+}
+
 export function refreshTransSurfaces(): void {
-  document.querySelectorAll('.ibt-trans').forEach((el) => {
-    if (el instanceof HTMLElement) el.setAttribute('data-ibt-on', darkSurface(el) ? 'dark' : 'light');
-  });
+  document.querySelectorAll('.ibt-trans').forEach((el) => { if (el instanceof HTMLElement) tagOne(el); });
 }
 
 /** Tag each translation once, including ones inserted later. */
 function tagTrans(el: Element): void {
-  if (el instanceof HTMLElement && el.classList.contains('ibt-trans')) {
-    el.setAttribute('data-ibt-on', darkSurface(el) ? 'dark' : 'light');
-  }
-  if (el instanceof HTMLElement) el.querySelectorAll('.ibt-trans').forEach(tagTrans);
+  if (el instanceof HTMLElement && el.classList.contains('ibt-trans')) tagOne(el);
+  if (el instanceof HTMLElement) el.querySelectorAll('.ibt-trans').forEach((node) => { if (node instanceof HTMLElement) tagOne(node); });
 }
+
+const THEME_ATTRS = ['class', 'style', 'data-theme', 'data-color-mode'];
 
 export function watchTransSurfaces(): void {
   const w = window as unknown as { __ibtSurface?: boolean };
   if (w.__ibtSurface) return;
   w.__ibtSurface = true;
+  surfaceIo = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting && entry.target instanceof HTMLElement) tagOne(entry.target);
+    }
+  }, { rootMargin: '400px 0px' });
+  let themeFrame = 0;
+  const onTheme = () => {
+    if (themeFrame) return;
+    themeFrame = requestAnimationFrame(() => { themeFrame = 0; refreshTransSurfaces(); });
+  };
+  const themeObserver = new MutationObserver(onTheme);
+  const watchTheme = (node: Element) => themeObserver.observe(node, { attributes: true, attributeFilter: THEME_ATTRS });
+  watchTheme(document.documentElement);
+  const watchBody = () => { if (document.body) watchTheme(document.body); };
+  if (document.body) watchBody();
+  else document.addEventListener('DOMContentLoaded', watchBody, { once: true });
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', onTheme);
   refreshTransSurfaces();
   new MutationObserver((records) => {
-    for (const record of records) record.addedNodes.forEach((node) => { if (node instanceof Element) tagTrans(node); });
+    for (const record of records) {
+      record.addedNodes.forEach((node) => {
+        if (node === document.body) watchBody();
+        if (node instanceof Element) tagTrans(node);
+      });
+    }
   }).observe(document.documentElement, { childList: true, subtree: true });
 }
 

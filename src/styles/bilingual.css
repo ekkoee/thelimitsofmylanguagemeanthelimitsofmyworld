@@ -70,27 +70,24 @@
 :root[data-ibt-bar="dashed"] .ibt-block { border-left-style: dashed; }
 :root[data-ibt-bar="none"] .ibt-block { border-left: 0; padding-left: 0; }
 
-/* 淡底色 sits on the inner line. Vertical padding stays inside the line box so wraps do not overlap. */
-:root[data-ibt-highlight="on"] .ibt-trans {
-  line-height: 1.9;
-}
+/* 淡底色. Line-height is unchanged. Light text (a dark page) mixes to a grey veil.
+   Yellow is applied only after the surface is confirmed light. */
 :root[data-ibt-highlight="on"] .ibt-trans > span,
 :root[data-ibt-highlight="on"] span.ibt-trans,
 .ibt-highlight .ibt-trans > span,
 .ibt-highlight span.ibt-trans {
   display: inline;
-  padding: 0.16em 0.57em;
-  line-height: 1;
-  border-radius: 0.25em;
+  padding: 0.03em 0.3em;
+  border-radius: 0.3em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  background: rgba(255, 236, 170, 0.35);
+  background: color-mix(in srgb, currentColor 14%, transparent);
 }
-:root[data-ibt-highlight="on"] .ibt-trans[data-ibt-on="dark"] > span,
-:root[data-ibt-highlight="on"] span.ibt-trans[data-ibt-on="dark"],
-.ibt-highlight .ibt-trans[data-ibt-on="dark"] > span,
-.ibt-highlight span.ibt-trans[data-ibt-on="dark"] {
-  background: rgba(255, 255, 255, 0.16);
+:root[data-ibt-highlight="on"] .ibt-trans[data-ibt-on="light"] > span,
+:root[data-ibt-highlight="on"] span.ibt-trans[data-ibt-on="light"],
+.ibt-highlight .ibt-trans[data-ibt-on="light"] > span,
+.ibt-highlight span.ibt-trans[data-ibt-on="light"] {
+  background: rgba(255, 236, 170, 0.35);
 }
 
 .ibt-pair { display: flex; flex-direction: column; gap: 1px; margin: 1px 0; }
