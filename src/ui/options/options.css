@@ -202,8 +202,29 @@ input[type="color"] {
 .swatch[data-tint="orange"] { background: #f08a3c; }
 .swatch[data-tint="red"] { background: #e85d5d; }
 .swatch[data-tint="violet"] { background: #9b6bff; }
-.swatch.custom { display: grid; place-items: center; background: conic-gradient(#5b8def, #3cbf7a, #e6b15c, #e85d5d, #9b6bff, #5b8def); }
-.swatch.custom input { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
+.swatch.custom {
+  position: relative;
+  background: conic-gradient(#e85d5d, #f08a3c, #e6b15c, #3cbf7a, #5b8def, #9b6bff, #e85d5d);
+}
+.swatch.custom::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: var(--card);
+  pointer-events: none;
+}
+.swatch.custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
 .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--accent); }
 .swatch-wrap { position: relative; width: 40px; height: 32px; }
 .swatch-wrap input[type="color"] { width: 100%; height: 100%; }
@@ -212,7 +233,7 @@ input[type="color"] {
   inset: 0;
   border-radius: 10px;
   background:
-    linear-gradient(135deg, transparent 46%, #c45555 46% 54%, transparent 54%),
+    linear-gradient(135deg, transparent 49%, var(--muted) 49% 51%, transparent 51%),
     var(--field);
   box-shadow: inset 0 0 0 1px var(--inset);
   pointer-events: none;
