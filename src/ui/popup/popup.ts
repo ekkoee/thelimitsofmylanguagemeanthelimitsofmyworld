@@ -1,8 +1,10 @@
 import { normalizeGeminiKey } from '../../core/gemini-key';
 import { UI_FIXED, applyI18n, setUiLang, t, watchUiLang } from '../../core/i18n';
 import { loadSettings, saveSettings } from '../../core/storage';
+import { DEFAULT_MODELS, ProviderId, Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+let afterI18n = (): void => {};
 
 async function init() {
   const s = await loadSettings();
@@ -63,12 +65,8 @@ async function init() {
     void saveSettings({ targetLangCode: lang.value, targetLang: names[lang.value] || lang.value });
   });
 
-  const open = $('openOptions');
-  const needsKey = s.provider === 'gemini' && !normalizeGeminiKey(s.apiKeys.gemini);
-  const openKey = needsKey ? 'pasteGemini' : 'settings';
-  open.dataset.i18n = openKey;
-  open.textContent = t(openKey);
-  open.addEventListener('click', () => chrome.runtime.openOptionsPage());
+  bindEngine(s);
+  $('openOptions').addEventListener('click', () => chrome.runtime.openOptionsPage());
 
   // "翻譯這個網頁" — works even if the Alt+A shortcut isn't bound.
   const AUTO_SITE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
@@ -102,6 +100,63 @@ async function init() {
   });
 }
 
+function bindEngine(initial: Settings): void {
+  const provider = $<HTMLSelectElement>('provider');
+  const note = $('engineNote');
+  const hint = $<HTMLButtonElement>('keyHint');
+  let writing = false;
+
+  const paint = (s: Settings): void => {
+    provider.value = s.provider === 'gemini' ? 'gemini' : 'google';
+    const gemini = provider.value === 'gemini';
+    const hasKey = !!normalizeGeminiKey(s.apiKeys.gemini);
+    if (!gemini) {
+      note.hidden = true;
+      hint.hidden = true;
+      note.classList.remove('is-missing');
+      note.textContent = '';
+      return;
+    }
+    note.hidden = false;
+    if (!hasKey) {
+      note.classList.add('is-missing');
+      note.textContent = t('geminiKeyMissing');
+      hint.hidden = false;
+      hint.textContent = t('openGeminiKey');
+      return;
+    }
+    note.classList.remove('is-missing');
+    hint.hidden = true;
+    note.textContent = (s.model || '').trim() || DEFAULT_MODELS.gemini;
+  };
+
+  paint(initial);
+  afterI18n = () => { void loadSettings().then(paint); };
+
+  provider.addEventListener('change', async () => {
+    const value: ProviderId = provider.value === 'gemini' ? 'gemini' : 'google';
+    writing = true;
+    try {
+      const cur = await loadSettings();
+      const patch: Partial<Settings> = { provider: value };
+      if (value === 'gemini' && !/^gemini/i.test(cur.model || '')) patch.model = DEFAULT_MODELS.gemini;
+      paint(await saveSettings(patch));
+    } finally {
+      writing = false;
+    }
+  });
+
+  hint.addEventListener('click', async () => {
+    try { await chrome.storage.session.set({ ibtOpen: 'gemini-key' }); } catch { /* still open settings */ }
+    await chrome.runtime.openOptionsPage();
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (writing || area !== 'sync' || !changes.ibt_settings) return;
+    void loadSettings().then(paint);
+  });
+}
+
 function bindUiLang(pref: string): void {
   const btn = $<HTMLButtonElement>('uiLangBtn');
   const pop = $('uiLangPop');
@@ -120,6 +175,7 @@ function bindUiLang(pref: string): void {
         void saveSettings({ uiLang: item.id });
         setUiLang(item.id);
         applyI18n();
+        afterI18n();
         paint();
         pop.hidden = true;
         btn.setAttribute('aria-expanded', 'false');

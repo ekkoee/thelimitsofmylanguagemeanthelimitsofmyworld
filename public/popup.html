@@ -25,30 +25,46 @@
   <button id="translatePage" type="button" data-i18n="translatePage">翻譯這個網頁</button>
   <p id="ctaHint" class="hint" data-i18n="altHint">Alt+A 切換原文、譯文、對照</p>
 
-  <label class="field">
-    <span data-i18n="translateTo">翻譯成</span>
-    <select id="lang">
-      <option value="zh-TW">繁體中文</option>
-      <option value="zh-CN">简体中文</option>
-      <option value="en">English</option>
-      <option value="ja">日本語</option>
-      <option value="ko">한국어</option>
-      <option value="es">Español</option>
-      <option value="fr">Français</option>
-      <option value="de">Deutsch</option>
-    </select>
-  </label>
+  <section class="panel">
+    <label class="field">
+      <span data-i18n="translateTo">翻譯成</span>
+      <select id="lang">
+        <option value="zh-TW">繁體中文</option>
+        <option value="zh-CN">简体中文</option>
+        <option value="en">English</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
+        <option value="es">Español</option>
+        <option value="fr">Français</option>
+        <option value="de">Deutsch</option>
+      </select>
+    </label>
 
-  <label class="field">
-    <span data-i18n="viewLabel">譯文呈現</span>
-    <select id="viewMode">
-      <option value="both" data-i18n="viewBoth">原文 + 譯文對照</option>
-      <option value="zh" data-i18n="viewTrans">只顯示譯文</option>
-      <option value="orig" data-i18n="viewOrig">只顯示原文</option>
-    </select>
-  </label>
+    <label class="field">
+      <span data-i18n="viewLabel">譯文呈現</span>
+      <select id="viewMode">
+        <option value="both" data-i18n="viewBoth">原文 + 譯文對照</option>
+        <option value="zh" data-i18n="viewTrans">只顯示譯文</option>
+        <option value="orig" data-i18n="viewOrig">只顯示原文</option>
+      </select>
+    </label>
+  </section>
 
-  <button id="openOptions" type="button" data-i18n="settings">設定</button>
+  <section class="panel">
+    <div class="field">
+      <label for="provider" data-i18n="popupEngine">翻譯引擎</label>
+      <select id="provider">
+        <option value="google" data-i18n="engineGoogle">Google 翻譯</option>
+        <option value="gemini">Gemini</option>
+      </select>
+      <p id="engineNote" class="engine-note" hidden></p>
+      <button id="keyHint" class="key-hint" type="button" hidden></button>
+    </div>
+  </section>
+
+  <footer>
+    <button id="openOptions" type="button" data-i18n="settings">設定</button>
+  </footer>
   <script src="popup.js"></script>
 </body>
 </html>

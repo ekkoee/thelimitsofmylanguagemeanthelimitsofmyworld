@@ -83,6 +83,31 @@ async function init() {
   });
   model.addEventListener('change', () => save({ model: model.value.trim() }));
 
+  const revealGeminiKey = async (): Promise<void> => {
+    let flagged = location.hash === '#gemini-key';
+    try {
+      const got = await chrome.storage.session.get('ibtOpen');
+      if (got.ibtOpen === 'gemini-key') flagged = true;
+      if (flagged) await chrome.storage.session.remove('ibtOpen');
+    } catch { /* session storage is optional */ }
+    if (!flagged) return;
+    if (provider.value !== 'gemini') {
+      provider.value = 'gemini';
+      if (!/^gemini/i.test(model.value.trim())) model.value = DEFAULT_MODELS.gemini;
+      await save({ provider: 'gemini', model: model.value.trim() });
+    }
+    syncEngineUi();
+    const input = $<HTMLInputElement>('key_gemini');
+    geminiBlock.scrollIntoView({ block: 'center' });
+    input.focus({ preventScroll: true });
+  };
+  void revealGeminiKey();
+  try {
+    chrome.storage.session.onChanged.addListener((changes) => {
+      if (changes.ibtOpen?.newValue === 'gemini-key') void revealGeminiKey();
+    });
+  } catch { /* ignore */ }
+
   const imageModel = $<HTMLSelectElement>('imageModel');
   imageModel.value = s.imageModel === 'gemini' ? 'gemini' : 'local';
   imageModel.addEventListener('change', () => save({ imageModel: imageModel.value }));
