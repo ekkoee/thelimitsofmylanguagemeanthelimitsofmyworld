@@ -7,6 +7,7 @@ import { segment } from '../core/segmentation';
 import { findTermMatches, lookupGlossary, TermMatch } from '../core/glossary';
 import { toTraditional } from '../core/st2t';
 import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
+import { isGeminiFallbackError } from '../providers/gemini-guard';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 import { friendlyTranslateError } from '../core/errors';
 import { setUiLang, t } from '../core/i18n';
@@ -755,7 +756,7 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
       // LLM quota (429) or an unusable response: don't leave the video without subtitles.
       // Finish this batch on the free engine, cached under the free engine's own keys so its
       // lower-quality text is never served later as if it were the LLM's.
-      if (!isQuotaError(err) && !isUnusableResponse(err)) throw err;
+      if (!isQuotaError(err) && !isUnusableResponse(err) && !isGeminiFallbackError(err)) throw err;
       penalizeLLM();
       console.warn('[IBT] subtitle batch fell back to the free engine:', String((err as Error)?.message ?? err).slice(0, 80));
       const freeSettings = { ...settings, provider: 'google' as const, model: '' };

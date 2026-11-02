@@ -2,6 +2,10 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.5.2] — 2026-11-02
+### 修正 Fixed
+- **Gemini 太慢就改走免費翻譯。** 單次超過 8 秒會中止，同一批改用 Google；Google 失敗時仍改問 Microsoft。連續三次逾時後，60 秒內直接用免費翻譯，之後再試 Gemini。
+
 ## [1.5.1] — 2026-11-02
 ### 新增 Added
 - **工具列可選翻譯引擎。** Google 翻譯或 Gemini，與設定頁共用同一組設定。選了 Gemini 卻還沒有金鑰時，會提示前往設定填寫。已有金鑰時，安靜顯示模型名稱。

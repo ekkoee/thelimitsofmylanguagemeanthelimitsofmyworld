@@ -12,6 +12,7 @@
 import { segment } from './segmentation';
 import { AlignedPair, Settings } from './types';
 import { TranslateInput, TranslationProvider } from '../providers/base';
+import { isGeminiFallbackError } from '../providers/gemini-guard';
 
 export interface BatchRequest {
   text: string;
@@ -135,7 +136,7 @@ export class LlmBatcher {
         it.resolve(it.sentences.map((o, k) => ({ o, t: slice[k] ?? '' })));
       });
     } catch (err) {
-      if (isQuotaError(err) || isUnusableResponse(err)) {
+      if (isQuotaError(err) || isUnusableResponse(err) || isGeminiFallbackError(err)) {
         // Free-tier minute quota exhausted mid-thread, or the LLM returned an
         // unusable response: don't leave the rest of the page on manual retry
         // buttons — let the host finish the batch another way (free engine).
