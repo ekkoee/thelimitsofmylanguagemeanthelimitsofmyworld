@@ -24,6 +24,9 @@ export interface Settings {
   ollamaEndpoint: string;
   cacheEnabled: boolean;
   dblClickTranslate: boolean;   // double-click word popup (needs <all_urls>, off by default)
+  hedgeEnabled: boolean;        // after hedgeDelayMs, also ask the fast Gemini model
+  hedgeModel: string;
+  hedgeDelayMs: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -47,6 +50,9 @@ export const DEFAULT_SETTINGS: Settings = {
   ollamaEndpoint: 'http://localhost:11434',
   cacheEnabled: true,
   dblClickTranslate: false,    // ← least privilege: opt-in, requests <all_urls> only when enabled
+  hedgeEnabled: true,
+  hedgeModel: 'gemini-2.5-flash-lite',
+  hedgeDelayMs: 1500,
 };
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
@@ -65,6 +71,10 @@ export interface TranslateMessage {
   text: string;
   title?: string;                // page title, sent by the content script as LLM context (prose path)
   mode?: 'prose' | 'subtitle';   // translation register; service worker treats a missing mode as 'subtitle'
+  /** visible = on screen now (tiny first batch). near = just below the fold, after that. */
+  priority?: 'visible' | 'near';
+  /** Block id so a later primary answer can replace a hedge line in place. */
+  reqId?: string;
 }
 
 export interface TranslateResponse {

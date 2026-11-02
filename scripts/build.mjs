@@ -33,6 +33,7 @@ const shared = {
   logLevel: 'info',
   legalComments: 'none',
   define: { 'process.env.NODE_ENV': watch ? '"development"' : '"production"' },
+  loader: { '.css': 'text' },
 };
 
 // Content scripts MUST be IIFE (no ESM in injected context).

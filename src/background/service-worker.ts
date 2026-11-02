@@ -6,7 +6,9 @@ import { getProvider, TranslationProvider } from '../providers/index';
 import { segment } from '../core/segmentation';
 import { findTermMatches, lookupGlossary, TermMatch } from '../core/glossary';
 import { toTraditional } from '../core/st2t';
-import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
+import { LlmBatcher, isQuotaError, isTimeoutError, isUnusableResponse } from '../core/llm-batcher';
+import { DEFAULT_HEDGE_DELAY_MS, DEFAULT_HEDGE_MODEL, hedgeRace, isBothFailed, isPrimaryFatal } from '../providers/gemini-race';
+import { geminiProvider, resolveGeminiModel } from '../providers/gemini';
 import { hasAllUrls, registerDblClick, unregisterDblClick } from '../core/dblclick';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 
@@ -52,9 +54,38 @@ function isMetered(p: { id: string }): boolean {
 // → manual retry buttons). LlmBatcher (src/core/llm-batcher.ts) gathers
 // messages arriving within a short window and serves them with as few
 // provider.translate calls as possible, then fans results back to each caller.
+// Warm DNS/TLS to Gemini as the worker boots, in parallel with the first
+// real request. No API key on this URL.
+let geminiWarmed = false;
+function warmGemini(): void {
+  if (geminiWarmed) return;
+  geminiWarmed = true;
+  fetch('https://generativelanguage.googleapis.com/v1beta/models', { method: 'GET' }).catch(() => {});
+}
+warmGemini();
+
+// Primary model returned 400/404 (unsupported thinking level, retired id).
+// Don't spend every later batch on the same failure.
+let primaryDead = false;
+let primaryDeadLogged = false;
+
 const llmBatcher = new LlmBatcher({
   pace: paceLLM,
   run: (fn) => queue.run(fn),
+  finish: (input, req) => racedGemini(input, req.settings),
+  onReady: async (entries, reason) => {
+    const map = new Map<string, string>();
+    for (const e of entries) {
+      if (e.pairs.some((p) => p.t)) {
+        const key = cacheKey(e.req.settings.provider, e.req.settings.model, cacheTarget(e.req.settings), e.req.text.trim());
+        map.set(key, JSON.stringify(e.pairs));
+      }
+      if (reason === 'upgrade' && e.req.tabId != null && e.req.reqId) {
+        chrome.tabs.sendMessage(e.req.tabId, { type: 'ibt-upgrade', reqId: e.req.reqId, pairs: e.pairs }).catch(() => {});
+      }
+    }
+    if (map.size) await putCached(map, true);
+  },
   // Free-tier minute quota exhausted mid-thread: don't leave the rest of the
   // page on manual retry buttons — finish the batch on the free engine.
   // withFreeFallback already retries a throttled Google block on Microsoft.
@@ -66,7 +97,7 @@ const llmBatcher = new LlmBatcher({
   // NOTE: start from the FREE engine explicitly. req.settings.provider is the
   // LLM that just failed (e.g. gemini) — withFreeFallback would otherwise retry
   // the same exhausted LLM instead of falling back (it only Google→Microsoft).
-  onBatchFallback: (reqs) => (penalizeLLM(), Promise.all(reqs.map((req) => queue.run(async () => {
+  onBatchFallback: (reqs, _sentences, reason) => ((reason === 'timeout' || reason === 'both') ? console.warn(reason === 'both' ? '[IBT] gemini both failed → free engine' : '[IBT] gemini timeout → free engine') : penalizeLLM(), Promise.all(reqs.map((req) => queue.run(async () => {
     const freeSettings = { ...req.settings, provider: 'google' as const };
     const pairs = await withFreeFallback(freeSettings, async (p) => {
       const raw = await translateWith(p, paraphraseForMT(req.text), req.settings, {
@@ -76,7 +107,11 @@ const llmBatcher = new LlmBatcher({
     });
     return pairs;
   })))),
-}, { windowMs: 60, maxSentences: 10, maxChars: 1600 });
+// First request of a burst is tiny (about two sentences) so the on-screen
+// tweet can paint in one short Gemini call. The rest follow immediately,
+// in parallel, at the normal batch size. windowMs only coalesces tweets
+// that arrive in the same frame.
+}, { windowMs: 30, maxSentences: 8, maxChars: 1400, firstSentences: 2, firstChars: 380 });
 
 chrome.runtime.onInstalled.addListener(() => { loadSettings(); reconcileDblClick(); });
 chrome.runtime.onStartup.addListener(() => { reconcileDblClick(); });
@@ -127,15 +162,15 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   await handleAltA(tab);
 });
 
-chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, sendResponse) => {
   if (msg?.type === 'translate') {
-    handleTranslate(msg.text, { title: msg.title, mode: msg.mode })
+    handleTranslate(msg.text, { title: msg.title, mode: msg.mode, priority: msg.priority, reqId: msg.reqId, tabId: sender.tab?.id })
       .then((pairs) => sendResponse({ ok: true, pairs } satisfies TranslateResponse))
       .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateResponse));
     return true; // async response
   }
   if (msg?.type === 'translateBatch') {
-    handleTranslateBatch(msg.texts)
+    handleTranslateBatch(msg.texts, sender.tab?.id)
       .then((translations) => sendResponse({ ok: true, translations } satisfies TranslateBatchResponse))
       .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) } satisfies TranslateBatchResponse));
     return true; // async response
@@ -151,7 +186,7 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
 
 async function handleTranslate(
   text: string,
-  opts?: { title?: string; mode?: 'prose' | 'subtitle' },
+  opts?: { title?: string; mode?: 'prose' | 'subtitle'; priority?: 'visible' | 'near'; reqId?: string; tabId?: number },
 ): Promise<AlignedPair[]> {
   const clean = text.trim();
   if (!clean) return [];
@@ -176,6 +211,7 @@ async function handleTranslate(
     // provider calls — far fewer requests, no per-tweet pacing delay.
     pairs = await llmBatcher.submit({
       text: clean, settings, provider, mode: llmOpts.mode, pageTitle: llmOpts.pageTitle,
+      priority: opts?.priority, reqId: opts?.reqId, tabId: opts?.tabId,
     });
   } else {
     pairs = await queue.run(() => withFreeFallback(settings, async (p) => {
@@ -196,10 +232,64 @@ async function handleTranslate(
     }));
   }
 
-  if (settings.cacheEnabled && pairs.length) {
+  // Metered results are cached in the batcher only when they came from the
+  // primary model. A hedge must not occupy that key.
+  if (settings.cacheEnabled && pairs.length && !isMetered(provider)) {
     await putCached(new Map([[key, JSON.stringify(pairs)]]), true);
   }
   return pairs;
+}
+
+/** Primary Gemini call, hedged with the fast model after hedgeDelayMs. */
+async function racedGemini(
+  input: import('../providers/base').TranslateInput,
+  settings: Settings,
+): Promise<{ texts: string[]; cache: boolean; upgrade?: Promise<string[] | null> }> {
+  const primaryModel = resolveGeminiModel(settings.model);
+  const hedgeOn = settings.hedgeEnabled !== false;
+  const hedgeModel = (settings.hedgeModel || DEFAULT_HEDGE_MODEL).trim() || DEFAULT_HEDGE_MODEL;
+  const delay = Number.isFinite(settings.hedgeDelayMs) ? settings.hedgeDelayMs : DEFAULT_HEDGE_DELAY_MS;
+  const call = (model: string) => geminiProvider.translate!(input, { ...settings, model });
+
+  if (!hedgeOn || hedgeModel.toLowerCase() === primaryModel.toLowerCase() || primaryDead) {
+    const model = primaryDead || !hedgeOn ? (primaryDead ? hedgeModel : primaryModel) : primaryModel;
+    const useHedge = primaryDead && hedgeOn;
+    const t0 = performance.now();
+    const texts = await call(useHedge ? hedgeModel : primaryModel);
+    const ms = Math.round(performance.now() - t0);
+    console.log(useHedge
+      ? `[IBT] race primary=${primaryModel} disabled hedge=${hedgeModel} ${ms}ms shown=hedge@${ms}ms`
+      : `[IBT] race primary=${model} ${ms}ms hedge=${hedgeOn ? 'not-sent' : 'off'} shown=primary@${ms}ms`);
+    return { texts, cache: !useHedge };
+  }
+
+  try {
+    const race = await hedgeRace({
+      delayMs: Math.max(0, delay),
+      primaryModel,
+      hedgeModel,
+      primary: () => call(primaryModel),
+      hedge: () => call(hedgeModel),
+      log: (line) => console.log(line),
+    });
+    if (race.primaryDead && !primaryDeadLogged) {
+      primaryDead = true;
+      primaryDeadLogged = true;
+      console.warn(`[IBT] primary ${primaryModel} disabled after 4xx; using ${hedgeModel}`);
+    } else if (race.primaryDead) {
+      primaryDead = true;
+    }
+    return { texts: race.texts, cache: race.cache, upgrade: race.upgrade };
+  } catch (err) {
+    if (isPrimaryFatal(err)) {
+      primaryDead = true;
+      if (!primaryDeadLogged) {
+        primaryDeadLogged = true;
+        console.warn(`[IBT] primary ${primaryModel} disabled after 4xx; using ${hedgeModel}`);
+      }
+    }
+    throw err;
+  }
 }
 
 // Word/selection lookup for the double-click popup. Reuses the same provider, queue
@@ -466,7 +556,7 @@ function cacheTarget(settings: Settings): string {
 // Translate many independent lines while making as few provider calls as possible.
 // LLM providers (Gemini/OpenAI) translate every uncached line in ONE request,
 // which is what keeps us under the free-tier per-minute request limit.
-async function handleTranslateBatch(texts: string[]): Promise<string[]> {
+async function handleTranslateBatch(texts: string[], tabId?: number): Promise<string[]> {
   const settings = await loadSettings();
   const provider = getProvider(settings.provider);
   const target = cacheTarget(settings);
@@ -496,21 +586,39 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
     const sentences = need.map((i) => texts[i].trim());
     if (isMetered(provider)) await paceLLM();
     try {
-      const translations = await queue.run(() => provider.translate!(
-        { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
-        settings,
-      ));
+      const outcome = provider.id === 'gemini'
+        ? await queue.run(() => racedGemini(
+          { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
+          settings,
+        ))
+        : { texts: await queue.run(() => provider.translate!(
+          { sentences, targetLang: settings.targetLang, sourceLang: settings.sourceLang, mode: 'subtitle' },
+          settings,
+        )), cache: true as boolean, upgrade: undefined as Promise<string[] | null> | undefined };
+      const translations = outcome.texts;
       need.forEach((idx, k) => {
         const t = translations[k] ?? '';
         out[idx] = t;
-        if (settings.cacheEnabled && t) writeBack.set(keys[idx], JSON.stringify([{ o: texts[idx].trim(), t }] satisfies AlignedPair[]));
+        if (settings.cacheEnabled && outcome.cache && t) writeBack.set(keys[idx], JSON.stringify([{ o: texts[idx].trim(), t }] satisfies AlignedPair[]));
       });
+      if (outcome.upgrade) {
+        outcome.upgrade.then(async (better) => {
+          if (!better?.length) return;
+          const map = new Map<string, string>();
+          need.forEach((idx, k) => {
+            const t = better[k] ?? '';
+            if (settings.cacheEnabled && t) map.set(keys[idx], JSON.stringify([{ o: texts[idx].trim(), t }] satisfies AlignedPair[]));
+          });
+          if (map.size) await putCached(map, true);
+          if (tabId != null) chrome.tabs.sendMessage(tabId, { type: 'ibt-upgrade-subs', sources: sentences, translations: better }).catch(() => {});
+        }).catch(() => {});
+      }
     } catch (err) {
       // LLM quota (429) or an unusable response: don't leave the video without subtitles.
       // Finish this batch on the free engine, cached under the free engine's own keys so its
       // lower-quality text is never served later as if it were the LLM's.
-      if (!isQuotaError(err) && !isUnusableResponse(err)) throw err;
-      penalizeLLM();
+      if (!isQuotaError(err) && !isUnusableResponse(err) && !isTimeoutError(err) && !isBothFailed(err)) throw err;
+      if (!isTimeoutError(err)) penalizeLLM();
       console.warn('[IBT] subtitle batch fell back to the free engine:', String((err as Error)?.message ?? err).slice(0, 80));
       const freeSettings = { ...settings, provider: 'google' as const, model: '' };
       const freeTarget = cacheTarget(freeSettings);

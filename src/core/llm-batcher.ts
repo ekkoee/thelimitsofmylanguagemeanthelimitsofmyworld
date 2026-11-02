@@ -12,6 +12,7 @@
 import { segment } from './segmentation';
 import { AlignedPair, Settings } from './types';
 import { TranslateInput, TranslationProvider } from '../providers/base';
+import { isBothFailed } from '../providers/gemini-race';
 
 export interface BatchRequest {
   text: string;
@@ -19,6 +20,11 @@ export interface BatchRequest {
   provider: TranslationProvider;
   mode: 'prose' | 'subtitle';
   pageTitle?: string;
+  /** On-screen text ships in a tiny first request. Below-the-fold waits for that. */
+  priority?: 'visible' | 'near';
+  /** Content-script block id, so a later primary answer can replace the hedge text. */
+  reqId?: string;
+  tabId?: number;
 }
 
 interface Item {
@@ -35,8 +41,16 @@ export interface BatcherDeps {
   pace: () => Promise<void>;
   /** Run the provider call through the concurrency queue. */
   run: <T>(fn: () => Promise<T>) => Promise<T>;
-  /** Quota/rate-limit failure: translate the batch another way, or rethrow. */
-  onBatchFallback: (items: BatchRequest[], sentences: string[][]) => Promise<AlignedPair[][]>;
+  /** Quota, unusable output, timeout, or both Gemini calls failed. */
+  onBatchFallback: (items: BatchRequest[], sentences: string[][], reason: 'quota' | 'unusable' | 'timeout' | 'both') => Promise<AlignedPair[][]>;
+  /** When set, used instead of provider.translate. May return a provisional hedge. */
+  finish?: (input: TranslateInput, req: BatchRequest) => Promise<{
+    texts: string[];
+    cache: boolean;
+    upgrade?: Promise<string[] | null>;
+  }>;
+  /** Persist a primary result, and on `upgrade` push it to the page. */
+  onReady?: (entries: { req: BatchRequest; pairs: AlignedPair[] }[], reason: 'final' | 'upgrade') => void | Promise<void>;
 }
 
 export function isQuotaError(err: unknown): boolean {
@@ -52,20 +66,35 @@ export function isUnusableResponse(err: unknown): boolean {
   return /could not parse translations|empty response|no translations returned/i.test(msg);
 }
 
+/** Our own abort (Gemini timeout). A generic "network timeout" is NOT this —
+ *  only the explicit error the Gemini provider throws when its deadline fires. */
+export function isTimeoutError(err: unknown): boolean {
+  const msg = String((err as { message?: unknown })?.message ?? err);
+  return /^Gemini timeout\b/.test(msg);
+}
+
 export class LlmBatcher {
   private items: Item[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private sentences = 0;
   private chars = 0;
+  /** The next flush is the first of a burst: keep it tiny so the first tweet paints fast. */
+  private cold = true;
+  private coldTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly deps: BatcherDeps,
-    private readonly opts: { windowMs?: number; maxSentences?: number; maxChars?: number } = {},
+    private readonly opts: {
+      windowMs?: number; maxSentences?: number; maxChars?: number;
+      firstSentences?: number; firstChars?: number;
+    } = {},
   ) {}
 
   get windowMs(): number { return this.opts.windowMs ?? 250; }
   get maxSentences(): number { return this.opts.maxSentences ?? 80; }
   get maxChars(): number { return this.opts.maxChars ?? 8000; }
+  get firstSentences(): number { return this.opts.firstSentences ?? 2; }
+  get firstChars(): number { return this.opts.firstChars ?? 380; }
 
   /** For tests: how many requests are currently waiting to be flushed. */
   get pending(): number { return this.items.length; }
@@ -93,14 +122,81 @@ export class LlmBatcher {
     });
   }
 
+  /** On-screen items only, and only enough for one short request. */
+  private splitFirst(items: Item[]): { ship: Item[]; hold: Item[] } {
+    const visible = items.filter((it) => it.req.priority !== 'near');
+    const near = items.filter((it) => it.req.priority === 'near');
+    const pool = visible.length ? visible : items;
+    const aside = visible.length ? near : [];
+    const ship: Item[] = [];
+    const hold: Item[] = [];
+    let s = 0;
+    let c = 0;
+    for (const it of pool) {
+      const ns = s + it.sentences.length;
+      const nc = c + it.text.length;
+      if (ship.length && (ns > this.firstSentences || nc > this.firstChars)) hold.push(it);
+      else { ship.push(it); s = ns; c = nc; }
+    }
+    return { ship, hold: [...hold, ...aside] };
+  }
+
+  private capItems(items: Item[]): { ship: Item[]; hold: Item[] } {
+    const ship: Item[] = [];
+    const hold: Item[] = [];
+    let s = 0;
+    let c = 0;
+    for (const it of items) {
+      const ns = s + it.sentences.length;
+      const nc = c + it.text.length;
+      if (ship.length && (ns > this.maxSentences || nc > this.maxChars)) hold.push(it);
+      else { ship.push(it); s = ns; c = nc; }
+    }
+    return { ship, hold };
+  }
+
+  private requeue(items: Item[], delayMs: number): void {
+    for (const it of items) {
+      this.items.push(it);
+      this.sentences += it.sentences.length;
+      this.chars += it.text.length;
+    }
+    if (!this.items.length || this.timer) return;
+    this.timer = setTimeout(() => void this.flush(), delayMs);
+  }
+
+  private markHot(): void {
+    this.cold = false;
+    if (this.coldTimer) clearTimeout(this.coldTimer);
+    const t = setTimeout(() => { this.cold = true; this.coldTimer = null; }, 1500);
+    this.coldTimer = t;
+    const handle = t as unknown as { unref?: () => void };
+    if (typeof handle.unref === 'function') handle.unref();
+  }
+
   /** Flush immediately (also used by the timer). */
   async flush(): Promise<void> {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-    const items = this.items;
+    let items = this.items;
     this.items = [];
     this.sentences = 0;
     this.chars = 0;
     if (!items.length) return;
+    let kind: 'first' | 'next' = 'next';
+    if (this.cold) {
+      const split = this.splitFirst(items);
+      kind = 'first';
+      this.markHot();
+      items = split.ship;
+      this.requeue(split.hold, 0);
+    } else {
+      const capped = this.capItems(items);
+      items = capped.ship;
+      this.requeue(capped.hold, 0);
+    }
+    if (!items.length) return;
+    const sentences = items.reduce((n, it) => n + it.sentences.length, 0);
+    console.log(`[IBT] llm batch ${kind} items=${items.length} sentences=${sentences}`);
     const groups = new Map<string, Item[]>();
     for (const it of items) {
       const g = groups.get(it.key);
@@ -124,24 +220,45 @@ export class LlmBatcher {
       mode: first.req.mode,
       pageTitle: first.req.pageTitle,
     };
+    const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
     try {
       // One paced request for the whole group — this is what keeps a long
-      // thread under the free-tier per-minute limit.
+      // thread under the free-tier per-minute limit. The queue still runs
+      // several of these at once; pacing only spaces the starts.
       await this.deps.pace();
-      const translations = await this.deps.run(() =>
-        first.req.provider.translate!(input, first.req.settings));
-      items.forEach((it, i) => {
-        const slice = translations.slice(offsets[i], offsets[i] + it.sentences.length);
-        it.resolve(it.sentences.map((o, k) => ({ o, t: slice[k] ?? '' })));
+      const outcome = await this.deps.run(async () => {
+        if (this.deps.finish) return this.deps.finish(input, first.req);
+        const texts = await first.req.provider.translate!(input, first.req.settings);
+        return { texts, cache: true as boolean, upgrade: undefined as Promise<string[] | null> | undefined };
       });
+      const translations = outcome.texts;
+      const dt = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0);
+      console.log(`[IBT] llm batch done ${dt}ms sentences=${all.length}`);
+      const entries = items.map((it, i) => ({
+        req: it.req,
+        pairs: it.sentences.map((o, k) => ({ o, t: translations[offsets[i] + k] ?? '' })),
+      }));
+      if (outcome.cache && this.deps.onReady) await this.deps.onReady(entries, 'final');
+      items.forEach((it, i) => it.resolve(entries[i].pairs));
+      if (outcome.upgrade) {
+        outcome.upgrade.then(async (better) => {
+          if (!better?.length) return;
+          const upgraded = items.map((it, i) => ({
+            req: it.req,
+            pairs: it.sentences.map((o, k) => ({ o, t: better[offsets[i] + k] ?? '' })),
+          }));
+          if (this.deps.onReady) await this.deps.onReady(upgraded, 'upgrade');
+        }).catch(() => {});
+      }
     } catch (err) {
-      if (isQuotaError(err) || isUnusableResponse(err)) {
-        // Free-tier minute quota exhausted mid-thread, or the LLM returned an
-        // unusable response: don't leave the rest of the page on manual retry
-        // buttons — let the host finish the batch another way (free engine).
+      if (isQuotaError(err) || isUnusableResponse(err) || isTimeoutError(err) || isBothFailed(err)) {
+        // Free-tier minute quota exhausted mid-thread, the LLM returned an
+        // unusable response, both Gemini calls failed, or the primary blew
+        // its deadline with nothing else to show.
+        const reason = isBothFailed(err) ? 'both' : isTimeoutError(err) ? 'timeout' : isQuotaError(err) ? 'quota' : 'unusable';
         try {
           const results = await this.deps.onBatchFallback(
-            items.map((it) => it.req), items.map((it) => it.sentences));
+            items.map((it) => it.req), items.map((it) => it.sentences), reason);
           items.forEach((it, i) => it.resolve(results[i] ?? []));
         } catch (fallbackErr) {
           for (const it of items) it.reject(fallbackErr);

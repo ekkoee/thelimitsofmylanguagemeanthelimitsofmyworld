@@ -31,6 +31,19 @@ async function init() {
   });
   model.addEventListener('change', () => save({ model: model.value.trim() }));
 
+  const hedgeEnabled = $<HTMLInputElement>('hedgeEnabled');
+  const hedgeModel = $<HTMLInputElement>('hedgeModel');
+  const hedgeDelay = $<HTMLInputElement>('hedgeDelayMs');
+  hedgeEnabled.checked = s.hedgeEnabled !== false;
+  hedgeModel.value = s.hedgeModel || 'gemini-2.5-flash-lite';
+  hedgeDelay.value = String(s.hedgeDelayMs ?? 1500);
+  hedgeEnabled.addEventListener('change', () => save({ hedgeEnabled: hedgeEnabled.checked }));
+  hedgeModel.addEventListener('change', () => save({ hedgeModel: hedgeModel.value.trim() || 'gemini-2.5-flash-lite' }));
+  hedgeDelay.addEventListener('change', () => {
+    const n = Number(hedgeDelay.value);
+    save({ hedgeDelayMs: Number.isFinite(n) && n >= 0 ? n : 1500 });
+  });
+
   bindKey('key_gemini', s.apiKeys.gemini, 'gemini');
 
   // appearance: translated-text style + custom color + left marker bar, live preview
