@@ -3,109 +3,222 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="options.css" />
   <link rel="stylesheet" href="bilingual.css" />
-  <title>雙語對照 — 設定</title>
+  <link rel="stylesheet" href="options.css" />
+  <title data-i18n="appTitle">雙語對照 — 設定</title>
 </head>
 <body>
-  <main>
-    <h1>雙語對照 · 設定</h1>
-
-    <fieldset>
-      <legend>翻譯引擎</legend>
-      <div class="field">
-        <label for="provider">引擎</label>
-        <select id="provider">
-          <option value="google">Google 翻譯（免費，免設定）</option>
-          <option value="gemini">Gemini（譯文更自然，需自備 API key）</option>
-        </select>
-      </div>
-      <small class="hint">Google 翻譯開箱即用、速度快，但偏直譯。Gemini 用 AI 翻譯，語氣和專有名詞處理好很多，需要自己申請免費的 API key。</small>
-
-      <div id="geminiBlock" hidden>
-        <div class="field">
-          <label for="key_gemini">Gemini API Key</label>
-          <input type="password" id="key_gemini" placeholder="AIza..." autocomplete="off" />
+  <div class="app">
+    <aside>
+      <div class="mark">
+        <img src="icons/icon48.png" width="44" height="44" alt="" />
+        <div>
+          <strong data-i18n="appName">雙語對照</strong>
+          <em id="version"></em>
         </div>
-        <small class="hint">到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> 免費申請（登入 Google 帳號即可）。金鑰只會傳送給 Google 的 Gemini API。它儲存在瀏覽器的 Chrome 設定中；如果你開啟了 Chrome 同步，會隨你的 Google 帳號同步到其他裝置。</small>
+      </div>
+      <nav class="rail" data-i18n-aria="navLabel" aria-label="設定章節">
+        <a href="#general" data-i18n="navTranslate">翻譯</a>
+        <a href="#look" data-i18n="navLook">外觀</a>
+        <a href="#advanced" data-i18n="navSelect">反白翻譯</a>
+        <a href="#vocab" data-i18n="navVocab">單字本</a>
+      </nav>
+      <a class="gh" href="https://github.com/ekkoee/thelimitsofmylanguagemeanthelimitsofmyworld" target="_blank" rel="noopener" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span>GitHub</span>
+      </a>
+    </aside>
 
-        <div class="field">
-          <label for="model">模型</label>
-          <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
+    <main>
+      <section class="card" id="general" data-panel="general">
+        <h2 data-i18n="navTranslate">翻譯</h2>
+        <label class="field">
+          <span data-i18n="uiLang">介面語言</span>
+          <select id="uiLang">
+            <option value="" data-i18n="uiLangAuto">跟隨瀏覽器</option>
+            <option value="zh-TW">繁體中文</option>
+            <option value="zh-CN">简体中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="de">Deutsch</option>
+            <option value="fr">Français</option>
+            <option value="es">Español</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="engine">引擎</span>
+          <select id="provider">
+            <option value="google" data-i18n="engineGoogle">Google 翻譯</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </label>
+        <div id="geminiBlock" hidden>
+          <label class="field">
+            <span class="key-label"><span data-i18n="geminiKey">Gemini API Key</span> <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" data-i18n="getKey">取得金鑰</a></span>
+            <input type="password" id="key_gemini" data-i18n-placeholder="pasteKey" placeholder="貼上金鑰" autocomplete="off" spellcheck="false" />
+          </label>
+          <p id="keyNote" class="hint"></p>
+          <label class="field">
+            <span data-i18n="model">模型</span>
+            <input type="text" id="model" placeholder="gemini-3.5-flash-lite" />
+          </label>
         </div>
-        <small class="hint">預設 <b>gemini-3.5-flash-lite</b>（速度快、免費額度較高），一般不用改，只有 Google 汰換模型時才需要換。實際額度以 <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener">Google 官方額度說明</a>為準。</small>
-      </div>
-    </fieldset>
+        <label class="field">
+          <span data-i18n="imageTranslate">右鍵圖片翻譯</span>
+          <select id="imageModel">
+            <option value="local" data-i18n="imageLocal">本機辨識（免費、不限次數）</option>
+            <option value="gemini" data-i18n="imageGemini">Gemini 看圖（較準，每天約 20 次）</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="translateTo">翻譯成</span>
+          <select id="lang">
+            <option value="zh-TW">繁體中文</option>
+            <option value="zh-CN">简体中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="subtitleOrder">影片字幕順序</span>
+          <select id="order">
+            <option value="zhTop" data-i18n="orderTransTop">譯文在上</option>
+            <option value="enTop" data-i18n="orderOrigTop">原文在上</option>
+          </select>
+        </label>
+      </section>
 
-    <fieldset>
-      <legend>外觀（譯文樣式）</legend>
-      <div class="field">
-        <label for="transStyle">譯文樣式</label>
-        <select id="transStyle">
-          <option value="plain">無（純文字）</option>
-          <option value="underline">直線底線</option>
-          <option value="dashed">虛線底線</option>
-          <option value="dotted">點狀底線</option>
-          <option value="wavy">波浪底線</option>
-          <option value="solidBox">實線框線</option>
-          <option value="dashedBox">虛線框線</option>
-          <option value="highlight">醒目提示（黃底）</option>
-          <option value="dim">弱化（變淡）</option>
-          <option value="italic">斜體</option>
-          <option value="bold">粗體</option>
-          <option value="blur">模糊（學習模式 · 滑過才顯示）</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="transColor">譯文顏色</label>
-        <input type="color" id="transColor" value="#6c7aff" />
-        <button id="transColorReset" class="ghost">預設</button>
-        <small class="hint">影片字幕預設白色、網頁譯文預設跟隨原文顏色；按「預設」恢復。</small>
-      </div>
-      <div class="field">
-        <label for="barStyle">左側標記</label>
-        <select id="barStyle">
-          <option value="bar">線條（預設）</option>
-          <option value="thick">粗線條</option>
-          <option value="dashed">虛線</option>
-          <option value="none">無（隱藏）</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="barColor">標記顏色</label>
-        <input type="color" id="barColor" value="#6c7aff" />
-        <button id="barColorReset" class="ghost">預設</button>
-      </div>
-      <div class="field">
-        <label>即時預覽</label>
-        <div id="stylePreview" class="preview-box">
-          <div class="ibt-block">
-            <div class="ibt-pair">
-              <div class="ibt-orig" style="display:block">Knowledge itself is power.</div>
-              <div class="ibt-trans">知識本身就是力量。</div>
-            </div>
+      <section class="card" id="look" data-panel="look">
+        <h2 data-i18n="navLook">外觀</h2>
+        <label class="field">
+          <span data-i18n="transStyle">譯文樣式</span>
+          <select id="transStyle">
+            <option value="plain" data-i18n="stylePlain">無（純文字）</option>
+            <option value="underline" data-i18n="styleUnderline">直線底線</option>
+            <option value="dashed" data-i18n="styleDashed">虛線底線</option>
+            <option value="dotted" data-i18n="styleDotted">點狀底線</option>
+            <option value="wavy" data-i18n="styleWavy">波浪底線</option>
+            <option value="solidBox" data-i18n="styleSolid">實線框線</option>
+            <option value="dashedBox" data-i18n="styleDashedBox">虛線框線</option>
+            <option value="highlight" data-i18n="styleHighlight">醒目提示（黃底）</option>
+            <option value="dim" data-i18n="styleDim">弱化（變淡）</option>
+            <option value="italic" data-i18n="styleItalic">斜體</option>
+            <option value="bold" data-i18n="styleBold">粗體</option>
+            <option value="blur" data-i18n="styleBlur">模糊（學習模式，滑過才顯示）</option>
+          </select>
+        </label>
+        <div class="field">
+          <span id="transColorLabel" data-i18n="transColor">譯文顏色</span>
+          <span class="color-line">
+            <span class="swatch-wrap" id="transColorWrap">
+              <input type="color" id="transColor" value="#1c1c1c" aria-labelledby="transColorLabel" />
+              <span class="none-mark" id="transColorNone" aria-hidden="true"></span>
+            </span>
+            <button type="button" id="transColorReset" class="text-btn" data-i18n="followPage">跟頁面顏色</button>
+          </span>
+        </div>
+        <label class="field">
+          <span data-i18n="barMark">左側標記</span>
+          <select id="barStyle">
+            <option value="none" data-i18n="barNone">無</option>
+            <option value="bar" data-i18n="barLine">線條</option>
+            <option value="thick" data-i18n="barThick">粗線條</option>
+            <option value="dashed" data-i18n="barDashed">虛線</option>
+          </select>
+        </label>
+        <div class="field">
+          <span id="barColorLabel" data-i18n="barColor">標記顏色</span>
+          <span class="color-line">
+            <span class="swatch-wrap" id="barColorWrap">
+              <input type="color" id="barColor" value="#6c7aff" aria-labelledby="barColorLabel" />
+              <span class="none-mark" id="barColorNone" aria-hidden="true"></span>
+            </span>
+            <button type="button" id="barColorReset" class="text-btn" data-i18n="none">無</button>
+          </span>
+        </div>
+        <div class="toggle">
+          <span id="highlightLabel" data-i18n="tint">淡底色</span>
+          <label class="switch"><input type="checkbox" id="transHighlight" checked aria-labelledby="highlightLabel" /><span class="slider"></span></label>
+        </div>
+        <div class="swatches" id="tintSwatches">
+          <button type="button" class="swatch auto" data-tint="" data-i18n-aria="tintAuto" aria-label="自動"></button>
+          <button type="button" class="swatch" data-tint="blue" data-i18n-aria="tintBlue" aria-label="藍"></button>
+          <button type="button" class="swatch" data-tint="green" data-i18n-aria="tintGreen" aria-label="綠"></button>
+          <button type="button" class="swatch" data-tint="amber" data-i18n-aria="tintAmber" aria-label="琥珀"></button>
+          <button type="button" class="swatch" data-tint="orange" data-i18n-aria="tintOrange" aria-label="橙"></button>
+          <button type="button" class="swatch" data-tint="red" data-i18n-aria="tintRed" aria-label="紅"></button>
+          <button type="button" class="swatch" data-tint="violet" data-i18n-aria="tintViolet" aria-label="紫"></button>
+          <label class="swatch custom" data-i18n-aria="tintCustom" aria-label="自訂淡底色">
+            <input type="color" id="tintCustom" value="#5b8def" />
+          </label>
+        </div>
+        <label class="field font-field">
+          <span><span data-i18n="fontSize">字體大小</span> <b id="fontScaleVal"></b></span>
+          <input type="range" id="fontScale" min="0.8" max="1.6" step="0.05" />
+        </label>
+        <div class="tint-live">
+          <div class="tone-light">
+            <p data-preview="orig">Good design is quiet; it helps you read without getting in the way.</p>
+            <div class="ibt-block"><div class="ibt-trans" data-ibt-on="light"><span data-preview="trans">好的設計很安靜，它幫助你閱讀，卻不會打擾你。</span></div></div>
           </div>
-          <small class="hint" style="margin-top:8px">選「模糊（學習模式）」時，把滑鼠移到中文上才會顯示。</small>
+          <div class="tone-dark">
+            <p data-preview="orig">Good design is quiet; it helps you read without getting in the way.</p>
+            <div class="ibt-block"><div class="ibt-trans" data-ibt-on="dark"><span data-preview="trans">好的設計很安靜，它幫助你閱讀，卻不會打擾你。</span></div></div>
+          </div>
         </div>
-      </div>
-    </fieldset>
+        <div class="reset-row">
+          <button type="button" id="resetDefaults" class="ghost-btn" data-i18n="resetLook">恢復預設</button>
+          <span id="resetConfirm" hidden>
+            <span data-i18n="resetAsk">將外觀設定恢復為預設？</span>
+            <button type="button" id="resetYes" class="ghost-btn" data-i18n="ok">確定</button>
+            <button type="button" id="resetNo" class="ghost-btn" data-i18n="cancel">取消</button>
+          </span>
+        </div>
+      </section>
 
-    <fieldset>
-      <legend>進階</legend>
-      <label class="check">
-        <input type="checkbox" id="dblClickTranslate" /> 雙擊單字翻譯（需授權在所有網站執行）
-      </label>
-      <small class="hint">在任何網頁<b>雙擊單字</b>或<b>反白詞句</b>，會在旁邊浮出小視窗：原文＋🔊朗讀、翻譯，單字還會顯示<b>字典卡</b>（詞性＋釋義）。開啟時會請求「在所有網站執行」的權限，關閉會一併撤除（預設關閉）。</small>
+      <section class="card" id="advanced" data-panel="advanced">
+        <h2 data-i18n="navSelect">反白翻譯</h2>
+        <div class="toggle">
+          <span id="selectionLabel" data-i18n="selectionFeature">反白翻譯功能</span>
+          <label class="switch"><input type="checkbox" id="selectionTranslate" aria-labelledby="selectionLabel" /><span class="slider"></span></label>
+        </div>
+        <div class="toggle">
+          <span id="instantLabel" data-i18n="selectionInstant">選取後立即顯示</span>
+          <label class="switch"><input type="checkbox" id="selectionInstant" aria-labelledby="instantLabel" /><span class="slider"></span></label>
+        </div>
+      </section>
 
-      <div class="field" style="margin-top:14px">
-        <button id="clearCache" class="ghost">清除翻譯快取</button>
-        <span id="cacheMsg" class="muted"></span>
-      </div>
-      <small class="hint">翻譯結果會快取在瀏覽器裡，重複看到的內容不會再翻一次。如果譯文出現異常，可以清除快取後重新載入頁面。</small>
-    </fieldset>
-
-    <p id="status" class="status"></p>
-  </main>
+      <section class="card" id="vocab" data-panel="vocab">
+        <h2 data-i18n="navVocab">單字本</h2>
+        <div class="vocab-tools">
+          <input type="search" id="vocabSearch" data-i18n-placeholder="searchVocab" placeholder="搜尋單字或譯文" />
+          <select id="vocabSort" data-i18n-aria="sort" aria-label="排序">
+            <option value="new" data-i18n="sortNew">新到舊</option>
+            <option value="az" data-i18n="sortAz">A–Z</option>
+          </select>
+        </div>
+        <p id="vocabEmpty" class="hint" data-i18n="vocabEmpty">還沒有存下的字。</p>
+        <div class="vocab-scroll">
+          <ul id="vocabList" class="vocab-list"></ul>
+        </div>
+        <div class="vocab-actions">
+          <button type="button" id="vocabCsv" class="ghost-btn" data-i18n="exportCsv">匯出 CSV</button>
+          <button type="button" id="vocabTxt" class="ghost-btn" data-i18n="exportTxt">匯出 TXT</button>
+          <button type="button" id="vocabClear" class="ghost-btn" data-i18n="clear">清空</button>
+          <span id="vocabConfirm" hidden>
+            <span data-i18n="clearAsk">清除單字本裡的全部單字？</span>
+            <button type="button" id="vocabYes" class="ghost-btn" data-i18n="ok">確定</button>
+            <button type="button" id="vocabNo" class="ghost-btn" data-i18n="cancel">取消</button>
+          </span>
+        </div>
+      </section>
+    </main>
+  </div>
   <script src="options.js"></script>
 </body>
 </html>

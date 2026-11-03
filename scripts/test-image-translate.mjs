@@ -1,0 +1,275 @@
+// Run the extension's image-request code.
+//
+//   GEMINI_API_KEY=... node scripts/test-image-translate.mjs path/to/image.png
+//
+// Prints the model, the latency, and the Traditional Chinese lines.
+// Without a key, check the request sequence (no network):
+//
+//   node scripts/test-image-translate.mjs --self-test
+import { execSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const root = new URL('..', import.meta.url).pathname;
+execSync(
+  'npx esbuild src/providers/gemini-image.ts --bundle --platform=node --format=esm --outfile=/tmp/ibt-image-api.mjs --log-level=error',
+  { cwd: root, stdio: 'inherit' },
+);
+const api = await import(pathToFileURL('/tmp/ibt-image-api.mjs').href);
+
+function check(name, cond) {
+  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}`);
+  if (!cond) process.exitCode = 1;
+}
+
+if (process.argv.includes('--self-test')) {
+  const parsed = api.parseImageTranslation(JSON.stringify({
+    regions: [
+      { text_en: 'TRUE.', text_zh: '真實。', box_2d: [540, 400, 580, 520] },
+      { text_en: "THIS BABY'S SIX-EYED HALLOWEEN LOOK HAS EVERYONE AT KINDERGARTEN DOING A DOUBLE TAKE", text_zh: '這名寶寶的六眼萬聖節造型讓幼兒園裡的每個人都忍不住多看兩眼', box_2d: [680, 40, 920, 960] },
+      { text_en: '2014', text_zh: '2014', box_2d: [300, 80, 330, 140] },
+      { text_en: 'The model writes high quality code very quickly and the whole team', text_zh: '這個模型寫程式又快又好，整個團隊', box_2d: [200, 40, 250, 900] },
+      { text_en: 'notices how fast the new code lands.', text_zh: '都注意到新程式碼有多快。', box_2d: [255, 40, 310, 900] },
+      { text_en: 'Productivity is surging in AI-adopting sectors in the US, but not elsewhere', text_zh: '美國採用 AI 的產業生產力激增，但其他地區則否', box_2d: [20, 20, 60, 980] },
+      { text_en: 'Real output per worker in AI-adopting sectors versus the earlier trend', text_zh: '採用 AI 的產業中每位工人的實際產出，對比先前趨勢', box_2d: [180, 20, 230, 980] },
+      { text_en: 'November 7, 2026', text_zh: '2026年11月7日', box_2d: [400, 40, 430, 300] },
+    ],
+  }));
+  check('parses box_2d into fractions', parsed.regions[0].box && Math.abs(parsed.regions[0].box[0] - 0.4) < 0.01 && Math.abs(parsed.regions[0].box[1] - 0.54) < 0.01);
+  check('parses text_en and text_zh', parsed.regions[1].textZh.includes('萬聖節') && parsed.regions[0].textEn === 'TRUE.');
+  const placed = api.selectInPlace(parsed.regions);
+  check('axis year is not painted', !placed.regions.some((r) => r.textEn === '2014'));
+  check('stacked prose becomes one paragraph', placed.mode === 'inplace' && placed.regions.some((r) => r.kind === 'paragraph' && r.textZh.includes('程式碼')));
+  const list = api.selectInPlace([
+    { textEn: '1. Owners of physical bottlenecks. Power generation, transmission,', textZh: '1. 實體瓶頸的所有者。電力生成、傳輸、', box: [0.08, 0.10, 0.82, 0.04] },
+    { textEn: 'grid interconnects, data center land and permits, cooling, and the', textZh: '電網互連、資料中心土地和許可、冷卻以及', box: [0.08, 0.145, 0.82, 0.04] },
+    { textEn: 'long tail ends here.', textZh: '長尾到此。', box: [0.08, 0.19, 0.4, 0.035] },
+    { textEn: 'are the moat.', textZh: '護城河。', box: [0.08, 0.23, 0.28, 0.035] },
+    { textEn: '2. Liability-bearers and licensed entities stay accountable', textZh: '2. 2. 責任承擔者', box: [0.08, 0.25, 0.82, 0.04] },
+  ]);
+  const item = list.regions.find((r) => r.textEn.includes('are the moat'));
+  check('short last line stays inside the paragraph box', !!item && item.box && item.box[1] + item.box[3] >= 0.26);
+  check('next numbered item stays separate', list.regions.some((r) => r.textEn.startsWith('2.')));
+  check('list marker is written once', list.regions.find((r) => r.textEn.startsWith('2.')).textZh === '2. 責任承擔者');
+  const bullet = api.selectInPlace([
+    { textEn: 'How the attack worked (the chain)', textZh: '攻擊是如何進行的', box: [0.04, 0.04, 0.7, 0.04], kind: 'heading' },
+    { textEn: '條', textZh: '條', box: [0.76, 0.045, 0.06, 0.03] },
+    { textEn: 'September: Another engineer got a fake job interview through a job platform. The attacker', textZh: '9月：另一位工程師透過求職平台獲得了一份虛假的求職面試。攻擊者', box: [0.06, 0.28, 0.88, 0.035], kind: 'bullet', marker: '•', labelBold: true },
+    { textEn: 'built trust over two rounds, then had him download an assignment containing malware.', textZh: '透過兩輪建立信任，然後讓他下載了一個含有惡意軟體的作業。', box: [0.1, 0.32, 0.84, 0.035] },
+    { textEn: 'legitimate pyenv file for a malicious one,', textZh: '合法的 pyenv 檔換成惡意檔，', box: [0.12, 0.36, 0.7, 0.032] },
+    { textEn: 'Oct 20: The attacker used that engineer’s machine.', textZh: '10月20日：攻擊者利用該工程師的機器。', box: [0.06, 0.46, 0.88, 0.035], kind: 'bullet' },
+  ]);
+  const sep = bullet.regions.find((r) => r.textEn.includes('pyenv'));
+  check('a bullet’s wrapped lines, including inline code, are one block', !!sep && sep.kind === 'bullet' && sep.box && sep.box[1] < 0.3 && sep.box[1] + sep.box[3] > 0.38);
+  check('the next dated bullet stays separate', bullet.regions.filter((r) => r.kind === 'bullet').length === 2);
+  check('a title fragment on the same line joins the heading', bullet.regions.filter((r) => r.kind === 'heading').length === 1 && bullet.regions.some((r) => r.kind === 'heading' && r.textZh.includes('條')));
+  check('blank box is dropped', !api.selectInPlace([{ textEn: '   ', textZh: '   ', box: [0.1, 0.1, 0.2, 0.05] }]).regions.length);
+  const job = [
+    { textEn: 'Data Engineer (Sports & Prediction Markets)', textZh: '資料工程師（體育與預測市場）', box: [0.04, 0.04, 0.55, 0.04] },
+    { textEn: 'Betstamp Ventures • Toronto, ON (Hybrid)', textZh: '貝斯坦普創投 · 安大略省多倫多（混合）', box: [0.04, 0.09, 0.5, 0.03] },
+    { textEn: 'The Process', textZh: '過程', box: [0.04, 0.18, 0.2, 0.03] },
+    { textEn: 'Short video intro: a few questions, recorded on your own time', textZh: '短片自我介紹：幾個問題，自己找時間錄', box: [0.06, 0.26, 0.8, 0.03] },
+    { textEn: '45-min intro call: meet the team, swap questions', textZh: '45 分鐘介紹電話：認識團隊、互相提問', box: [0.06, 0.31, 0.75, 0.03] },
+    { textEn: 'Lightweight take-home (under 2 hours): a real problem from this codebase, not a LeetCode', textZh: '輕量的小型專題作業（兩小時內）：這個程式庫裡的真實問題，不是 LeetCode', box: [0.06, 0.36, 0.84, 0.03] },
+    { textEn: 'exercise', textZh: '練習', box: [0.09, 0.40, 0.2, 0.025] },
+    { textEn: 'Systems conversation: a real problem together, no whiteboard algorithms', textZh: '系統對談：一起看真實問題，沒有白板演算法', box: [0.06, 0.46, 0.8, 0.03] },
+    { textEn: 'Final interview: meet leadership', textZh: '最終面試：見領導', box: [0.06, 0.51, 0.5, 0.03] },
+    { textEn: 'Offer → onboarding → shipping to thousands of bettors', textZh: '錄取、入職、然後把產品送到數千位投注者手上', box: [0.06, 0.56, 0.7, 0.03] },
+  ];
+  const grouped = api.selectInPlace(job);
+  check('six bullets stay six blocks', grouped.regions.filter((r) => r.textEn.startsWith('Short') || r.textEn.startsWith('45-') || r.textEn.startsWith('Lightweight') || r.textEn.startsWith('Systems') || r.textEn.startsWith('Final') || r.textEn.startsWith('Offer')).length === 6);
+  check('a lowercase wrap joins its bullet', grouped.regions.some((r) => r.textEn.includes('Lightweight') && r.textEn.includes('exercise')));
+  check('the heading is not a tiny merged line', grouped.regions.some((r) => r.textEn === 'The Process' && r.kind === 'heading'));
+  const t0 = performance.now();
+  api.selectInPlace(job);
+  const groupMs = performance.now() - t0;
+  const body = JSON.stringify(api.buildImageTextBody('gemini-2.5-flash-lite', job.map((r) => r.textEn)));
+  check('text request carries every block and no image', body.includes('take-home') && body.includes('thinkingBudget') && !body.includes('inline_data'));
+  console.log('[IBT] image group', groupMs.toFixed(2), 'ms; text payload', body.length, 'bytes (vision jpeg is typically >100000)');
+  check('a title and the subtitle under it stay two regions', placed.regions.filter((r) => r.textZh.includes('生產力') || r.textZh.includes('實際產出')).length === 2);
+  check('a bare date is not painted', !placed.regions.some((r) => r.textEn.startsWith('November')));
+  execSync(
+    'npx esbuild src/content/image-inplace.ts --bundle --platform=node --format=esm --outfile=/tmp/ibt-image-place.mjs --log-level=error',
+    { cwd: root, stdio: 'inherit' },
+  );
+  const place = await import(pathToFileURL('/tmp/ibt-image-place.mjs').href);
+  const padded = place.padBox([0.1, 0.1, 0.2, 0.05], 1000, 500);
+  const padPx = 0.05 * 500 * 0.12;
+  check('pad is about 12% of the box height on every side', Math.abs(padded[0] * 1000 - (100 - padPx)) < 0.6 && Math.abs(padded[1] * 500 - (50 - padPx)) < 0.6);
+  check('english echo is detected', api.echoesEnglish('TRUE.', 'TRUE.'));
+  check('chinese is not an echo', !api.echoesEnglish('TRUE.', '真實。'));
+  const raw = 'Gemini 429 retry=12: {"error":{"code":429,"message":"You exceeded your current quota","status":"RESOURCE_EXHAUSTED","details":[{"violations":[{"quotaId":"GenerateRequestsPerMinutePerProjectPerModel-FreeTier","quotaValue":"5","quotaDimensions":{"model":"gemini-2.5-flash"}}]},{"retryDelay":"12s"}]}}';
+  const quota = api.friendlyTranslateError(raw, 'image');
+  check('429 is a specific minute line', quota.includes('請求太頻繁') && quota.includes('12') && quota.includes('自動重試') && !quota.includes('請稍後再試') && !quota.includes('{'));
+  check('no key is a Chinese prompt', api.friendlyTranslateError('NO_API_KEY:image', 'image').includes('Gemini 金鑰'));
+  await sequence();
+  if (process.exitCode) process.exit(process.exitCode);
+  console.log('\nimage request self-test passed');
+  process.exit(0);
+}
+
+async function sequence() {
+  const calls = [];
+  const fetchImpl = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    const model = decodeURIComponent(String(_url).split('/models/')[1].split(':')[0]);
+    calls.push({ model, at: Date.now(), bytes: body.contents[0].parts[1].inline_data.data.length });
+    const primary = calls.filter((c) => c.model === 'gemini-3.5-flash').length;
+    if (model === 'gemini-3.5-flash' && primary === 1) {
+      return new Response(JSON.stringify({
+        error: {
+          code: 429,
+          message: 'You exceeded your current quota',
+          status: 'RESOURCE_EXHAUSTED',
+          details: [
+            { violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '20', quotaDimensions: { model: 'gemini-3.6-flash' } }] },
+            { retryDelay: '86306s' },
+          ],
+        },
+      }), { status: 429, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify({ regions: [{ text_en: 'HELLO', text_zh: '你好' }] }) }] } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const t0 = Date.now();
+  const got = await api.translateImageSequential({
+    key: 'test-key',
+    model: 'gemini-3.5-flash',
+    imageModel: 'gemini-3.5-flash',
+    mime: 'image/jpeg',
+    data: 'abc',
+    fetchImpl,
+    log: (line) => console.log(line),
+  });
+  check('daily 429 skips that model instead of waiting', calls.length === 2 && calls[0].model === 'gemini-3.5-flash' && calls[1].model !== calls[0].model && Date.now() - t0 < 800);
+  check('chinese came back from the next model', got.text === '你好' && got.model !== 'gemini-3.5-flash');
+}
+
+const key = process.env.GEMINI_API_KEY || '';
+const file = process.argv[2];
+if (!key) {
+  console.error('Set GEMINI_API_KEY, or run with --self-test');
+  process.exit(1);
+}
+if (!file) {
+  console.error('Usage: GEMINI_API_KEY=... node scripts/test-image-translate.mjs image.png');
+  process.exit(1);
+}
+execSync(
+  'npx esbuild src/core/quota-router.ts --bundle --platform=node --format=esm --outfile=/tmp/ibt-quota.mjs --log-level=error',
+  { cwd: root, stdio: 'inherit' },
+);
+const quotaApi = await import(pathToFileURL('/tmp/ibt-quota.mjs').href);
+const quotaPath = resolve(root, '.ibt-quota.json');
+const quotaState = existsSync(quotaPath)
+  ? quotaApi.normalizeQuotaState(JSON.parse(readFileSync(quotaPath, 'utf8')))
+  : quotaApi.emptyQuotaState();
+console.log(quotaApi.quotaStatusText(quotaState));
+const bytes = readFileSync(file);
+const mime = file.endsWith('.png') ? 'image/png' : file.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+const t0 = Date.now();
+let got;
+try {
+  got = await api.translateImageSequential({
+    key,
+    model: process.env.GEMINI_MODEL || '',
+    imageModel: process.env.GEMINI_IMAGE_MODEL || 'auto',
+    mime,
+    data: bytes.toString('base64'),
+    quotaState,
+    onQuota: () => writeFileSync(quotaPath, JSON.stringify(quotaState)),
+    log: (line) => console.log(line),
+  });
+} finally {
+  writeFileSync(quotaPath, JSON.stringify(quotaState));
+  console.log(`quota file: ${quotaPath}`);
+}
+console.log(`model: ${got.model}`);
+console.log(`latency_ms: ${Date.now() - t0}`);
+for (const region of got.regions) {
+  console.log(`en: ${region.textEn}`);
+  console.log(`zh: ${region.textZh}`);
+}
+execSync(
+  'npx esbuild src/core/st2t.ts --bundle --platform=node --format=esm --outfile=/tmp/ibt-st2t.mjs --log-level=error',
+  { cwd: root, stdio: 'inherit' },
+);
+const st2t = await import(pathToFileURL('/tmp/ibt-st2t.mjs').href);
+const mapped = (got.regions || []).map((r) => ({ ...r, textZh: st2t.toTraditional(r.textZh || '') }));
+const picked = api.selectInPlace(mapped);
+console.log(`place: ${picked.mode} regions=${picked.regions.length}`);
+const shown = picked.mode === 'inplace' ? picked.regions : mapped;
+for (const region of shown) {
+  console.log(`en: ${region.textEn}`);
+  console.log(`zh: ${region.textZh}`);
+}
+if (!shown.length) console.log(got.text || '(no text)');
+const htmlPath = file.replace(/\.[^.]+$/, '') + '.ibt.html';
+const pngPath = file.replace(/\.[^.]+$/, '') + '.ibt.png';
+writeInPlacePreview({
+  htmlPath,
+  pngPath,
+  mime,
+  bytes,
+  payload: {
+    mode: picked.mode,
+    regions: picked.regions,
+    text: st2t.toTraditional(got.text || mapped.map((r) => r.textZh).join('\n')),
+  },
+});
+
+function imageSize(buf) {
+  if (buf.length > 24 && buf[0] === 0x89 && buf[1] === 0x50) {
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  }
+  if (buf[0] === 0xff && buf[1] === 0xd8) {
+    let o = 2;
+    while (o + 9 < buf.length) {
+      if (buf[o] !== 0xff) break;
+      const mark = buf[o + 1];
+      if (mark === 0xd8 || mark === 0xd9) { o += 2; continue; }
+      const len = buf.readUInt16BE(o + 2);
+      if (mark >= 0xc0 && mark <= 0xc2) return { h: buf.readUInt16BE(o + 5), w: buf.readUInt16BE(o + 7) };
+      o += 2 + len;
+    }
+  }
+  return { w: 1200, h: 900 };
+}
+
+function writeInPlacePreview({ htmlPath, pngPath, mime, bytes, payload }) {
+  execSync(
+    'npx esbuild scripts/image-paint-preview.ts --bundle --format=iife --platform=browser --outfile=/tmp/ibt-image-paint.js --log-level=error',
+    { cwd: root, stdio: 'inherit' },
+  );
+  const css = readFileSync(`${root}src/styles/bilingual.css`, 'utf8');
+  const paint = readFileSync('/tmp/ibt-image-paint.js', 'utf8');
+  const { w, h } = imageSize(bytes);
+  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+  const html = `<!doctype html><meta charset="utf-8"><style>${css}
+html,body{margin:0;background:#fff}
+#stage{position:relative;display:inline-block}
+</style><body><div id="stage"><img id="pic" alt="" width="${w}" height="${h}" src="data:${mime};base64,${bytes.toString('base64')}" style="display:block"><div id="overlay" class="ibt-img-overlay" style="left:0;top:0"></div></div>
+<script>window.__ibtPaint=${json}</script>
+<script>${paint}</script></body>`;
+  writeFileSync(htmlPath, html);
+  console.log(`html: ${htmlPath}`);
+  const bins = ['/opt/google/chrome/chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
+  const bin = bins.find((p) => existsSync(p));
+  if (!bin) {
+    console.log('png: skipped (chrome not found); open the html file');
+    return;
+  }
+  const ww = Math.min(2400, Math.max(400, w));
+  const wh = Math.min(1800, Math.max(300, h));
+  try {
+    execSync(
+      `"${bin}" --headless --disable-gpu --no-sandbox --hide-scrollbars --force-device-scale-factor=1 --virtual-time-budget=2500 --window-size=${ww},${wh} --screenshot="${pngPath}" "${pathToFileURL(resolve(htmlPath)).href}"`,
+      { stdio: 'inherit' },
+    );
+    console.log(`png: ${pngPath}`);
+  } catch {
+    console.log('png: skipped (chrome screenshot failed); open the html file');
+  }
+}

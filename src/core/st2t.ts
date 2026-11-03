@@ -35,6 +35,8 @@ const PHRASES: Array<[string, string]> = [
   ['干粮', '乾糧'], ['干洗', '乾洗'], ['晒干', '曬乾'], ['烘干', '烘乾'],
   // 软→軟 would be wrong here; the word is 軟體
   ['软件', '軟體'], ['硬件', '硬體'],
+  ['信息', '訊息'], ['文档', '文件'], ['文檔', '文件'],
+  ['数据', '資料'], ['數據', '資料'],
   // 征: these need the other char converted (征 itself is protected below)
   ['长征', '長征'], ['远征', '遠征'], ['征战', '征戰'],
   // 开伙 keeps 伙 but needs 开→開

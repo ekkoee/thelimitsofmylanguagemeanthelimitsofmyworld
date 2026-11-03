@@ -1,0 +1,4 @@
+{
+  "extName": { "message": "대역 번역 — 웹과 YouTube 자막" },
+  "extDescription": { "message": "원문과 번역을 한 줄씩 나란히 읽습니다. 웹(Alt+A), X, Reddit, YouTube, Netflix를 지원합니다. 무료 엔진이며 API 키가 필요 없습니다." }
+}

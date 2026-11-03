@@ -1,7 +1,29 @@
+import { t } from '../core/i18n';
+import { langTag } from '../core/lang-tag';
 import { AlignedPair, Settings, TranslateResponse } from '../core/types';
-import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
+import { hasTranslatableText, isAlreadyTargetLang, sameMeaning } from '../core/segmentation';
 import { el, isProcessed, markProcessed } from '../utils/dom';
 import { sendMessage, isContextGoneError } from '../utils/runtime';
+import { insideXVideo } from './selectors';
+import { isHeadingElement, pageFontPx } from './page-font';
+import { friendlyTranslateError } from '../core/errors';
+
+const KEPT_CLASS = ['ibt-uni', 'ibt-fit', 'ibt-heading'];
+
+/** Swap loading/error classes without dropping the page-translation classes
+ *  added after this block was inserted. */
+function setBlockClass(block: HTMLElement, ...extra: string[]): void {
+  const keep = KEPT_CLASS.filter((c) => block.classList.contains(c));
+  block.className = ['ibt-block', ...extra, ...keep].join(' ');
+}
+
+function applyPageFont(block: HTMLElement, anchor: Node): void {
+  const src = anchor.nodeType === 1 ? anchor as HTMLElement : anchor.parentElement;
+  if (!src) return;
+  block.style.fontSize = `${pageFontPx(src)}px`;
+  block.style.lineHeight = '1.5';
+  if (isHeadingElement(src)) block.classList.add('ibt-heading');
+}
 
 export interface TextUnit { source: HTMLElement; text: string; }
 export interface SiteAdapter { id: string; collect(): TextUnit[]; }
@@ -58,46 +80,60 @@ function isPureUrl(s: string): boolean {
   return /^(https?:\/\/|www\.)\S+$/i.test(t) || /^[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(t);
 }
 
-async function translateBlock(text: string): Promise<AlignedPair[]> {
+async function translateBlock(text: string, retry = false): Promise<AlignedPair[]> {
   // Reddit / X / universal are prose; carry the page title as background context.
-  const resp = await sendMessage<TranslateResponse>({ type: 'translate', text, title: document.title, mode: 'prose' });
+  const resp = await sendMessage<TranslateResponse>({ type: 'translate', text, title: document.title, mode: 'prose', retry });
   if (!resp?.ok) throw new Error(resp?.error || 'translate failed');
   return resp.pairs || [];
 }
 
+function pageTarget(): string {
+  return document.documentElement.getAttribute('data-ibt-target')
+    || document.documentElement.getAttribute('data-ibt-lang')
+    || 'zh-TW';
+}
+
 function fillPairs(block: HTMLElement, pairs: AlignedPair[]): void {
-  block.className = 'ibt-block';
+  setBlockClass(block);
   block.textContent = '';
+  const lang = pageTarget();
+  const tag = langTag(lang);
+  block.lang = tag;
   // Our block holds ONLY the translation. The original stays as the page's own
   // text (rich: links/mentions/media intact); the 3-state view shows/hides that
   // original via `.ibt-orig-src`. No `.ibt-orig` duplicate → no double original.
   for (const p of pairs) {
     if (isPureUrl(p.o) || !hasTranslatableText(p.o)) continue;   // just a URL / @mention → no useful translation
-    block.appendChild(el('div', 'ibt-trans', p.t));
+    if (isAlreadyTargetLang(p.o, lang) || sameMeaning(p.o, p.t, lang)) continue;
+    const line = el('div', 'ibt-trans');
+    line.lang = tag;
+    // The span carries the tint so each sentence stays on its own line while a wrap still hugs.
+    const chip = el('span', '', p.t);
+    chip.lang = tag;
+    line.appendChild(chip);
+    block.appendChild(line);
   }
 }
 
 // Shown when the extension context is gone (reload/update): a refresh reloads
 // the fresh content script and translation resumes.
 function showReloadHint(block: HTMLElement): void {
-  block.className = 'ibt-block';
+  setBlockClass(block);
   block.textContent = '';
-  block.appendChild(el('span', 'ibt-error-msg', '擴充功能已更新，請重新整理此頁面以繼續翻譯。'));
+  const reload = el('span', 'ibt-error-msg', t('reloadExt'));
+  reload.dataset.i18n = 'reloadExt';
+  block.appendChild(reload);
 }
 
 function showError(block: HTMLElement, message: string, retry: () => void): void {
-  block.className = 'ibt-block ibt-error';
+  setBlockClass(block, 'ibt-error');
   block.textContent = '';
   // 429 = rate/quota limit: retries with backoff already happened inside the
   // provider, so this only shows when the quota is genuinely exhausted.
-  const isQuota = /(^|\W)429(\W|$)|quota|rate.?limit/i.test(message);
-  const friendly = message.startsWith('NO_API_KEY')
-    ? '此引擎需要 API key — 點擊擴充功能圖示 → 選項頁填入（或切回免費引擎）。'
-    : isQuota
-      ? '翻譯額度暫時用盡（請求太頻繁或配額已滿），已自動重試多次。請稍後按「重試」，或到選項頁切換免費引擎。'
-      : `翻譯失敗：${message.replace(/\{[\s\S]*$/, '').trim().slice(0, 120) || message.slice(0, 120)}`;
+  const friendly = friendlyTranslateError(message, 'page');
   block.appendChild(el('span', 'ibt-error-msg', friendly));
-  const btn = el('button', 'ibt-retry', '重試');
+  const btn = el('button', 'ibt-retry', t('retry'));
+  btn.dataset.i18n = 'retry';
   btn.addEventListener('click', retry);
   block.appendChild(btn);
 }
@@ -107,14 +143,29 @@ function showError(block: HTMLElement, message: string, retry: () => void): void
  *  can detect "this exact translation already sits here" even after the framework
  *  swaps the source node — see universal.ts. Every block is also tagged
  *  data-ibt-out so the universal MutationObserver ignores its own insertions. */
+function adjacentBlock(anchor: Node): HTMLElement | null {
+  let sib = anchor.nextSibling;
+  while (sib && sib.nodeType === 3 && !(sib.nodeValue || '').trim()) sib = sib.nextSibling;
+  if (sib && sib.nodeType === 1 && (sib as Element).classList.contains('ibt-block')) return sib as HTMLElement;
+  return null;
+}
+
 export function renderTranslationAfter(
   anchor: Node, text: string, opts?: { sig?: string },
 ): HTMLElement | null {
-  if (!hasTranslatableText(text)) return null;
+  if (!hasTranslatableText(text) || isAlreadyTargetLang(text, pageTarget())) return null;
+  // The "From @account" chip and the rest of the player overlay are not prose.
+  if (insideXVideo(anchor)) return null;
+  // Same anchor already has our block (a second scan, or a second video node).
+  const existing = adjacentBlock(anchor);
+  if (existing) return existing;
   const block = el('div', 'ibt-block ibt-loading');
+  block.lang = langTag(pageTarget());
   block.dataset.ibtOut = '1';
   if (opts?.sig) block.dataset.ibtSig = opts.sig;
-  block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
+  const loading = el('span', 'ibt-loading-dot', t('translating'));
+  loading.dataset.i18n = 'translating';
+  block.appendChild(loading);
   if (anchor.parentNode) anchor.parentNode.insertBefore(block, anchor.nextSibling);
   // Tag the original element so "Chinese-only" view can hide it via CSS — but
   // ONLY when our block is a true sibling of a self-contained original
@@ -135,17 +186,22 @@ export function renderTranslationAfter(
     }
   }
 
-  const run = async () => {
-    block.className = 'ibt-block ibt-loading';
+  applyPageFont(block, anchor);
+
+  const run = async (retry = false) => {
+    setBlockClass(block, 'ibt-loading');
     block.textContent = '';
-    block.appendChild(el('span', 'ibt-loading-dot', '翻譯中…'));
+    const again = el('span', 'ibt-loading-dot', t('translating'));
+    again.dataset.i18n = 'translating';
+    block.appendChild(again);
     try {
-      const pairs = await translateBlock(text);
+      const pairs = await translateBlock(text, retry);
       fillPairs(block, pairs);
+      if (!block.querySelector('.ibt-trans')) block.remove();
     } catch (err: any) {
       // Extension was reloaded/updated → quiet "refresh" hint, no retry spam.
       if (isContextGoneError(err)) { showReloadHint(block); return; }
-      showError(block, String(err?.message ?? err), run);
+      showError(block, String(err?.message ?? err), () => run(true));
     }
   };
   void run();
@@ -171,7 +227,7 @@ export class Engine {
     for (const unit of this.adapter.collect()) {
       if (isProcessed(unit.source) || this.pending.has(unit.source)) continue;
       // Skip text already in the target language (e.g. a Chinese post when the
-      // target is Chinese) — no 中文→中文 duplicate. Not marked processed, so it
+      // target is Chinese) — no duplicate of text already in the target language. Not marked processed, so it
       // re-evaluates if the target language is later changed.
       if (isAlreadyTargetLang(unit.text, this.settings.targetLangCode)) continue;
 

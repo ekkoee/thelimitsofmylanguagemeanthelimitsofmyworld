@@ -9,7 +9,11 @@ import { segment } from '../core/segmentation';
 // NOTE: this is an unofficial endpoint. It can rate-limit (HTTP 429) or change.
 // If that ever happens, switch the engine to Gemini (free tier key) in options.
 const ENDPOINT = 'https://translate.googleapis.com/translate_a/single';
+const T_ENDPOINT = 'https://translate.googleapis.com/translate_a/t';
 const MAX_CHUNK = 1000; // keep each request's text short to avoid endpoint limits
+// dict-chrome-ex is the fast client on /translate_a/t. gtx on the same path is
+// the second try. /translate_a/single stays the fallback.
+const T_CLIENTS = ['dict-chrome-ex', 'gtx'];
 
 export const googleProvider: TranslationProvider = {
   id: 'google',
@@ -46,6 +50,27 @@ export const googleProvider: TranslationProvider = {
 };
 
 async function fetchChunk(text: string, sl: string, tl: string): Promise<AlignedPair[]> {
+  const sentences = sentencesLikeGtx(text);
+  if (sentences.length) {
+    try {
+      const translated = await translateFast(sentences, sl, tl);
+      if (translated && translated.length === sentences.length && translated.every((t) => t.trim())) {
+        return sentences.map((o, i) => ({ o, t: translated[i].trim() }));
+      }
+    } catch { /* /t failed or was unusable — same line via /single */ }
+  }
+  return fetchChunkSingle(text, sl, tl);
+}
+
+// Live /single echoes the whole chunk as one original span: multi-sentence
+// English, lists, URLs, emoji, CJK, Korean, and Japanese all come back as a
+// single pair. Splitting them would add extra tinted lines.
+export function sentencesLikeGtx(text: string): string[] {
+  const s = text.trim();
+  return s ? [s] : [];
+}
+
+async function fetchChunkSingle(text: string, sl: string, tl: string): Promise<AlignedPair[]> {
   const url = `${ENDPOINT}?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(tl)}&dt=t&q=${encodeURIComponent(text)}`;
   const data = await gtxGet(url);
   const segs: any[] = Array.isArray(data?.[0]) ? data[0] : [];
@@ -56,10 +81,64 @@ async function fetchChunk(text: string, sl: string, tl: string): Promise<Aligned
   return pairs.length ? pairs : [{ o: text.trim(), t: '' }];
 }
 
-// Shared GET against the gtx endpoint with the same gentle 429 back-off retry.
+async function translateFast(sentences: string[], sl: string, tl: string): Promise<string[] | null> {
+  let last: unknown;
+  for (const client of T_CLIENTS) {
+    try {
+      const data = await callT(client, sentences, sl, tl);
+      const parsed = parseT(data, sentences.length);
+      if (parsed) return parsed;
+      last = new Error('Google unparseable');
+    } catch (err) {
+      last = err;
+    }
+  }
+  throw last instanceof Error ? last : new Error('Google unparseable');
+}
+
+async function callT(client: string, sentences: string[], sl: string, tl: string): Promise<any> {
+  const params = new URLSearchParams();
+  params.set('client', client);
+  params.set('sl', sl);
+  params.set('tl', tl);
+  for (const q of sentences) params.append('q', q);
+  const body = params.toString();
+  const getUrl = `${T_ENDPOINT}?${body}`;
+  if (getUrl.length <= 1800) return requestJson(getUrl);
+  return requestJson(T_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+}
+
+function parseT(data: any, n: number): string[] | null {
+  if (typeof data === 'string') return n === 1 ? [data] : null;
+  if (!Array.isArray(data) || data.length !== n) return null;
+  if (data.every((item) => typeof item === 'string')) return data;
+  if (data.every((item) => Array.isArray(item) && typeof item[0] === 'string')) return data.map((item) => item[0]);
+  return null;
+}
+
+async function requestJson(url: string, init?: RequestInit, attempt = 0): Promise<any> {
+  const res = await fetch(url, init);
+  if ((res.status === 429 || res.status === 403) && attempt < 2) {
+    await sleep(400 * (attempt + 1));
+    return requestJson(url, init, attempt + 1);
+  }
+  if (!res.ok) throw new Error(`Google ${res.status}`);
+  try {
+    return await res.json();
+  } catch {
+    throw new Error('Google unparseable');
+  }
+}
+
+// One request, on its own. A 429 or 403 waits and tries that same request again.
+// Nothing is queued behind a global gap, and nothing retries forever.
 async function gtxGet(url: string, attempt = 0): Promise<any> {
   const res = await fetch(url, { method: 'GET' });
-  if (res.status === 429 && attempt < 2) {
+  if ((res.status === 429 || res.status === 403) && attempt < 2) {
     await sleep(400 * (attempt + 1));
     return gtxGet(url, attempt + 1);
   }

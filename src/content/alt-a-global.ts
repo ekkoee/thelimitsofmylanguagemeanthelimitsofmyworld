@@ -8,28 +8,56 @@
 // it directly instantiates UniversalTranslator, no extra permission needed.
 //
 // Auto-sites (x/reddit/youtube) are excluded: content.js handles Alt+A there.
-import { loadSettings, onSettingsChanged } from '../core/storage';
-import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
+import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
+import { setUiLang, watchUiLang } from '../core/i18n';
+import { applyRootState, cycleView, viewLabel, watchTransSurfaces } from '../utils/dom';
 import { UniversalTranslator, toast } from './universal';
 import { Settings } from '../core/types';
+import { isAltA } from './alt-a-key';
+import { startLinkedIn } from './linkedin';
+import { startImageTranslate } from './image-translate';
+import { startSelectionTranslate } from './selection';
+
+console.log('[IBT] content script loaded', location.hostname, location.href);
+watchUiLang();
+startImageTranslate();
+startSelectionTranslate();
+watchTransSurfaces();
+loadSettings().then((s) => setUiLang(s.uiLang || '')).catch(() => {});
 
 const AUTO_SITE_RE = /^https?:\/\/([^/]*\.)?(x\.com|twitter\.com|reddit\.com|youtube\.com)\//i;
 if (AUTO_SITE_RE.test(location.href)) {
   // content.js owns Alt+A on auto-sites; do nothing here.
+  console.log('[IBT] auto-site, Alt+A owned by content.js', location.hostname);
 } else {
-  const w = window as unknown as { __ibtUniversal?: UniversalTranslator };
+  try {
+  const w = window as unknown as { __ibtUniversal?: UniversalTranslator; __ibtAltAAt?: number };
 
   function applyVisual(s: Settings) {
+    setUiLang(s.uiLang || '');
     applyRootState({
       enabled: s.enabled, showOriginal: s.showOriginal, layout: s.layout, fontScale: s.fontScale,
       targetLangCode: s.targetLangCode, transStyle: s.transStyle, transColor: s.transColor,
-      barStyle: s.barStyle, barColor: s.barColor,
+      barStyle: s.barStyle, barColor: s.barColor, viewMode: s.viewMode,
+      transHighlight: s.transHighlight, highlightColor: s.highlightColor,
     });
   }
 
   async function onAltA(): Promise<void> {
+    const now = Date.now();
+    // Page-world forward, this listener, and chrome.commands all see one keypress.
+    if (now - (w.__ibtAltAAt || 0) < 500) {
+      console.log('[IBT] Alt+A ignored, duplicate');
+      return;
+    }
+    w.__ibtAltAAt = now;
     // Already translated → cycle the 3-state display (pure CSS).
-    if (w.__ibtUniversal) { toast(VIEW_LABEL[cycleView()]); return; }
+    if (w.__ibtUniversal) {
+      const next = cycleView();
+      toast(viewLabel(next));
+      void saveSettings({ viewMode: next });
+      return;
+    }
 
     let settings = await loadSettings();
     applyVisual(settings);
@@ -40,14 +68,46 @@ if (AUTO_SITE_RE.test(location.href)) {
     uni.activate();
   }
 
-  window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (
-      e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
-      (e.key === 'a' || e.key === 'A')
-    ) {
-      e.preventDefault();
-      e.stopPropagation();
-      onAltA().catch(() => {});
-    }
-  }, true);
+  // Apply the saved color as soon as this script exists, and again if the
+  // options page changes it. The stylesheet is injected with this script.
+  onSettingsChanged((s) => applyVisual(s));
+  loadSettings().then((s) => { if (!w.__ibtUniversal) applyVisual(s); }).catch(() => {});
+
+  const onKey = (e: KeyboardEvent) => {
+    if (!e.altKey) return;
+    if (!isAltA(e)) return;
+    console.log('[IBT] Alt+A received', location.hostname, e.code, e.key);
+    e.preventDefault();
+    e.stopPropagation();
+    onAltA().catch((err) => console.log('[IBT] Alt+A failed', err));
+  };
+  console.log('[IBT] Alt+A listener ready (isolated)', location.hostname);
+  window.addEventListener('keydown', onKey, true);
+  document.addEventListener('keydown', onKey, true);
+
+  window.addEventListener('message', (e: MessageEvent) => {
+    const d = e.data;
+    if (!d || d.source !== 'ibt-alt-a' || d.type !== 'toggle') return;
+    // MAIN-world postMessage is same-origin. Do not drop it when the isolated
+    // window object is not === event.source.
+    if (e.source !== window && e.origin !== location.origin) return;
+    console.log('[IBT] Alt+A received (from page)', location.hostname);
+    onAltA().catch((err) => console.log('[IBT] Alt+A failed', err));
+  });
+
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type !== 'ibt-toggle-page') return;
+    console.log('[IBT] Alt+A received (popup/command)', location.hostname);
+    onAltA()
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => {
+        console.log('[IBT] Alt+A failed', err);
+        sendResponse({ ok: false, error: String(err) });
+      });
+    return true;
+  });
+  startLinkedIn();
+} catch (err) {
+  console.log('[IBT] content script init failed', err);
+}
 }

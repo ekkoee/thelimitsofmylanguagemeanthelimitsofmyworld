@@ -1,40 +1,49 @@
 import { detectSite } from '../utils/site';
-import { loadSettings, onSettingsChanged } from '../core/storage';
-import { applyRootState, cycleView, VIEW_LABEL } from '../utils/dom';
+import { loadSettings, onSettingsChanged, saveSettings } from '../core/storage';
+import { setUiLang, watchUiLang } from '../core/i18n';
+import { applyRootState, cycleView, viewLabel } from '../utils/dom';
 import { observeMutations, onUrlChange } from '../utils/observer';
 import { Engine } from './engine';
 import { scanTwitter } from './twitter';
 import { redditAdapter } from './reddit';
 import { startYouTube, updateYouTubeSettings } from './youtube';
-import { startWordPopup, stopWordPopup } from './word-popup';
+import { startXVideo, updateXVideoSettings } from './x-video';
+import { startNetflix, updateNetflixSettings } from './netflix';
+import { isAltA } from './alt-a-key';
+import { startImageTranslate } from './image-translate';
 import { Settings } from '../core/types';
 
-// This script auto-runs on X / Reddit / YouTube (declared in the manifest). When the
-// user opts in to "double-click word popup", it's ALSO dynamically registered on all
-// other sites (see core/dblclick.ts) — there detectSite() is null, so only the popup
-// runs. The "translate any page" feature is still injected on demand via Alt+A.
+// This script auto-runs on X / Reddit / YouTube. Whole-page translation on other
+// sites is injected on demand via Alt+A.
 (async function main() {
+  watchUiLang();
+  startImageTranslate();
   let settings = await loadSettings();
-
-  // Double-click word popup — works on ANY page, gated purely by the setting, and
-  // kept in sync if the user toggles it while the page is open.
-  if (settings.dblClickTranslate) startWordPopup();
-  onSettingsChanged((s) => { if (s.dblClickTranslate) startWordPopup(); else stopWordPopup(); });
 
   const site = detectSite();
   if (!site) return; // non-auto page: nothing below runs, only the word popup above
 
+  // Netflix video subs only. Alt+A stays with the page translator (alt-a-global),
+  // which skips the player. Browse pages are not an auto-site.
+  if (site === 'netflix') {
+    applyRoot(settings);
+    let live = settings;
+    startNetflix(() => live);
+    onSettingsChanged((s) => { live = s; applyRoot(s); updateNetflixSettings(s); });
+    return;
+  }
+
   applyRoot(settings);
 
   // Alt+A (or the popup button) on these auto-sites cycles the 3-state display:
-  // 原文 + 中文 → 只顯示原文 → 只顯示中文 → … (pure CSS, no re-translation).
+  // original + translation → original only → translation only (pure CSS, no re-translation).
   let lastDirectToggle = 0;
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type === 'ibt-toggle-visibility') {
       // If our own keydown handler just toggled (<1s ago), skip — the SW
       // command and the keypress both fire for one Alt+A, don't double-toggle.
       if (Date.now() - lastDirectToggle < 1000) return;
-      flash(VIEW_LABEL[cycleView()]);
+      cycleAndSave();
     }
   });
 
@@ -42,12 +51,10 @@ import { Settings } from '../core/types';
   // is missing/broken (e.g. new extension ID after re-install). The SW command
   // above is deduped via lastDirectToggle so a single press toggles once.
   window.addEventListener('keydown', (e) => {
-    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
-        (e.key === 'a' || e.key === 'A')) {
-      e.preventDefault();
-      lastDirectToggle = Date.now();
-      flash(VIEW_LABEL[cycleView()]);
-    }
+    if (!isAltA(e)) return;
+    e.preventDefault();
+    lastDirectToggle = Date.now();
+    cycleAndSave();
   }, true);
 
   if (site === 'youtube') {
@@ -58,11 +65,13 @@ import { Settings } from '../core/types';
   }
 
   if (site === 'x') {
-    const scan = () => scanTwitter(settings);
+    let live = settings;
+    startXVideo(() => live);
+    const scan = () => scanTwitter(live);
     scan();
     observeMutations(document.body, scan, 300);
     onUrlChange(() => setTimeout(scan, 400));
-    onSettingsChanged((s) => { settings = s; applyRoot(s); scan(); });
+    onSettingsChanged((s) => { live = s; settings = s; applyRoot(s); scan(); updateXVideoSettings(s); });
     return;
   }
 
@@ -75,11 +84,20 @@ import { Settings } from '../core/types';
   onSettingsChanged((s) => { settings = s; applyRoot(s); engine.setSettings(s); scan(); });
 })();
 
+function cycleAndSave(): void {
+  const next = cycleView();
+  flash(viewLabel(next));
+  void saveSettings({ viewMode: next });
+}
+
 function applyRoot(s: Settings) {
+  setUiLang(s.uiLang || '');
   applyRootState({
     enabled: s.enabled, showOriginal: s.showOriginal, layout: s.layout, fontScale: s.fontScale,
     targetLangCode: s.targetLangCode, transStyle: s.transStyle, transColor: s.transColor,
     barStyle: s.barStyle, barColor: s.barColor,
+    transHighlight: s.transHighlight, highlightColor: s.highlightColor,
+    viewMode: s.viewMode,
   });
 }
 

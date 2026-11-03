@@ -1,5 +1,5 @@
 import { renderTranslationAfter } from './engine';
-import { SELECTORS, queryFirst } from './selectors';
+import { SELECTORS, insideXVideo, queryFirst } from './selectors';
 import { isProcessed, markProcessed } from '../utils/dom';
 import { hasTranslatableText, isAlreadyTargetLang } from '../core/segmentation';
 import { Settings } from '../core/types';
@@ -106,7 +106,7 @@ function ensureSplitWatcher(): void {
 // consecutive breaks) is a paragraph boundary. Each returned Line is one whole
 // paragraph; the Google endpoint still returns per-sentence [zh, src] pairs, so
 // fillPairs keeps sentence-level interleaving WITHIN the paragraph.
-function splitParagraphs(tt: HTMLElement): Line[] {
+function splitParagraphs(tt: HTMLElement, targetLang: string): Line[] {
   // Phase 1: build the sequence of PHYSICAL lines (same break logic as before),
   // but KEEP empty lines — they're what marks a paragraph boundary. Each line
   // records the anchor of its terminating break: the <br>, the text node ending
@@ -125,6 +125,11 @@ function splitParagraphs(tt: HTMLElement): Line[] {
     acceptNode(n) {
       if (n.nodeType === 1) {
         if (isIbt(n)) return NodeFilter.FILTER_REJECT;            // skip our own nodes
+        // X's own translation, or a previous Chinese block, is already readable.
+        if (n !== tt) {
+          const own = ((n as HTMLElement).innerText || '').replace(/\s+/g, ' ').trim();
+          if (own.length >= 12 && isAlreadyTargetLang(own, targetLang)) return NodeFilter.FILTER_REJECT;
+        }
         return n.nodeName === 'BR' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       }
       return NodeFilter.FILTER_ACCEPT;                            // text node
@@ -231,6 +236,7 @@ export function scanTwitter(s: Settings): void {
   // 1) Tweets / replies / quotes — interleave a translation after each line.
   for (const node of queryFirst(SELECTORS.x.text)) {
     const tt = node as HTMLElement;
+    if (insideXVideo(tt)) continue;
     healSplits(tt);
     // A Chinese tweet is left COMPLETELY alone — judged as a whole tweet, not per
     // paragraph, so its FTX.com / kyc / @mentions are never "translated", and its
@@ -245,7 +251,7 @@ export function scanTwitter(s: Settings): void {
     (tt as JobbedElement).__ibtJobs = [];
     tt.setAttribute(SPLIT, sig);
     try {
-      const lines = splitParagraphs(tt);
+      const lines = splitParagraphs(tt, s.targetLangCode);
       if (lines.length <= 1) {
         const text = tt.innerText?.trim() ?? '';
         if (text && hasTranslatableText(text) && !isAlreadyTargetLang(text, s.targetLangCode)) deferX(tt, s, () => renderTranslationAfter(tt, text));
@@ -280,7 +286,7 @@ export function scanTwitter(s: Settings): void {
   // 3) Profile bios.
   for (const node of queryFirst(SELECTORS.x.bio)) {
     const b = node as HTMLElement;
-    if (isProcessed(b)) continue;
+    if (insideXVideo(b) || isProcessed(b)) continue;
     const text = b.innerText?.trim() ?? '';
     if (!text || isAlreadyTargetLang(text, s.targetLangCode)) continue; // skip empty / already-Chinese
     markProcessed(b);
@@ -315,7 +321,7 @@ function collectArticleLeaves(root: HTMLElement): HTMLElement[] {
   // ancestor and re-translate it — that was an infinite tree-walking loop.
   const leaves = matches.filter((c) => !matches.some((o) => o !== c && c.contains(o)));
   return leaves.filter((e) => {
-    if (isProcessed(e) || e.closest(ARTICLE_SKIP)) return false;
+    if (isProcessed(e) || insideXVideo(e) || e.closest(ARTICLE_SKIP)) return false;
     const t = e.innerText?.trim() ?? '';
     return !!t && t.length >= 2;
   });
