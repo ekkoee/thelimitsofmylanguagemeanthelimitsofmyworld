@@ -288,8 +288,10 @@ export function renderRegions(
   for (const item of built) {
     if (!item.heading) continue;
     item.node.style.fontSize = `${headPx}px`;
-    fitRegionFont(item.node, headPx);
-    if (parseFloat(item.node.style.fontSize) < fitted) item.node.style.fontSize = `${fitted}px`;
+    item.node.style.lineHeight = LINE;
+    if (item.node.scrollHeight > item.node.clientHeight + 1) {
+      item.node.style.height = `${item.node.scrollHeight + 2}px`;
+    }
   }
 }
 

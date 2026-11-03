@@ -13,6 +13,7 @@ import { friendlyTranslateError } from '../core/errors';
 import { IMAGE_JPEG_QUALITY, IMAGE_MAX_EDGE, ImageRegion, isMostlyLatin, selectInPlace } from '../providers/gemini-image';
 
 const inflight = new Map<string, Promise<void>>();
+const imageCache = new Map<string, ImageRegion[]>();
 
 type ImgHit = HTMLImageElement | HTMLElement;
 
@@ -127,11 +128,27 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
   try {
     const settings = await loadSettings();
     applyRootState(settings);
+    const tJob = performance.now();
     const bytes = await acquire(img, srcUrl);
     if (!shell.isConnected) return;
     if (!bytes) throw new Error(t('imageUnreadable'));
-    console.log('[IBT] image encoded', bytes.via, bytes.mime, bytes.data.length, new Date().toISOString());
+    const tEncoded = performance.now();
+    console.log('[IBT] image encoded', Math.round(tEncoded - tJob), 'ms', bytes.via, bytes.mime, bytes.data.length);
+    const sig = `${bytes.data.length}:${bytes.data.slice(0, 64)}:${bytes.data.slice(-32)}`;
+    const cached = imageCache.get(sig);
+    if (cached) {
+      console.log('[IBT] image cache hit', Math.round(performance.now() - tJob), 'ms');
+      await paintInPlace(shell, img, bytes, cached);
+      return;
+    }
     if (settings.imageModel === 'gemini') {
+      const painted = await paintGeminiFromOcr(shell, img, bytes);
+      if (painted) {
+        imageCache.set(sig, painted);
+        console.log('[IBT] image total', Math.round(performance.now() - tJob), 'ms');
+        return;
+      }
+      console.log('[IBT] image ocr empty, vision');
       const resp = await chrome.runtime.sendMessage({
         type: 'ibt-translate-image', mime: bytes.mime, data: bytes.data,
       }) as { ok?: boolean; text?: string; regions?: ImageRegion[]; error?: string };
@@ -140,7 +157,9 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
         const picked = selectInPlace(resp.regions || []);
         console.log('[IBT] image place', picked.mode, picked.regions.length);
         if (picked.mode === 'inplace') {
+          imageCache.set(sig, picked.regions);
           await paintInPlace(shell, img, bytes, picked.regions);
+          console.log('[IBT] image total', Math.round(performance.now() - tJob), 'ms');
           return;
         }
         const body = (resp.text || '').trim();
@@ -175,6 +194,43 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
     }
     paintPanel(shell, shown);
   }
+}
+
+async function paintGeminiFromOcr(shell: HTMLElement, img: ImgHit, bytes: Bytes): Promise<ImageRegion[] | null> {
+  const ocrT = performance.now();
+  const ocr = await chrome.runtime.sendMessage({
+    type: 'ibt-ocr-blocks', mime: bytes.mime, data: bytes.data,
+  }) as { ok?: boolean; regions?: { text: string; box: [number, number, number, number]; glyph?: number }[]; ms?: number; error?: string };
+  if (!shell.isConnected) return [];
+  if (!ocr?.ok || !(ocr.regions || []).length) {
+    console.log('[IBT] image ocr miss', Math.round(performance.now() - ocrT), 'ms', (ocr?.error || '').slice(0, 80));
+    return null;
+  }
+  console.log('[IBT] image ocr', ocr.ms ?? Math.round(performance.now() - ocrT), 'ms lines', ocr.regions!.length);
+  const seeded = (ocr.regions || []).map((region) => ({
+    textEn: region.text,
+    textZh: region.text,
+    box: region.box,
+    glyph: region.glyph,
+  }));
+  const picked = selectInPlace(seeded);
+  const blocks = picked.mode === 'inplace' ? picked.regions : seeded;
+  const lines = blocks.map((region) => region.textEn).filter(Boolean);
+  if (lines.length < 2) return null;
+  const textT = performance.now();
+  const translated = await chrome.runtime.sendMessage({
+    type: 'ibt-translate-blocks', lines,
+  }) as { ok?: boolean; lines?: string[]; model?: string; ms?: number; error?: string };
+  if (!translated?.ok || !translated.lines || translated.lines.length !== lines.length) {
+    throw new Error(translated?.error || t('imageFailed'));
+  }
+  console.log('[IBT] image gemini text', translated.ms ?? Math.round(performance.now() - textT), 'ms', translated.model, 'blocks', lines.length);
+  const regions = blocks.map((region, i) => ({ ...region, textZh: translated.lines![i] || '' })).filter((region) => region.textZh.trim());
+  const placed = selectInPlace(regions);
+  const ready = placed.mode === 'inplace' ? placed.regions : regions;
+  if (!shell.isConnected) return [];
+  await paintInPlace(shell, img, bytes, ready);
+  return ready;
 }
 
 function mountBelow(img: ImgHit, text: string): HTMLElement {

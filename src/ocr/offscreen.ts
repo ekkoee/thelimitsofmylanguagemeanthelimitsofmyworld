@@ -121,7 +121,42 @@ function tokensFromWords(words: TessWord[]): OcrToken[] {
   return out;
 }
 
-async function recognize(mime: string, data: string): Promise<{ regions: { text: string; box: [number, number, number, number] }[]; ms: number }> {
+function isHighlightPixel(r: number, g: number, b: number): boolean {
+  return b > 80 && b > r + 20 && b > g + 8 && r < 200;
+}
+
+/** White text on a blue selection is invisible to a dark-on-light OCR pass. Invert those pixels. */
+async function highlightBlob(bitmap: ImageBitmap): Promise<Blob | null> {
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(bitmap, 0, 0);
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = img.data;
+  let hits = 0;
+  const samples = Math.max(1, Math.floor(d.length / 4 / 4000));
+  for (let p = 0; p < d.length; p += 4 * samples) {
+    if (isHighlightPixel(d[p], d[p + 1], d[p + 2])) hits += 1;
+  }
+  if (hits < 12) return null;
+  for (let p = 0; p < d.length; p += 4) {
+    if (!isHighlightPixel(d[p], d[p + 1], d[p + 2])) continue;
+    d[p] = 255 - d[p];
+    d[p + 1] = 255 - d[p + 1];
+    d[p + 2] = 255 - d[p + 2];
+  }
+  ctx.putImageData(img, 0, 0);
+  const blob = await canvas.convertToBlob({ type: 'image/png' });
+  return blob.size > 32 ? blob : null;
+}
+
+function covers(token: OcrToken, other: OcrToken): boolean {
+  const cx = other.x + other.w / 2;
+  const cy = other.y + other.h / 2;
+  return cx >= token.x && cx <= token.x + token.w && cy >= token.y && cy <= token.y + token.h;
+}
+
+async function recognize(mime: string, data: string): Promise<{ regions: { text: string; box: [number, number, number, number]; glyph?: number }[]; ms: number }> {
   const t0 = Date.now();
   const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: mime || 'image/jpeg' });
@@ -130,6 +165,15 @@ async function recognize(mime: string, data: string): Promise<{ regions: { text:
   const height = bitmap.height;
   const worker = await getWorker();
   const tokens = tokensFromWords((await worker.recognize(blob)).data.words || []);
+  const extra = await highlightBlob(bitmap);
+  if (extra) {
+    const more = tokensFromWords((await worker.recognize(extra)).data.words || []);
+    for (const token of more) {
+      if (tokens.some((have) => covers(have, token))) continue;
+      tokens.push(token);
+    }
+    console.log('[IBT] ocr highlight words', more.length);
+  }
   bitmap.close();
   return { regions: tokensToRegions(tokens, width, height), ms: Date.now() - t0 };
 }

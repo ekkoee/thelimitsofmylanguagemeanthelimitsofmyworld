@@ -167,4 +167,13 @@ export interface OcrTranslateMessage {
   mime: string;
   data: string;
 }
-export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage | FetchImageMessage | CaptureTabMessage | TranslateImageMessage | OcrTranslateMessage;
+export interface OcrBlocksMessage {
+  type: 'ibt-ocr-blocks';
+  mime: string;
+  data: string;
+}
+export interface TranslateBlocksMessage {
+  type: 'ibt-translate-blocks';
+  lines: string[];
+}
+export type RuntimeMessage = TranslateMessage | TranslateBatchMessage | LookupMessage | FetchImageMessage | CaptureTabMessage | TranslateImageMessage | OcrTranslateMessage | OcrBlocksMessage | TranslateBlocksMessage;

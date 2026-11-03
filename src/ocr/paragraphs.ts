@@ -22,6 +22,12 @@ export interface PixelRect { x: number; y: number; w: number; h: number }
 /** Drop a legend dot that Tesseract glued to the next word (`@EU27`, `oNY`). */
 export function cleanOcrText(text: string): string {
   let t = text.replace(/\s+/g, ' ').trim();
+  if (/^[•·▪◦‣]$/.test(t)) return t;
+  const bullet = t.match(/^([•·▪◦‣])\s+(.*)$/);
+  if (bullet) {
+    const rest = cleanOcrText(bullet[2]);
+    return rest ? `${bullet[1]} ${rest}` : bullet[1];
+  }
   t = t.replace(/^[^A-Za-z0-9]+/, '').replace(/[^A-Za-z0-9.%]+$/, '');
   if (/^[A-Z]{2}e$/.test(t)) t = t.slice(0, 2);
   else if (/^[oO][A-Z]{2,4}$/.test(t) || /^[oO][A-Z][a-z]$/.test(t)) t = t.slice(1);
@@ -33,8 +39,10 @@ export function isOcrNoise(text: string): boolean {
   const raw = text.replace(/\s+/g, ' ').trim();
   if (!raw) return true;
   if (/[®©]/.test(raw) && cleanOcrText(raw).length <= 6) return true;
+  if (/^[•·▪◦‣]$/.test(raw)) return false;
   const t = cleanOcrText(raw);
   if (!t) return true;
+  if (/^[•·▪◦‣]/.test(t)) return false;
   if (t.length === 1 && !/[0-9]/.test(t) && !/^[AI]$/i.test(t)) return true;
   if (/^[^0-9A-Za-z]+$/.test(t)) return true;
   if (/[\[\]{}()<>|@®©]/.test(t) && t.length <= 4 && !/[A-Za-z]{3,}/.test(t)) return true;

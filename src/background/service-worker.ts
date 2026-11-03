@@ -10,7 +10,7 @@ import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batche
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
 import { friendlyTranslateError } from '../core/errors';
 import { setUiLang, t } from '../core/i18n';
-import { echoesEnglish, shouldSkipImageText, translateImageSequential } from '../providers/gemini-image';
+import { buildImageTextBody, echoesEnglish, parseImageText, shouldSkipImageText, translateImageSequential } from '../providers/gemini-image';
 import { normalizeGeminiKey } from '../core/gemini-key';
 import { bindQuota, emptyQuotaState, fingerprintKey, migrateQuotaState, quotaForKey, setQuotaAlign, setQuotaReady, QuotaState } from '../core/quota-router';
 
@@ -235,6 +235,18 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
     });
     return true;
   }
+  if (msg?.type === 'ibt-ocr-blocks') {
+    ocrBlocks(msg.mime, msg.data)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'image') }));
+    return true;
+  }
+  if (msg?.type === 'ibt-translate-blocks') {
+    translateImageBlocks(msg.lines || [])
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((err) => sendResponse({ ok: false, error: friendlyTranslateError(err, 'image') }));
+    return true;
+  }
   if (msg?.type === 'ibt-ocr-translate') {
     ocrTranslate(msg.mime, msg.data)
       .then((result) => sendResponse({ ok: true, ...result }))
@@ -360,6 +372,49 @@ async function translateOcrLines(lines: string[]): Promise<string[]> {
     out.push(toTraditional(pairs.map((p) => p.t).join('').trim()));
   }
   return out;
+}
+
+const blockCache = new Map<string, { lines: string[]; model: string }>();
+
+async function ocrBlocks(mime: string, data: string): Promise<{ regions: { text: string; box: [number, number, number, number]; glyph?: number }[]; ms: number }> {
+  await ensureOffscreen();
+  const t0 = Date.now();
+  const ocr = await chrome.runtime.sendMessage({ type: 'ibt-offscreen-ocr', mime, data }) as {
+    ok?: boolean; error?: string; ms?: number; regions?: { text: string; box: [number, number, number, number]; glyph?: number }[];
+  };
+  if (!ocr?.ok) throw new Error(ocr?.error || '本機文字辨識失敗');
+  const regions = (ocr.regions || []).filter((region) => region.text && region.box && !shouldSkipImageText(region.text));
+  console.log('[IBT] image ocr', Date.now() - t0, 'ms regions', regions.length);
+  return { regions, ms: ocr.ms || Date.now() - t0 };
+}
+
+async function translateImageBlocks(lines: string[]): Promise<{ lines: string[]; model: string; ms: number }> {
+  const settings = await loadSettings();
+  const key = normalizeGeminiKey(settings.apiKeys.gemini);
+  if (!key) throw new Error('NO_API_KEY:image');
+  const model = settings.model && /^gemini/i.test(settings.model) ? settings.model : 'gemini-3.5-flash-lite';
+  const sig = `${model}\n${lines.join('\n')}`;
+  const cached = blockCache.get(sig);
+  if (cached) {
+    console.log('[IBT] image gemini text cache', model);
+    return { ...cached, ms: 0 };
+  }
+  const t0 = Date.now();
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify(buildImageTextBody(model, lines)),
+  });
+  const raw = await res.text();
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${raw.slice(0, 180)}`);
+  const json = JSON.parse(raw) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+  const content = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') ?? '';
+  const translated = parseImageText(content, lines.length).map((line, i) => toTraditional(line || lines[i]));
+  if (translated.length !== lines.length) throw new Error('Gemini image text');
+  const ms = Date.now() - t0;
+  console.log('[IBT] image gemini text', ms, 'ms model', model, 'blocks', lines.length);
+  blockCache.set(sig, { lines: translated, model });
+  return { lines: translated, model, ms };
 }
 
 async function ocrTranslate(mime: string, data: string): Promise<{ regions: { textEn: string; textZh: string; box?: [number, number, number, number]; glyph?: number }[]; ms: number }> {

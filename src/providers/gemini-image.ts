@@ -10,8 +10,8 @@ export { friendlyTranslateError };
 
 export const IMAGE_PRIMARY_DEFAULT = 'gemini-2.5-flash-lite';
 export const IMAGE_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'];
-export const IMAGE_MAX_EDGE = 1600;
-export const IMAGE_JPEG_QUALITY = 0.85;
+export const IMAGE_MAX_EDGE = 1280;
+export const IMAGE_JPEG_QUALITY = 0.8;
 
 export interface ImageRegion {
   textEn: string;
@@ -85,7 +85,9 @@ export function buildImageBody(opts: { mime: string; data: string; model: string
       temperature: 0.2,
       responseMimeType: 'application/json',
       responseSchema: IMAGE_SCHEMA,
-      ...( /gemini-3/i.test(opts.model) ? { thinkingConfig: { thinkingLevel: 'minimal' } } : {}),
+      ...( /gemini-3/i.test(opts.model)
+        ? { thinkingConfig: { thinkingLevel: 'minimal' } }
+        : { thinkingConfig: { thinkingBudget: 0 } }),
     },
   };
 }
@@ -219,12 +221,22 @@ function sameLine(a: [number, number, number, number], b: [number, number, numbe
   return gapX < Math.max(a[3], b[3]) * 2.2 && gapX > -minH;
 }
 
+/** A wrapped line, not the next bullet. Capitalized lines start their own block. */
+function isWrapLine(prev: string, next: string): boolean {
+  const b = next.trim();
+  const a = prev.trim();
+  if (!b || startsBlock(b, undefined)) return false;
+  if (/^[a-z("'\u201c]/.test(b)) return true;
+  if (/[,:;(–—\-]$/.test(a)) return true;
+  return false;
+}
+
 function continues(prev: ImageRegion, next: ImageRegion): boolean {
   if (!prev.box || !next.box) return false;
   if (startsBlock(next.textEn, next.kind)) return false;
   if ((prev.kind === 'heading' || next.kind === 'heading') && sameLine(prev.box, next.box)) return true;
   if (prev.kind === 'heading' || next.kind === 'heading') return false;
-  if (isShortLabel(prev.textEn) && isShortLabel(next.textEn)) return false;
+  if (!isWrapLine(prev.textEn, next.textEn)) return false;
   return sameBlock(prev.box, next.box);
 }
 
@@ -262,7 +274,8 @@ export function groupImageRegions(regions: ImageRegion[]): ImageRegion[] {
       prev.labelBold = prev.labelBold || region.labelBold;
       continue;
     }
-    const kind = region.kind || (isProse(region.textEn) ? 'paragraph' : 'line');
+    const kind = region.kind
+      || (startsBlock(region.textEn, undefined) ? 'bullet' : (isShortLabel(region.textEn) && !/[.!?]$/.test(region.textEn.trim()) ? 'heading' : (isProse(region.textEn) ? 'paragraph' : 'line')));
     out.push({ ...region, kind, glyph: region.glyph && region.glyph < 0.12 ? region.glyph : (lineH < 0.12 ? lineH : region.glyph) });
   }
   return out
@@ -344,6 +357,52 @@ export class GeminiStatusError extends Error {
  * Best available model, one call at a time. A daily-exhausted model is skipped.
  * A silent socket is aborted after 15s. The chain stops within 20s.
  */
+function isGemini3(model: string): boolean {
+  return /gemini-3/i.test(model);
+}
+
+/** One text call for every block, with the whole image as context. No picture bytes. */
+export function buildImageTextBody(model: string, blocks: string[]): Record<string, unknown> {
+  const prompt = [
+    'The blocks below are one image, in reading order. Each block is a heading or a single list item.',
+    'Translate each block into Traditional Chinese as used in Taiwan. Keep the same number of blocks, in the same order. Do not merge or drop any block.',
+    'Translate the meaning. A take-home task is 小型專題作業, not 帶回家. Keep product names.',
+    'If a block starts with a date label such as June: or Oct 20:, begin the translation with that label once, like 6月： or 10月20日：.',
+    `Return JSON {"t":[...]} with exactly ${blocks.length} strings.`,
+    ...blocks.map((block, i) => `(${i}) ${block}`),
+  ].join('\n');
+  return {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: Math.min(2048, 160 * blocks.length + 64),
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: { t: { type: 'ARRAY', items: { type: 'STRING' } } },
+        required: ['t'],
+      },
+      ...(isGemini3(model)
+        ? { thinkingConfig: { thinkingLevel: 'minimal' } }
+        : { thinkingConfig: { thinkingBudget: 0 } }),
+    },
+  };
+}
+
+export function parseImageText(raw: string, count: number): string[] {
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start < 0 || end <= start) return [];
+  try {
+    const parsed = JSON.parse(raw.slice(start, end + 1)) as { t?: unknown };
+    if (!Array.isArray(parsed.t)) return [];
+    const out = parsed.t.map((item) => (typeof item === 'string' ? item.trim() : ''));
+    return out.length === count ? out : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function translateImageSequential(opts: {
   key: string;
   model?: string;

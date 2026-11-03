@@ -49,7 +49,7 @@ if (process.argv.includes('--self-test')) {
     { textEn: '2. Liability-bearers and licensed entities stay accountable', textZh: '2. 2. 責任承擔者', box: [0.08, 0.25, 0.82, 0.04] },
   ]);
   const item = list.regions.find((r) => r.textEn.includes('are the moat'));
-  check('short last line stays inside the paragraph box', !!item && item.kind === 'paragraph' && item.box && item.box[1] + item.box[3] >= 0.22);
+  check('short last line stays inside the paragraph box', !!item && item.box && item.box[1] + item.box[3] >= 0.26);
   check('next numbered item stays separate', list.regions.some((r) => r.textEn.startsWith('2.')));
   check('list marker is written once', list.regions.find((r) => r.textEn.startsWith('2.')).textZh === '2. 責任承擔者');
   const bullet = api.selectInPlace([
@@ -65,6 +65,28 @@ if (process.argv.includes('--self-test')) {
   check('the next dated bullet stays separate', bullet.regions.filter((r) => r.kind === 'bullet').length === 2);
   check('a title fragment on the same line joins the heading', bullet.regions.filter((r) => r.kind === 'heading').length === 1 && bullet.regions.some((r) => r.kind === 'heading' && r.textZh.includes('條')));
   check('blank box is dropped', !api.selectInPlace([{ textEn: '   ', textZh: '   ', box: [0.1, 0.1, 0.2, 0.05] }]).regions.length);
+  const job = [
+    { textEn: 'Data Engineer (Sports & Prediction Markets)', textZh: '資料工程師（體育與預測市場）', box: [0.04, 0.04, 0.55, 0.04] },
+    { textEn: 'Betstamp Ventures • Toronto, ON (Hybrid)', textZh: '貝斯坦普創投 · 安大略省多倫多（混合）', box: [0.04, 0.09, 0.5, 0.03] },
+    { textEn: 'The Process', textZh: '過程', box: [0.04, 0.18, 0.2, 0.03] },
+    { textEn: 'Short video intro: a few questions, recorded on your own time', textZh: '短片自我介紹：幾個問題，自己找時間錄', box: [0.06, 0.26, 0.8, 0.03] },
+    { textEn: '45-min intro call: meet the team, swap questions', textZh: '45 分鐘介紹電話：認識團隊、互相提問', box: [0.06, 0.31, 0.75, 0.03] },
+    { textEn: 'Lightweight take-home (under 2 hours): a real problem from this codebase, not a LeetCode', textZh: '輕量的小型專題作業（兩小時內）：這個程式庫裡的真實問題，不是 LeetCode', box: [0.06, 0.36, 0.84, 0.03] },
+    { textEn: 'exercise', textZh: '練習', box: [0.09, 0.40, 0.2, 0.025] },
+    { textEn: 'Systems conversation: a real problem together, no whiteboard algorithms', textZh: '系統對談：一起看真實問題，沒有白板演算法', box: [0.06, 0.46, 0.8, 0.03] },
+    { textEn: 'Final interview: meet leadership', textZh: '最終面試：見領導', box: [0.06, 0.51, 0.5, 0.03] },
+    { textEn: 'Offer → onboarding → shipping to thousands of bettors', textZh: '錄取、入職、然後把產品送到數千位投注者手上', box: [0.06, 0.56, 0.7, 0.03] },
+  ];
+  const grouped = api.selectInPlace(job);
+  check('six bullets stay six blocks', grouped.regions.filter((r) => r.textEn.startsWith('Short') || r.textEn.startsWith('45-') || r.textEn.startsWith('Lightweight') || r.textEn.startsWith('Systems') || r.textEn.startsWith('Final') || r.textEn.startsWith('Offer')).length === 6);
+  check('a lowercase wrap joins its bullet', grouped.regions.some((r) => r.textEn.includes('Lightweight') && r.textEn.includes('exercise')));
+  check('the heading is not a tiny merged line', grouped.regions.some((r) => r.textEn === 'The Process' && r.kind === 'heading'));
+  const t0 = performance.now();
+  api.selectInPlace(job);
+  const groupMs = performance.now() - t0;
+  const body = JSON.stringify(api.buildImageTextBody('gemini-2.5-flash-lite', job.map((r) => r.textEn)));
+  check('text request carries every block and no image', body.includes('take-home') && body.includes('thinkingBudget') && !body.includes('inline_data'));
+  console.log('[IBT] image group', groupMs.toFixed(2), 'ms; text payload', body.length, 'bytes (vision jpeg is typically >100000)');
   check('a title and the subtitle under it stay two regions', placed.regions.filter((r) => r.textZh.includes('生產力') || r.textZh.includes('實際產出')).length === 2);
   check('a bare date is not painted', !placed.regions.some((r) => r.textEn.startsWith('November')));
   execSync(
