@@ -68,6 +68,12 @@ Chrome 有時會在啟動時詢問是否停用開發人員模式擴充功能。�
 
 X、Reddit、YouTube 會自動處理頁面或字幕。Netflix 只在觀看頁自動顯示字幕；瀏覽頁和其他網站用 `Alt+A`。
 
+## 安全與隱私
+
+- [PRIVACY.md](PRIVACY.md)：哪些資料會被處理、送到哪裡、存在哪裡。
+- [SECURITY.md](SECURITY.md)：權限、對外主機、金鑰、訊息檢查，以及如何回報漏洞。
+- [1.5.8 檢查報告](docs/security-audit-1.5.8.md)。
+
 ## 隱私
 
 完整說明見 [PRIVACY.md](PRIVACY.md)（繁體中文與 English）。
@@ -169,6 +175,12 @@ Chrome may ask on startup whether to disable a developer-mode extension. For a m
 The only shortcut registered with Chrome is `Alt+A` (`toggle-page-translation`). An unpacked install sometimes does not bind it. If the key does nothing, set it at `chrome://extensions/shortcuts`. Esc only closes the selection card. It is not a Chrome command.
 
 X, Reddit, and YouTube start on their own. Netflix captions start on a watch page. Browse pages and every other site use `Alt+A`.
+
+## Security & Privacy
+
+- [PRIVACY.md](PRIVACY.md): what is processed, which services receive it, and where it is stored.
+- [SECURITY.md](SECURITY.md): permissions, external hosts, key handling, message checks, and how to report a vulnerability.
+- [1.5.8 audit](docs/security-audit-1.5.8.md).
 
 ## Privacy
 

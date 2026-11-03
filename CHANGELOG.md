@@ -4,41 +4,52 @@
 
 ## [1.5.8] — 2026-11-03
 ### 修正 Fixed
-- **Gemini 金鑰只留在這台電腦。** 不再寫進 Chrome 同步。這台電腦若已同步過金鑰，下次開啟時會搬到本機並從同步設定清掉。其他電腦需要再貼一次。
-- **紀錄不印金鑰，也不印整段原文。** 頁面翻譯把金鑰放在 HTTPS 標頭，不再放進網址。
+- **Gemini 金鑰只留在這台電腦。** 不再寫進 Chrome 同步。這台電腦若已同步過金鑰，下次開啟時會搬到本機並從同步設定清掉。其他電腦需要再貼一次。金鑰只放在 HTTPS 的 `x-goog-api-key` 標頭，不放進網址。
+  The Gemini key stays on this computer in `chrome.storage.local`. It is not written to Chrome Sync. A key already synced is moved locally on the next read and cleared from sync. Paste it again on other computers. The key travels only in the HTTPS `x-goog-api-key` header, not in the URL.
+- **紀錄不印金鑰，也不印整段原文。** 擴充套件只接受自己送來的訊息。YouTube 字幕解實體時不再使用 `innerHTML`。
+  Logs do not print the key or the full source text. Extension messages are accepted only from this extension. YouTube caption entity decoding no longer uses `innerHTML`.
 
 ### 新增 Added
-- 隱私說明（[PRIVACY.md](PRIVACY.md)）。GitHub 加上 CodeQL 與每週的 Dependabot。
+- [PRIVACY.md](PRIVACY.md)、[SECURITY.md](SECURITY.md)，以及 [1.5.8 檢查報告](docs/security-audit-1.5.8.md)。GitHub 加上 CodeQL（`javascript-typescript`）與每週的 Dependabot。
+  Privacy and security notes, plus the 1.5.8 audit. CodeQL (`javascript-typescript`) and weekly Dependabot.
 
 ## [1.5.7] — 2026-11-03
 ### 修正 Fixed
-- **圖片翻譯改由本機認字、再一次把整張圖的段落交給 Gemini。** 每一則條列各自一塊，藍色反白的字也會認。同一張圖再翻不用重送。
+- **圖片翻譯先在本機認字，再把整段文字交給 Gemini。** 每一則條列各自一塊，藍色反白的字也會認。同一張圖再翻不用重送。認不到字時才把圖片送出。
+  Image translation recognizes text locally, then sends the blocks as one Gemini text request. Each bullet stays its own block, including text on a blue highlight. The same image is cached. The picture is sent only when recognition finds nothing.
 
 ## [1.5.6] — 2026-11-03
 ### 修正 Fixed
 - **字幕大小跟著播放器走。** YouTube 和 X 的字幕用畫面短邊的固定比例，小窗、劇院模式、全螢幕看起來一樣。字級設定是在這個比例上再放大或縮小。
+  YouTube and X captions scale with the short side of the player, so a small window, theater mode, and fullscreen keep the same proportion. Font scale multiplies that size.
 
 ## [1.5.5] — 2026-11-03
 ### 修正 Fixed
-- **圖片翻譯改成一段一塊。** 標題、每一則條列都是同一塊，字級全圖一致。條列符號和粗體日期留在原位。底色取自圖片，不再出現白塊，英文不會從行間露出。
+- **圖片翻譯一段一塊，字級全圖一致。** 標題與每一則條列各自成塊。條列符號和粗體日期留在原位。底色取自圖片，英文不會從行間露出。
+  Image translation uses one block per title or bullet, with one body font size for the picture. Markers and bold date labels stay in place. The fill comes from the image, so English does not show through the gaps.
 
 ## [1.5.4] — 2026-11-03
 ### 修正 Fixed
-- **圖片譯文蓋住整段原文。** 每一段用原文的完整範圍（含最後一行和清單編號），底色不透明。中文較長時縮小字級，不再露出英文。清單編號只出現一次。按住「原文」仍可看原圖。
+- **圖片譯文蓋住整段原文。** 每一段含最後一行和清單編號，底色不透明。中文較長時縮小字級。清單編號只出現一次。按住「原文」仍可看原圖。
+  Each image translation covers the full source paragraph, including the last line and the list number, with an opaque fill. Longer Chinese shrinks to fit. The list number is drawn once. Holding “original” shows the picture again.
 
 ## [1.5.3] — 2026-11-03
 ### 移除 Removed
-- **拿掉 1.5.2 的 Gemini 逾時自動改走免費翻譯。** 單次逾時或連續失敗都不再改用 Google。Gemini 的行為回到 1.5.1。
+- **拿掉 1.5.2 的 Gemini 逾時自動改走免費翻譯。** 逾時或失敗都不再改用 Google。淨效果：選了 Gemini 就不會自動改走 Google。
+  Removed the 1.5.2 timeout that switched later requests to Google. A Gemini timeout or failure no longer uses Google. Net effect: choosing Gemini does not fall back to Google.
 ### 修正 Fixed
-- **X 影片不再同時出現兩套字幕。** 開啟 CC 且翻譯作用時，X 自己的字幕只隱藏顯示，字幕軌仍留著。畫面上只留我們的字幕：對照、只顯示譯文，或只顯示原文。關掉翻譯或關掉 CC 後，X 的字幕恢復。
+- **X 影片不再同時出現兩套字幕。** 開啟 CC 且翻譯作用時，X 自己的字幕只隱藏顯示，字幕軌仍留著。畫面上只留我們的三種呈現。關掉翻譯或關掉 CC 後，X 的字幕恢復。
+  While our captions are on, X’s own caption display is hidden and the text track is kept. Only our three views show. Turning translation or CC off restores X’s captions.
 
 ## [1.5.2] — 2026-11-02
-### 修正 Fixed
-- **Gemini 太慢就改走免費翻譯。** 單次超過 8 秒會中止，同一批改用 Google；Google 失敗時仍改問 Microsoft。連續三次逾時後，60 秒內直接用免費翻譯，之後再試 Gemini。
+### 變更 Changed
+- **曾讓 Gemini 逾時後改走 Google，1.5.3 已整段移除。** 淨效果與 1.5.1 相同：Gemini 不會因為逾時自動改用 Google。
+  This version briefly sent later batches to Google after a Gemini timeout. 1.5.3 removed that path. Net effect, same as 1.5.1: Gemini does not switch to Google on its own.
 
 ## [1.5.1] — 2026-11-02
 ### 新增 Added
 - **工具列可選翻譯引擎。** Google 翻譯或 Gemini，與設定頁共用同一組設定。選了 Gemini 卻還沒有金鑰時，會提示前往設定填寫。已有金鑰時，安靜顯示模型名稱。
+  The toolbar can choose Google or Gemini again, using the same settings as the options page. Gemini without a key points you to the key field. With a key, the model name is shown quietly.
 
 ## [1.5.0] — 2026-11-01
 ### 變更 Changed
