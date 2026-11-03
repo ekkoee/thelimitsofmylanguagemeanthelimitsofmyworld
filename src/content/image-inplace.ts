@@ -229,20 +229,24 @@ export function renderRegions(
     : contentRect(img);
   const ew = overlay.clientWidth || 1;
   const eh = overlay.clientHeight || 1;
-  for (const region of regions) {
+  const spaceW = content.w || ew;
+  const spaceH = content.h || eh;
+  const placed = separateCovers(regions.map((region) => {
+    if (!region.box || !region.textZh) return region;
+    const full = coverSourceBox(region.box, region.textEn || '', canvas);
+    return { ...region, box: padCover(full, spaceW, spaceH) as [number, number, number, number] };
+  }));
+  for (const region of placed) {
     if (!region.box || !region.textZh) continue;
-    const band = canvas ? textBand(canvas, region.box) : region.box;
-    // A stacked label (US over average) is much taller than one letter band.
-    // Keep every word box. A single loose box keeps only the letter band, not a dot below it.
-    const stacked = region.box[3] > band[3] * 2.2;
-    const padded = coverBox(stacked ? region.box : band, content.w || ew, content.h || eh);
+    const padded = region.box;
     const left = content.x + padded[0] * content.w;
     const top = content.y + padded[1] * content.h;
-    let width = Math.max(8, padded[2] * content.w);
+    const width = Math.max(8, padded[2] * content.w);
     const height = Math.max(8, padded[3] * content.h);
-    const bg = neutralFill(canvas ? medianEdgeColor(canvas, region.box) : { r: 244, g: 241, b: 234 });
+    const bg = neutralFill(canvas ? medianEdgeColor(canvas, padded) : { r: 244, g: 241, b: 234 });
     const node = document.createElement('div');
-    node.className = region.kind === 'paragraph' ? 'ibt-img-region ibt-img-paragraph' : 'ibt-img-region';
+    const paragraph = region.kind === 'paragraph';
+    node.className = paragraph ? 'ibt-img-region ibt-img-paragraph' : 'ibt-img-region';
     node.style.left = `${(left / ew) * 100}%`;
     node.style.top = `${(top / eh) * 100}%`;
     node.style.width = `${(width / ew) * 100}%`;
@@ -252,47 +256,106 @@ export function renderRegions(
     node.textContent = region.textZh;
     overlay.appendChild(node);
     const words = (region.textEn || region.textZh).trim().split(/\s+/).filter(Boolean).length;
-    const lines = region.kind === 'paragraph' ? Math.max(1, Math.round(words / 8)) : 1;
-    const glyphPx = region.glyph ? region.glyph * (content.h || eh) : 0;
-    const bandPx = band[3] * (content.h || eh);
-    const letterPx = bandPx >= 8 ? bandPx : (glyphPx || region.box[3] * (content.h || eh) / lines);
-    const rawH = glyphPx > 0 ? Math.min(letterPx, glyphPx) : letterPx;
-    const cap = Math.max(1, Math.round(rawH));
-    node.style.fontSize = `${cap}px`;
-    node.style.lineHeight = '1';
-    const room = Math.max(0, (content.x + content.w) - left - 4);
-    if (node.scrollWidth > node.clientWidth + 1 && room > width) {
-      width = Math.min(room, Math.max(width, node.scrollWidth + 2));
-      node.style.width = `${(width / ew) * 100}%`;
-    }
-    fitRegionFont(node, cap);
+    const lines = paragraph ? Math.max(1, Math.round(words / 8)) : 1;
+    const linePx = height / lines;
+    node.style.lineHeight = paragraph ? '1.35' : '1';
+    node.style.padding = '2px 4px';
+    node.style.boxSizing = 'border-box';
+    fitRegionFont(node, Math.max(1, Math.floor(linePx / (paragraph ? 1.35 : 1))));
   }
 }
 
-/** A few pixels around the full word box. Not enough to swallow a neighboring dot. */
-function coverBox(
-  box: [number, number, number, number],
-  imgW: number,
-  imgH: number,
-): [number, number, number, number] {
-  const padPx = 2;
-  const x = Math.max(0, box[0] * imgW - padPx);
-  const y = Math.max(0, box[1] * imgH - padPx);
-  const r = Math.min(imgW, (box[0] + box[2]) * imgW + padPx);
-  const b = Math.min(imgH, (box[1] + box[3]) * imgH + padPx);
+type Box = [number, number, number, number];
+
+/** Pull a list marker that sits just left of the words into the same cover. */
+export function coverSourceBox(box: Box, textEn: string, canvas: HTMLCanvasElement | null): Box {
+  let [x, y, w, h] = box;
+  if (/^\d{1,3}[.)]/.test(textEn.trim())) {
+    const extra = Math.min(0.14, Math.max(h * 1.8, 0.018));
+    const nx = Math.max(0, x - extra);
+    w += x - nx;
+    x = nx;
+  }
+  if (!canvas?.width || !canvas.height) return [x, y, w, h];
+  return includeLeftInk(canvas, [x, y, w, h]);
+}
+
+function includeLeftInk(canvas: HTMLCanvasElement, box: Box): Box {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return box;
+  const W = canvas.width;
+  const H = canvas.height;
+  const x0 = Math.max(0, Math.floor(box[0] * W));
+  const y0 = Math.max(0, Math.floor(box[1] * H));
+  const y1 = Math.min(H, Math.ceil((box[1] + box[3]) * H));
+  const reach = Math.min(x0, Math.max(8, Math.round(box[3] * H * 2.4)));
+  if (reach < 2 || y1 - y0 < 4) return box;
+  const data = ctx.getImageData(x0 - reach, y0, reach, y1 - y0).data;
+  const iw = reach;
+  const ih = y1 - y0;
+  const step = Math.max(1, Math.floor(ih / 24));
+  let left = iw;
+  for (let x = 0; x < iw; x++) {
+    let dark = 0;
+    for (let y = 0; y < ih; y += step) {
+      const i = (y * iw + x) * 4;
+      const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+      if (lum < 170) dark += 1;
+    }
+    if (dark >= 2) { left = x; break; }
+  }
+  if (left >= iw - 1) return box;
+  const nx = (x0 - reach + left) / W;
+  return [nx, box[1], box[0] + box[2] - nx, box[3]];
+}
+
+/** A few pixels around the full source box. Capped so the pad does not swallow the next paragraph. */
+export function padCover(box: Box, imgW: number, imgH: number): Box {
+  const padX = Math.min(14, Math.max(3, box[3] * imgH * 0.12));
+  const padY = Math.min(8, Math.max(3, box[3] * imgH * 0.08));
+  const x = Math.max(0, box[0] * imgW - padX);
+  const y = Math.max(0, box[1] * imgH - padY);
+  const r = Math.min(imgW, (box[0] + box[2]) * imgW + padX);
+  const b = Math.min(imgH, (box[1] + box[3]) * imgH + padY);
   return [x / imgW, y / imgH, (r - x) / imgW, (b - y) / imgH];
 }
 
-/** Start at the source glyph height and only shrink so the line fits the box. */
+/** Padding may touch the next paragraph. Give the shared edge back so the boxes meet instead of stacking. */
+export function separateCovers<T extends { box?: Box }>(regions: T[]): T[] {
+  const items = regions.map((region) => ({ ...region, box: region.box ? [...region.box] as Box : undefined }));
+  const boxes = items.filter((item) => item.box).sort((a, b) => a.box![1] - b.box![1]);
+  for (let i = 0; i < boxes.length - 1; i++) {
+    const a = boxes[i].box!;
+    const b = boxes[i + 1].box!;
+    const overlapX = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]);
+    if (overlapX <= Math.min(a[2], b[2]) * 0.3) continue;
+    const overlapY = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
+    if (overlapY <= 0 || overlapY > Math.min(a[3], b[3]) * 0.35) continue;
+    const cut = (Math.max(a[1], b[1]) + Math.min(a[1] + a[3], b[1] + b[3])) / 2;
+    if (a[1] < cut && cut < a[1] + a[3]) a[3] = cut - a[1];
+    if (b[1] < cut) {
+      const bot = b[1] + b[3];
+      b[1] = cut;
+      b[3] = Math.max(0.004, bot - cut);
+    }
+  }
+  return items;
+}
+
+/** Start near the source line height and shrink until the translation fits inside the cover. */
 export function fitRegionFont(el: HTMLElement, capPx?: number): void {
   const cap = Math.max(1, Math.floor(capPx ?? el.clientHeight));
-  let px = cap;
-  el.style.fontSize = `${px}px`;
-  el.style.lineHeight = '1';
-  let steps = 0;
-  while (px > 1 && steps < 240 && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1)) {
-    px -= 1;
-    el.style.fontSize = `${px}px`;
-    steps += 1;
+  const overflows = () => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+  el.style.fontSize = `${cap}px`;
+  if (!overflows()) return;
+  let lo = 1;
+  let hi = cap - 1;
+  let best = 1;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    el.style.fontSize = `${mid}px`;
+    if (!overflows()) { best = mid; lo = mid + 1; }
+    else hi = mid - 1;
   }
+  el.style.fontSize = `${best}px`;
 }

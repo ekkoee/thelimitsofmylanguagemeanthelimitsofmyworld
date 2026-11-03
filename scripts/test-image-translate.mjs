@@ -41,6 +41,17 @@ if (process.argv.includes('--self-test')) {
   const placed = api.selectInPlace(parsed.regions);
   check('axis year is not painted', !placed.regions.some((r) => r.textEn === '2014'));
   check('stacked prose becomes one paragraph', placed.mode === 'inplace' && placed.regions.some((r) => r.kind === 'paragraph' && r.textZh.includes('程式碼')));
+  const list = api.selectInPlace([
+    { textEn: '1. Owners of physical bottlenecks. Power generation, transmission,', textZh: '1. 實體瓶頸的所有者。電力生成、傳輸、', box: [0.08, 0.10, 0.82, 0.04] },
+    { textEn: 'grid interconnects, data center land and permits, cooling, and the', textZh: '電網互連、資料中心土地和許可、冷卻以及', box: [0.08, 0.145, 0.82, 0.04] },
+    { textEn: 'long tail ends here.', textZh: '長尾到此。', box: [0.08, 0.19, 0.4, 0.035] },
+    { textEn: 'are the moat.', textZh: '護城河。', box: [0.08, 0.23, 0.28, 0.035] },
+    { textEn: '2. Liability-bearers and licensed entities stay accountable', textZh: '2. 2. 責任承擔者', box: [0.08, 0.25, 0.82, 0.04] },
+  ]);
+  const item = list.regions.find((r) => r.textEn.includes('are the moat'));
+  check('short last line stays inside the paragraph box', !!item && item.kind === 'paragraph' && item.box && item.box[1] + item.box[3] >= 0.22);
+  check('next numbered item stays separate', list.regions.some((r) => r.textEn.startsWith('2.')));
+  check('list marker is written once', list.regions.find((r) => r.textEn.startsWith('2.')).textZh === '2. 責任承擔者');
   check('a title and the subtitle under it stay two regions', placed.regions.filter((r) => r.textZh.includes('生產力') || r.textZh.includes('實際產出')).length === 2);
   check('a bare date is not painted', !placed.regions.some((r) => r.textEn.startsWith('November')));
   execSync(

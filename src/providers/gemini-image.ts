@@ -31,13 +31,14 @@ export interface ImageTranslation {
 
 const IMAGE_PROMPT = [
   'Detect every piece of text in this image.',
-  'Group body text into natural paragraphs: a multi-line paragraph is ONE region whose box covers all of its lines. Translate that paragraph as a whole so the Chinese reads fluently.',
+  'Group body text into natural paragraphs: a multi-line paragraph is ONE region whose box covers every line, from the top of the first line to the bottom of the last line, including a short last line. Translate that paragraph as a whole so the Chinese reads fluently.',
+  'A numbered list item is its own paragraph. Its box must include the list marker (1. 2. …) and every wrapped line.',
   'Keep titles, chart labels, country names, buttons and other short UI text as separate line regions.',
   'Do NOT return regions that are only axis numbers, years, dates, URLs, @handles, or code/model ids.',
   'For each region return:',
-  '- box_2d: [ymin, xmin, ymax, xmax], integers normalized 0-1000, origin at the top left. The box must cover the entire text, including the ends of the line.',
+  '- box_2d: [ymin, xmin, ymax, xmax], integers normalized 0-1000, origin at the top left. The box must cover the entire text, including list markers and the ends of every line.',
   '- text_en: the original wording.',
-  '- text_zh: Traditional Chinese as used in Taiwan. Use 軟體、文件、訊息、資料、程式. Do NOT use 文檔、信息、數據、軟件. Keep numbers, years, and product names.',
+  '- text_zh: Traditional Chinese as used in Taiwan. Use 軟體、文件、訊息、資料、程式. Do NOT use 文檔、信息、數據、軟件. Keep numbers, years, and product names. If the source starts with a list marker, write that marker once at the start of text_zh and do not repeat it.',
   'text_zh MUST be Chinese. Never copy English into text_zh.',
   'If the image has no meaningful text, return {"regions":[]}.',
   'Return ONLY JSON: {"regions":[{"box_2d":[0,0,40,1000],"text_en":"...","text_zh":"..."}]}',
@@ -143,23 +144,32 @@ function stacked(a: [number, number, number, number], b: [number, number, number
   const gap = b[1] - (a[1] + a[3]);
   const overlap = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]);
   const minw = Math.min(a[2], b[2]);
-  const taller = Math.max(a[3], b[3]);
-  const shorter = Math.min(a[3], b[3]);
-  return Math.abs(a[0] - b[0]) < 0.08
-    && shorter >= taller * 0.62
-    && gap < taller * 0.55
-    && gap > -taller * 0.4
-    && overlap > minw * 0.45;
+  // Compare the gap to the incoming line, not the paragraph already merged.
+  // A short last line is much shorter than a three-line box and must still join it.
+  const lineH = Math.max(b[3], 0.01);
+  return Math.abs(a[0] - b[0]) < 0.1
+    && gap < lineH * 0.9
+    && gap > -lineH * 0.5
+    && overlap > minw * 0.4;
+}
+
+/** The source list marker is written once at the start of the translation. */
+export function withSingleListNumber(en: string, zh: string): string {
+  const mark = en.trim().match(/^(\d{1,3}[.)])/);
+  const body = zh.trim().replace(/^(?:\d{1,3}[.)]\s*)+/, '').trim();
+  if (!mark) return zh.trim();
+  return body ? `${mark[1]} ${body}` : mark[1];
 }
 
 function continues(prev: string, next: string): boolean {
   const a = prev.trim();
   const b = next.trim();
   if (!a || !b) return false;
-  if (/[.!?。！？]$/.test(a)) return false;
-  if (isShortLabel(a) && isShortLabel(b)) return false;
-  // Only a wrapped line (it continues in lowercase). Two captions that each
-  // start with a capital stay on their own line.
+  if (/^\d{1,3}[.)](\s|$)/.test(b)) return false;
+  // A title or a one-word sticker does not swallow the line under it.
+  if (isShortLabel(a)) return false;
+  // A wrapped paragraph keeps going when the next line starts lowercase,
+  // even if the previous sentence already ended. A capital starts a new block.
   return /^[a-z("']/.test(b);
 }
 
@@ -185,10 +195,10 @@ export function groupImageRegions(regions: ImageRegion[]): ImageRegion[] {
       prev.kind = 'paragraph';
       continue;
     }
-    const tall = (region.box?.[3] || 0) > 0.055;
-    out.push({ ...region, kind: isProse(region.textEn) && tall ? 'paragraph' : 'line' });
+    const tall = (region.box?.[3] || 0) > 0.045;
+    out.push({ ...region, kind: isProse(region.textEn) && tall ? 'paragraph' : (region.kind || 'line') });
   }
-  return out;
+  return out.map((region) => ({ ...region, textZh: withSingleListNumber(region.textEn, region.textZh) }));
 }
 
 function boxAcceptable(region: ImageRegion): boolean {
