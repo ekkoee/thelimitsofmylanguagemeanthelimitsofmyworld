@@ -81,6 +81,7 @@ export function medianEdgeColor(canvas: HTMLCanvasElement, box: [number, number,
   const samples: number[] = [];
   const step = Math.max(1, Math.floor(Math.max(iw, ih) / 48));
   const take = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= iw || y >= ih) return;
     const i = (y * iw + x) * 4;
     samples.push((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
   };
@@ -94,8 +95,18 @@ export function medianEdgeColor(canvas: HTMLCanvasElement, box: [number, number,
     for (let x = ix0; x < ix1; x += step) { take(x, iy0); take(x, Math.max(iy0, iy1 - 1)); }
   }
   if (!samples.length) return PAPER;
-  samples.sort((a, b) => a - b);
-  const mid = samples[Math.floor(samples.length / 2)];
+  // The most common coarse color is the paper. A few light glyphs must not turn a dark page white.
+  const buckets = new Map<number, number[]>();
+  for (const color of samples) {
+    const key = ((color >> 16) & 0xf0) << 8 | ((color >> 8) & 0xf0) | ((color & 0xf0) >> 4);
+    const list = buckets.get(key);
+    if (list) list.push(color);
+    else buckets.set(key, [color]);
+  }
+  let best: number[] = [];
+  for (const list of buckets.values()) if (list.length > best.length) best = list;
+  best.sort((a, b) => a - b);
+  const mid = best[Math.floor(best.length / 2)];
   return { r: (mid >> 16) & 255, g: (mid >> 8) & 255, b: mid & 255 };
 }
 
@@ -232,37 +243,118 @@ export function renderRegions(
   const spaceW = content.w || ew;
   const spaceH = content.h || eh;
   const placed = separateCovers(regions.map((region) => {
-    if (!region.box || !region.textZh) return region;
+    if (!region.box || !region.textZh.trim()) return { ...region, box: undefined };
     const full = coverSourceBox(region.box, region.textEn || '', canvas);
-    return { ...region, box: padCover(full, spaceW, spaceH) as [number, number, number, number] };
-  }));
+    const lineFrac = region.glyph && region.glyph < full[3] ? region.glyph : Math.min(full[3], 0.045);
+    return { ...region, box: padCover(full, spaceW, spaceH, lineFrac) };
+  })).filter((region) => region.box && region.textZh.trim());
+  const bodyGlyphs = placed
+    .filter((region) => region.kind !== 'heading' && region.glyph && region.glyph < 0.12)
+    .map((region) => region.glyph as number)
+    .sort((a, b) => a - b);
+  const medianGlyph = bodyGlyphs.length ? bodyGlyphs[Math.floor((bodyGlyphs.length - 1) / 2)] : 0;
+  const bodyPx = Math.max(12, Math.round((medianGlyph || 0.028) * spaceH));
+  const headingPx = Math.round(bodyPx * 1.18);
+  const built: { node: HTMLElement; heading: boolean }[] = [];
   for (const region of placed) {
-    if (!region.box || !region.textZh) continue;
-    const padded = region.box;
+    const padded = region.box!;
     const left = content.x + padded[0] * content.w;
     const top = content.y + padded[1] * content.h;
     const width = Math.max(8, padded[2] * content.w);
     const height = Math.max(8, padded[3] * content.h);
     const bg = neutralFill(canvas ? medianEdgeColor(canvas, padded) : { r: 244, g: 241, b: 234 });
+    const heading = region.kind === 'heading';
     const node = document.createElement('div');
-    const paragraph = region.kind === 'paragraph';
-    node.className = paragraph ? 'ibt-img-region ibt-img-paragraph' : 'ibt-img-region';
+    node.className = heading ? 'ibt-img-region ibt-img-heading' : (region.kind === 'bullet' ? 'ibt-img-region ibt-img-bullet' : 'ibt-img-region ibt-img-paragraph');
     node.style.left = `${(left / ew) * 100}%`;
     node.style.top = `${(top / eh) * 100}%`;
     node.style.width = `${(width / ew) * 100}%`;
     node.style.height = `${(height / eh) * 100}%`;
     node.style.background = cssColor(bg);
     node.style.color = contrastColor(bg);
-    node.textContent = region.textZh;
-    overlay.appendChild(node);
-    const words = (region.textEn || region.textZh).trim().split(/\s+/).filter(Boolean).length;
-    const lines = paragraph ? Math.max(1, Math.round(words / 8)) : 1;
-    const linePx = height / lines;
-    node.style.lineHeight = paragraph ? '1.35' : '1';
-    node.style.padding = '2px 4px';
+    node.style.lineHeight = '1.45';
+    node.style.textAlign = 'left';
+    node.style.padding = '3px 6px';
     node.style.boxSizing = 'border-box';
-    fitRegionFont(node, Math.max(1, Math.floor(linePx / (paragraph ? 1.35 : 1))));
+    fillRegion(node, region);
+    overlay.appendChild(node);
+    node.style.fontSize = `${heading ? headingPx : bodyPx}px`;
+    built.push({ node, heading });
   }
+  const bodies = built.filter((item) => !item.heading).map((item) => item.node);
+  const fitted = globalBodySize(bodies, bodyPx);
+  for (const node of bodies) node.style.fontSize = `${fitted}px`;
+  const headPx = Math.max(fitted, Math.round(fitted * 1.18));
+  for (const item of built) {
+    if (!item.heading) continue;
+    item.node.style.fontSize = `${headPx}px`;
+    fitRegionFont(item.node, headPx);
+    if (parseFloat(item.node.style.fontSize) < fitted) item.node.style.fontSize = `${fitted}px`;
+  }
+}
+
+const LINE = '1.45';
+
+function fillRegion(node: HTMLElement, region: ImageRegion): void {
+  const en = region.textEn.trim();
+  let zh = region.textZh.trim().replace(/^[•·▪◦]\s*/, '');
+  let marker = (region.marker || '').trim();
+  if (!marker) {
+    if (/^[•·▪◦]\s*/.test(en)) marker = '•';
+    else {
+      const num = en.match(/^(\d{1,3}[.)])\s*/);
+      if (num) marker = num[1];
+    }
+  }
+  if (/^\d{1,3}[.)]/.test(marker)) zh = zh.replace(/^\d{1,3}[.)]\s*/, '');
+  const labelMatch = zh.match(/^(\d{1,2}月(?:\d{1,2}日)?[：:])\s*/);
+  const bold = region.labelBold !== false && !!labelMatch;
+  const label = bold && labelMatch ? labelMatch[1] : '';
+  if (label) zh = zh.slice(labelMatch![0].length).trim();
+  node.replaceChildren();
+  if (marker) {
+    const mark = document.createElement('span');
+    mark.className = 'ibt-img-mark';
+    mark.textContent = marker;
+    const body = document.createElement('span');
+    body.className = 'ibt-img-body';
+    if (label) {
+      const strong = document.createElement('b');
+      strong.className = 'ibt-img-label';
+      strong.textContent = label;
+      body.append(strong, document.createTextNode(zh ? ` ${zh}` : ''));
+    } else body.textContent = zh;
+    node.append(mark, body);
+    return;
+  }
+  if (label) {
+    const strong = document.createElement('b');
+    strong.className = 'ibt-img-label';
+    strong.textContent = label;
+    node.append(strong, document.createTextNode(zh ? ` ${zh}` : ''));
+    return;
+  }
+  node.textContent = zh;
+}
+
+/** One size for every body block. Shrink only when a block cannot fit, and then shrink them all together. */
+function globalBodySize(nodes: HTMLElement[], preferred: number): number {
+  const floor = Math.max(11, Math.round(preferred * 0.72));
+  const fitsAll = (px: number) => nodes.every((node) => {
+    node.style.fontSize = `${px}px`;
+    node.style.lineHeight = LINE;
+    return node.scrollHeight <= node.clientHeight + 1 && node.scrollWidth <= node.clientWidth + 1;
+  });
+  if (fitsAll(preferred)) return preferred;
+  let lo = floor;
+  let hi = preferred - 1;
+  let best = floor;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (fitsAll(mid)) { best = mid; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  return best;
 }
 
 type Box = [number, number, number, number];
@@ -293,16 +385,17 @@ function includeLeftInk(canvas: HTMLCanvasElement, box: Box): Box {
   const data = ctx.getImageData(x0 - reach, y0, reach, y1 - y0).data;
   const iw = reach;
   const ih = y1 - y0;
+  const lumAt = (x: number, y: number) => {
+    const i = (y * iw + x) * 4;
+    return 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+  };
+  const bg = [lumAt(0, 0), lumAt(iw - 1, 0), lumAt(0, ih - 1), lumAt(iw - 1, ih - 1)].sort((a, b) => a - b)[1];
   const step = Math.max(1, Math.floor(ih / 24));
   let left = iw;
   for (let x = 0; x < iw; x++) {
-    let dark = 0;
-    for (let y = 0; y < ih; y += step) {
-      const i = (y * iw + x) * 4;
-      const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-      if (lum < 170) dark += 1;
-    }
-    if (dark >= 2) { left = x; break; }
+    let ink = 0;
+    for (let y = 0; y < ih; y += step) if (Math.abs(lumAt(x, y) - bg) > 42) ink += 1;
+    if (ink >= 2) { left = x; break; }
   }
   if (left >= iw - 1) return box;
   const nx = (x0 - reach + left) / W;
@@ -310,9 +403,10 @@ function includeLeftInk(canvas: HTMLCanvasElement, box: Box): Box {
 }
 
 /** A few pixels around the full source box. Capped so the pad does not swallow the next paragraph. */
-export function padCover(box: Box, imgW: number, imgH: number): Box {
-  const padX = Math.min(14, Math.max(3, box[3] * imgH * 0.12));
-  const padY = Math.min(8, Math.max(3, box[3] * imgH * 0.08));
+export function padCover(box: Box, imgW: number, imgH: number, lineFrac = box[3]): Box {
+  const linePx = Math.max(8, Math.min(box[3], lineFrac) * imgH);
+  const padX = Math.min(12, Math.max(3, linePx * 0.2));
+  const padY = Math.min(8, Math.max(3, linePx * 0.18));
   const x = Math.max(0, box[0] * imgW - padX);
   const y = Math.max(0, box[1] * imgH - padY);
   const r = Math.min(imgW, (box[0] + box[2]) * imgW + padX);

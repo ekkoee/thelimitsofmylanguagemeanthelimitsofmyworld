@@ -18,9 +18,13 @@ export interface ImageRegion {
   textZh: string;
   /** [x, y, w, h] as fractions of the source image (0–1). */
   box?: [number, number, number, number];
-  /** Source glyph height as a fraction of the image. The cover box may be taller. */
+  /** Source line height as a fraction of the image. Body type uses the median of these. */
   glyph?: number;
-  kind?: 'line' | 'paragraph';
+  kind?: 'line' | 'paragraph' | 'heading' | 'bullet';
+  /** Bullet or number drawn once, outside the wrapped text. */
+  marker?: string;
+  /** Leading date/label was bold in the source. */
+  labelBold?: boolean;
 }
 
 export interface ImageTranslation {
@@ -30,19 +34,39 @@ export interface ImageTranslation {
 }
 
 const IMAGE_PROMPT = [
-  'Detect every piece of text in this image.',
-  'Group body text into natural paragraphs: a multi-line paragraph is ONE region whose box covers every line, from the top of the first line to the bottom of the last line, including a short last line. Translate that paragraph as a whole so the Chinese reads fluently.',
-  'A numbered list item is its own paragraph. Its box must include the list marker (1. 2. …) and every wrapped line.',
-  'Keep titles, chart labels, country names, buttons and other short UI text as separate line regions.',
+  'Read this image as a document and return one region per logical block, never one region per visual line.',
+  'A block is a title, or one bullet, or one paragraph. A bullet that wraps onto several lines is still ONE block.',
+  'box_2d must be the union of every line in that block: from the list marker (• or 1.) through the last word, including inline code such as pyenv.',
+  'block is "heading", "bullet", or "paragraph".',
+  'marker is the bullet character or list number, or "" for a heading or plain paragraph. Do not also put that marker inside text_zh.',
+  'label_bold is true when the leading label (June:, September:, Oct 20:) is bold.',
+  'text_zh is Traditional Chinese as used in Taiwan (軟體、文件、訊息、資料、程式; not 文檔、信息、數據、軟件). Keep product names. Write a bold date label once, like 6月： or 10月20日：.',
   'Do NOT return regions that are only axis numbers, years, dates, URLs, @handles, or code/model ids.',
-  'For each region return:',
-  '- box_2d: [ymin, xmin, ymax, xmax], integers normalized 0-1000, origin at the top left. The box must cover the entire text, including list markers and the ends of every line.',
-  '- text_en: the original wording.',
-  '- text_zh: Traditional Chinese as used in Taiwan. Use 軟體、文件、訊息、資料、程式. Do NOT use 文檔、信息、數據、軟件. Keep numbers, years, and product names. If the source starts with a list marker, write that marker once at the start of text_zh and do not repeat it.',
-  'text_zh MUST be Chinese. Never copy English into text_zh.',
+  'Do NOT return empty boxes. text_zh must be Chinese, never a copy of the English.',
   'If the image has no meaningful text, return {"regions":[]}.',
-  'Return ONLY JSON: {"regions":[{"box_2d":[0,0,40,1000],"text_en":"...","text_zh":"..."}]}',
 ].join('\n');
+
+const IMAGE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    regions: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          box_2d: { type: 'ARRAY', items: { type: 'INTEGER' } },
+          text_en: { type: 'STRING' },
+          text_zh: { type: 'STRING' },
+          block: { type: 'STRING' },
+          marker: { type: 'STRING' },
+          label_bold: { type: 'BOOLEAN' },
+        },
+        required: ['box_2d', 'text_en', 'text_zh', 'block'],
+      },
+    },
+  },
+  required: ['regions'],
+};
 
 export function imageModelChain(_model?: string, imageModel?: string): string[] {
   return routedImageChain({ imageModel: imageModel || 'auto' });
@@ -60,6 +84,7 @@ export function buildImageBody(opts: { mime: string; data: string; model: string
     generationConfig: {
       temperature: 0.2,
       responseMimeType: 'application/json',
+      responseSchema: IMAGE_SCHEMA,
       ...( /gemini-3/i.test(opts.model) ? { thinkingConfig: { thinkingLevel: 'minimal' } } : {}),
     },
   };
@@ -139,18 +164,43 @@ function isShortLabel(en: string): boolean {
   return wordCount(t) <= 4 && t.length <= 28;
 }
 
-/** Wrapped lines of one paragraph. A title sitting above a subtitle stays apart. */
-function stacked(a: [number, number, number, number], b: [number, number, number, number]): boolean {
+function isBlankText(s: string): boolean {
+  return !/[\p{L}\p{N}]/u.test(s || '');
+}
+
+function blockKind(raw: unknown, en: string): ImageRegion['kind'] {
+  const name = typeof raw === 'string' ? raw.toLowerCase() : '';
+  if (name === 'heading' || name === 'title') return 'heading';
+  if (name === 'bullet' || name === 'list') return 'bullet';
+  if (name === 'paragraph') return 'paragraph';
+  if (/^[•·▪◦]\s*/.test(en) || /^(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b/i.test(en)) return 'bullet';
+  if (/^\d{1,3}[.)]\s+\S/.test(en)) return 'bullet';
+  return undefined;
+}
+
+/** A new bullet or heading, not the next wrapped line of the block above. */
+function startsBlock(en: string, kind: ImageRegion['kind']): boolean {
+  if (kind === 'heading') return true;
+  const t = en.trim();
+  if (/^[•·▪◦]\s+/.test(t)) return true;
+  if (/^\d{1,3}[.)]\s+\S/.test(t)) return true;
+  if (/^(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b[^.\n]{0,16}:/i.test(t)) return true;
+  return false;
+}
+
+/** Same column, or an indented wrap, with only a line-gap between them. */
+function sameBlock(a: [number, number, number, number], b: [number, number, number, number]): boolean {
+  const overlapY = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
+  const overlapX = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]);
+  const smaller = Math.min(a[2] * a[3], b[2] * b[3]);
+  if (overlapX > 0 && overlapY > 0 && overlapX * overlapY > smaller * 0.4) return true;
   const gap = b[1] - (a[1] + a[3]);
-  const overlap = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]);
+  const lineH = Math.max(Math.min(a[3], b[3]), 0.012);
+  if (gap > lineH * 1.25 || gap < -lineH * 0.55) return false;
+  const sameLeft = Math.abs(a[0] - b[0]) < 0.09;
+  const indented = b[0] >= a[0] - 0.015 && b[0] <= a[0] + Math.max(0.1, a[2] * 0.28);
   const minw = Math.min(a[2], b[2]);
-  // Compare the gap to the incoming line, not the paragraph already merged.
-  // A short last line is much shorter than a three-line box and must still join it.
-  const lineH = Math.max(b[3], 0.01);
-  return Math.abs(a[0] - b[0]) < 0.1
-    && gap < lineH * 0.9
-    && gap > -lineH * 0.5
-    && overlap > minw * 0.4;
+  return sameLeft || indented || overlapX > minw * 0.3;
 }
 
 /** The source list marker is written once at the start of the translation. */
@@ -161,16 +211,27 @@ export function withSingleListNumber(en: string, zh: string): string {
   return body ? `${mark[1]} ${body}` : mark[1];
 }
 
-function continues(prev: string, next: string): boolean {
-  const a = prev.trim();
-  const b = next.trim();
-  if (!a || !b) return false;
-  if (/^\d{1,3}[.)](\s|$)/.test(b)) return false;
-  // A title or a one-word sticker does not swallow the line under it.
-  if (isShortLabel(a)) return false;
-  // A wrapped paragraph keeps going when the next line starts lowercase,
-  // even if the previous sentence already ended. A capital starts a new block.
-  return /^[a-z("']/.test(b);
+function sameLine(a: [number, number, number, number], b: [number, number, number, number]): boolean {
+  const overlapY = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
+  const minH = Math.min(a[3], b[3]);
+  if (overlapY < minH * 0.45) return false;
+  const gapX = b[0] - (a[0] + a[2]);
+  return gapX < Math.max(a[3], b[3]) * 2.2 && gapX > -minH;
+}
+
+function continues(prev: ImageRegion, next: ImageRegion): boolean {
+  if (!prev.box || !next.box) return false;
+  if (startsBlock(next.textEn, next.kind)) return false;
+  if ((prev.kind === 'heading' || next.kind === 'heading') && sameLine(prev.box, next.box)) return true;
+  if (prev.kind === 'heading' || next.kind === 'heading') return false;
+  if (isShortLabel(prev.textEn) && isShortLabel(next.textEn)) return false;
+  return sameBlock(prev.box, next.box);
+}
+
+function joinText(a: string, b: string): string {
+  if (!a) return b;
+  if (!b) return a;
+  return /\p{Script=Han}/u.test(a) || /\p{Script=Han}/u.test(b) ? `${a}${b}` : `${a} ${b}`;
 }
 
 function union(a: [number, number, number, number], b: [number, number, number, number]): [number, number, number, number] {
@@ -181,24 +242,32 @@ function union(a: [number, number, number, number], b: [number, number, number, 
   return [x, y, r - x, bot - y];
 }
 
-/** Merge stacked body lines into one paragraph box. Labels stay on their own line. */
+/** Merge line fragments of one bullet or paragraph. A heading stays on its own. */
 export function groupImageRegions(regions: ImageRegion[]): ImageRegion[] {
-  const items = regions.filter((r) => r.box).slice().sort((a, b) => a.box![1] - b.box![1] || a.box![0] - b.box![0]);
+  const items = regions
+    .filter((r) => r.box && !(isBlankText(r.textEn) && isBlankText(r.textZh)))
+    .slice()
+    .sort((a, b) => a.box![1] - b.box![1] || a.box![0] - b.box![0]);
   const out: ImageRegion[] = [];
   for (const region of items) {
     const prev = out[out.length - 1];
-    if (prev?.box && region.box && continues(prev.textEn, region.textEn) && stacked(prev.box, region.box)) {
-      prev.box = union(prev.box, region.box);
+    const lineH = region.box![3];
+    if (prev && continues(prev, region)) {
+      prev.box = union(prev.box!, region.box!);
       prev.textEn = `${prev.textEn} ${region.textEn}`.replace(/\s+/g, ' ').trim();
-      prev.textZh = `${prev.textZh}${region.textZh}`;
-      prev.glyph = Math.max(prev.glyph || 0, region.glyph || 0) || undefined;
-      prev.kind = 'paragraph';
+      prev.textZh = joinText(prev.textZh, region.textZh);
+      const lines = [prev.glyph, region.glyph, lineH].filter((n): n is number => !!n && n > 0 && n < 0.12);
+      prev.glyph = lines.length ? lines.sort((a, b) => a - b)[Math.floor((lines.length - 1) / 2)] : prev.glyph;
+      if (prev.kind !== 'bullet' && prev.kind !== 'heading') prev.kind = 'paragraph';
+      prev.labelBold = prev.labelBold || region.labelBold;
       continue;
     }
-    const tall = (region.box?.[3] || 0) > 0.045;
-    out.push({ ...region, kind: isProse(region.textEn) && tall ? 'paragraph' : (region.kind || 'line') });
+    const kind = region.kind || (isProse(region.textEn) ? 'paragraph' : 'line');
+    out.push({ ...region, kind, glyph: region.glyph && region.glyph < 0.12 ? region.glyph : (lineH < 0.12 ? lineH : region.glyph) });
   }
-  return out.map((region) => ({ ...region, textZh: withSingleListNumber(region.textEn, region.textZh) }));
+  return out
+    .filter((region) => !isBlankText(region.textZh))
+    .map((region) => ({ ...region, textZh: withSingleListNumber(region.textEn, region.textZh) }));
 }
 
 function boxAcceptable(region: ImageRegion): boolean {
@@ -242,9 +311,18 @@ export function parseImageTranslation(raw: string): { text: string; regions: Ima
         const textEn = typeof r.text_en === 'string' ? r.text_en.trim() : '';
         const textZh = typeof r.text_zh === 'string' ? r.text_zh.trim()
           : (typeof r.text === 'string' ? r.text.trim() : '');
-        if (!textEn && !textZh) continue;
+        if (isBlankText(textEn) && isBlankText(textZh)) continue;
         const boxRaw = (r as { box_2d?: unknown }).box_2d ?? r.box;
-        regions.push({ textEn, textZh, box: boxToFractions(boxRaw) });
+        const marker = typeof (r as { marker?: unknown }).marker === 'string' ? (r as { marker: string }).marker.trim() : '';
+        const bold = (r as { label_bold?: unknown }).label_bold;
+        regions.push({
+          textEn,
+          textZh,
+          box: boxToFractions(boxRaw),
+          kind: blockKind((r as { block?: unknown }).block, textEn),
+          marker,
+          labelBold: typeof bold === 'boolean' ? bold : undefined,
+        });
       }
     }
     const text = regions.map((r) => r.textZh).filter(Boolean).join('\n')

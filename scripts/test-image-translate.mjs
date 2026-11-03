@@ -32,7 +32,7 @@ if (process.argv.includes('--self-test')) {
       { text_en: 'The model writes high quality code very quickly and the whole team', text_zh: '這個模型寫程式又快又好，整個團隊', box_2d: [200, 40, 250, 900] },
       { text_en: 'notices how fast the new code lands.', text_zh: '都注意到新程式碼有多快。', box_2d: [255, 40, 310, 900] },
       { text_en: 'Productivity is surging in AI-adopting sectors in the US, but not elsewhere', text_zh: '美國採用 AI 的產業生產力激增，但其他地區則否', box_2d: [20, 20, 60, 980] },
-      { text_en: 'Real output per worker in AI-adopting sectors versus the earlier trend', text_zh: '採用 AI 的產業中每位工人的實際產出，對比先前趨勢', box_2d: [80, 20, 120, 980] },
+      { text_en: 'Real output per worker in AI-adopting sectors versus the earlier trend', text_zh: '採用 AI 的產業中每位工人的實際產出，對比先前趨勢', box_2d: [180, 20, 230, 980] },
       { text_en: 'November 7, 2026', text_zh: '2026年11月7日', box_2d: [400, 40, 430, 300] },
     ],
   }));
@@ -52,6 +52,19 @@ if (process.argv.includes('--self-test')) {
   check('short last line stays inside the paragraph box', !!item && item.kind === 'paragraph' && item.box && item.box[1] + item.box[3] >= 0.22);
   check('next numbered item stays separate', list.regions.some((r) => r.textEn.startsWith('2.')));
   check('list marker is written once', list.regions.find((r) => r.textEn.startsWith('2.')).textZh === '2. 責任承擔者');
+  const bullet = api.selectInPlace([
+    { textEn: 'How the attack worked (the chain)', textZh: '攻擊是如何進行的', box: [0.04, 0.04, 0.7, 0.04], kind: 'heading' },
+    { textEn: '條', textZh: '條', box: [0.76, 0.045, 0.06, 0.03] },
+    { textEn: 'September: Another engineer got a fake job interview through a job platform. The attacker', textZh: '9月：另一位工程師透過求職平台獲得了一份虛假的求職面試。攻擊者', box: [0.06, 0.28, 0.88, 0.035], kind: 'bullet', marker: '•', labelBold: true },
+    { textEn: 'built trust over two rounds, then had him download an assignment containing malware.', textZh: '透過兩輪建立信任，然後讓他下載了一個含有惡意軟體的作業。', box: [0.1, 0.32, 0.84, 0.035] },
+    { textEn: 'legitimate pyenv file for a malicious one,', textZh: '合法的 pyenv 檔換成惡意檔，', box: [0.12, 0.36, 0.7, 0.032] },
+    { textEn: 'Oct 20: The attacker used that engineer’s machine.', textZh: '10月20日：攻擊者利用該工程師的機器。', box: [0.06, 0.46, 0.88, 0.035], kind: 'bullet' },
+  ]);
+  const sep = bullet.regions.find((r) => r.textEn.includes('pyenv'));
+  check('a bullet’s wrapped lines, including inline code, are one block', !!sep && sep.kind === 'bullet' && sep.box && sep.box[1] < 0.3 && sep.box[1] + sep.box[3] > 0.38);
+  check('the next dated bullet stays separate', bullet.regions.filter((r) => r.kind === 'bullet').length === 2);
+  check('a title fragment on the same line joins the heading', bullet.regions.filter((r) => r.kind === 'heading').length === 1 && bullet.regions.some((r) => r.kind === 'heading' && r.textZh.includes('條')));
+  check('blank box is dropped', !api.selectInPlace([{ textEn: '   ', textZh: '   ', box: [0.1, 0.1, 0.2, 0.05] }]).regions.length);
   check('a title and the subtitle under it stay two regions', placed.regions.filter((r) => r.textZh.includes('生產力') || r.textZh.includes('實際產出')).length === 2);
   check('a bare date is not painted', !placed.regions.some((r) => r.textEn.startsWith('November')));
   execSync(
