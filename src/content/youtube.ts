@@ -1,3 +1,4 @@
+import { redactSecrets } from '../core/errors';
 import { AlignedPair, Settings, TranslateBatchResponse, TranslateResponse } from '../core/types';
 import { SELECTORS, queryFirst } from './selectors';
 import { onUrlChange } from '../utils/observer';
@@ -439,7 +440,7 @@ class TrackCaptions {
         if (!this.warned) {
           this.warned = true;
           if (quota) console.warn('[IBT] 翻譯被限流（429），稍後自動重試。若使用 Gemini，請檢查 API key 的額度，或改用免費 Google 翻譯。');
-          else console.warn('[IBT] 翻譯失敗：', msg, '（稍後重試）');
+          else console.warn('[IBT] 翻譯失敗：', redactSecrets(msg).slice(0, 180), '（稍後重試）');
         }
       })
       .finally(() => batch.forEach((i) => this.inflight.delete(i)));

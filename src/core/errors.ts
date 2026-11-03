@@ -1,7 +1,16 @@
-/** Short text for the page. The raw API body stays in the console. */
+/** Short text for the page. Console output is a short, redacted slice of the error. */
 
 import { t } from './i18n';
 import { allExhaustedMessage, nextPacificMidnight, parseQuotaFailure } from './quota-router';
+
+/** Drop API keys and query-string credentials before anything is printed. */
+export function redactSecrets(msg: string): string {
+  return msg
+    .replace(/([?&]key=)[^&\s]+/gi, '$1(redacted)')
+    .replace(/\bAIza[0-9A-Za-z\-_]{8,}\b/g, '(redacted-key)')
+    .replace(/\bAQ\.[0-9A-Za-z\-_]{8,}\b/g, '(redacted-key)')
+    .replace(/(x-goog-api-key["']?\s*[:=]\s*["']?)[^"'\s,}]+/gi, '$1(redacted)');
+}
 
 export function retrySeconds(message: string): number | null {
   const msg = message || '';
@@ -15,7 +24,7 @@ export function retrySeconds(message: string): number | null {
 
 export function friendlyTranslateError(err: unknown, kind: 'page' | 'image' = 'page'): string {
   const msg = String((err as { message?: unknown })?.message ?? err ?? '');
-  console.log('[IBT] error', kind, msg.slice(0, 500));
+  console.log('[IBT] error', kind, redactSecrets(msg).slice(0, 180));
   const raw = /[{"]|\b(429|401|403|400|500|502|503|504)\b|NO_API_KEY|API_KEY|IMAGE_ECHO|timeout|timed out|abort|failed to fetch|networkerror|quota|rate.?limit|resource.exhausted|too many requests/i.test(msg);
   if (!raw && msg.length > 0 && msg.length < 220) return msg;
   if (/IMAGE_ECHO/.test(msg)) return t('imageFailed');

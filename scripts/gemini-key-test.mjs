@@ -52,7 +52,7 @@ check('a network failure is unknown', await checkGeminiKey(sample, async () => {
 
 const page = readFileSync(`${root}src/providers/gemini.ts`, 'utf8');
 const route = readFileSync(`${root}src/core/gemini-route.ts`, 'utf8');
-check('page translation still sends the key as a query parameter', page.includes('?key=${encodeURIComponent(key)}'));
+check('page translation sends the key in a header, not the query', page.includes("'x-goog-api-key': key") && !page.includes('?key='));
 check('image route sends x-goog-api-key and not a query key', route.includes("'x-goog-api-key': opts.key") && !route.includes('?key='));
 
 if (failures) {

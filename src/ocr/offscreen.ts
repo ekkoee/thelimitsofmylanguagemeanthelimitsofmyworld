@@ -1,6 +1,7 @@
 // Local OCR for image translation. Runs in the extension offscreen document so
 // the page stays responsive. Language data is downloaded once, hashed, and cached.
 
+import { redactSecrets } from '../core/errors';
 import { setUiLang, t } from '../core/i18n';
 import { loadSettings } from '../core/storage';
 import { hushTessConsole } from './quiet-log';
@@ -178,7 +179,8 @@ async function recognize(mime: string, data: string): Promise<{ regions: { text:
   return { regions: tokensToRegions(tokens, width, height), ms: Date.now() - t0 };
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender?.id !== chrome.runtime.id) return;
   if (msg?.type !== 'ibt-offscreen-ocr') return;
   enqueue(async () => {
     await useUiLang();
@@ -187,7 +189,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     .then((result) => sendResponse({ ok: true, ...result }))
     .catch((err) => {
       const message = String((err as Error)?.message || err);
-      console.log('[IBT] ocr failed', message.slice(0, 300));
+      console.log('[IBT] ocr failed', redactSecrets(message).slice(0, 180));
       const friendly = message.length > 0 && message.length < 200 && !/[{]/.test(message) ? message : t('ocrFailed');
       sendResponse({ ok: false, error: friendly });
     });

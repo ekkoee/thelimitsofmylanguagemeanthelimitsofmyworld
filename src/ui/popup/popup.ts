@@ -1,6 +1,6 @@
 import { normalizeGeminiKey } from '../../core/gemini-key';
 import { UI_FIXED, applyI18n, setUiLang, t, watchUiLang } from '../../core/i18n';
-import { loadSettings, saveSettings } from '../../core/storage';
+import { GEMINI_KEY_STORAGE, loadSettings, saveSettings } from '../../core/storage';
 import { DEFAULT_MODELS, ProviderId, Settings } from '../../core/types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -152,7 +152,10 @@ function bindEngine(initial: Settings): void {
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (writing || area !== 'sync' || !changes.ibt_settings) return;
+    if (writing) return;
+    const syncChanged = area === 'sync' && !!changes.ibt_settings;
+    const keyChanged = area === 'local' && !!changes[GEMINI_KEY_STORAGE];
+    if (!syncChanged && !keyChanged) return;
     void loadSettings().then(paint);
   });
 }

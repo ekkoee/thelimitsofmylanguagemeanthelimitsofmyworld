@@ -38,12 +38,14 @@ let layoutKey = '';
 
 export function startNetflix(getSettings: () => Settings): void {
   settingsRef = getSettings;
-  nfLog('content script ready', location.href);
+  nfLog('content script ready', location.host + location.pathname);
   const root = document.documentElement;
   const docObs = new MutationObserver(() => scheduleRead());
   docObs.observe(root, { childList: true, subtree: true });
   onUrlChange((url) => {
-    nfLog('navigation', url);
+    let where = '';
+    try { const u = new URL(url); where = u.host + u.pathname; } catch { where = ''; }
+    nfLog('navigation', where);
     lastCue = '';
     generation++;
     layoutKey = '';

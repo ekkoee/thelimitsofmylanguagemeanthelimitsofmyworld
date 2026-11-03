@@ -1,6 +1,7 @@
 // One Gemini generateContent call at a time, on the best model that still has quota.
 // Image calls give up a silent socket after 15s and keep the whole chain under 20s.
 
+import { redactSecrets } from './errors';
 import { t as ui } from './i18n';
 import {
   IMAGE_BODY_TIMEOUT_MS,
@@ -96,7 +97,7 @@ async function callModel(
     throw new RouteSignal('network', null, 0, model);
   }
   if (!res.ok) {
-    opts.log?.(`[IBT] ${opts.purpose} gemini fail model=${model} status=${res.status} ${raw.slice(0, 300)}`);
+    opts.log?.(`[IBT] ${opts.purpose} gemini fail model=${model} status=${res.status} ${redactSecrets(raw).slice(0, 180)}`);
     if (res.status === 400 || res.status === 401 || res.status === 403) {
       if (/api[_ ]?key|API_KEY_INVALID|unregistered|permission denied/i.test(raw)) {
         throw new RouteSignal('auth', null, res.status, model);

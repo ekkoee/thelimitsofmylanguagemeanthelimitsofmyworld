@@ -9,7 +9,7 @@ import { loadSettings } from '../core/storage';
 import { pageFontPx } from './page-font';
 import { belowAnchor, imageDecision, shouldSkipImageTarget } from './image-place';
 import { renderRegions } from './image-inplace';
-import { friendlyTranslateError } from '../core/errors';
+import { friendlyTranslateError, redactSecrets } from '../core/errors';
 import { IMAGE_JPEG_QUALITY, IMAGE_MAX_EDGE, ImageRegion, isMostlyLatin, selectInPlace } from '../providers/gemini-image';
 
 const inflight = new Map<string, Promise<void>>();
@@ -31,12 +31,13 @@ export function startImageTranslate(): void {
   }, true);
   if (listening) return;
   listening = true;
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (sender?.id !== chrome.runtime.id) return;
     if (msg?.type !== 'ibt-image') return;
     void run(String(msg.srcUrl || ''))
       .then(() => sendResponse({ ok: true }))
       .catch((err) => {
-        console.log('[IBT] image translate failed', err);
+        console.log('[IBT] image translate failed', redactSecrets(String(err?.message ?? err)).slice(0, 160));
         sendResponse({ ok: false, error: String(err?.message ?? err) });
       });
     return true;
@@ -168,7 +169,7 @@ async function runOne(img: ImgHit, srcUrl: string): Promise<void> {
         paintPanel(shell, shown);
         return;
       }
-      console.log('[IBT] vision unavailable, local ocr', (resp?.error || '').slice(0, 120));
+      console.log('[IBT] vision unavailable, local ocr', redactSecrets(resp?.error || '').slice(0, 120));
     }
     const ocr = await chrome.runtime.sendMessage({
       type: 'ibt-ocr-translate', mime: bytes.mime, data: bytes.data,
@@ -203,7 +204,7 @@ async function paintGeminiFromOcr(shell: HTMLElement, img: ImgHit, bytes: Bytes)
   }) as { ok?: boolean; regions?: { text: string; box: [number, number, number, number]; glyph?: number }[]; ms?: number; error?: string };
   if (!shell.isConnected) return [];
   if (!ocr?.ok || !(ocr.regions || []).length) {
-    console.log('[IBT] image ocr miss', Math.round(performance.now() - ocrT), 'ms', (ocr?.error || '').slice(0, 80));
+    console.log('[IBT] image ocr miss', Math.round(performance.now() - ocrT), 'ms', redactSecrets(ocr?.error || '').slice(0, 80));
     return null;
   }
   console.log('[IBT] image ocr', ocr.ms ?? Math.round(performance.now() - ocrT), 'ms lines', ocr.regions!.length);

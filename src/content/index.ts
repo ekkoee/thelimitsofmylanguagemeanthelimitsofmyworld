@@ -38,7 +38,8 @@ import { Settings } from '../core/types';
   // Alt+A (or the popup button) on these auto-sites cycles the 3-state display:
   // original + translation → original only → translation only (pure CSS, no re-translation).
   let lastDirectToggle = 0;
-  chrome.runtime.onMessage.addListener((msg) => {
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    if (sender?.id !== chrome.runtime.id) return;
     if (msg?.type === 'ibt-toggle-visibility') {
       // If our own keydown handler just toggled (<1s ago), skip — the SW
       // command and the keypress both fire for one Alt+A, don't double-toggle.

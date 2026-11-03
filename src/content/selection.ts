@@ -2,6 +2,7 @@
 // shows the source, the translation, and copy. Speaking reads the original.
 // Inputs and editable fields are left alone.
 
+import { redactSecrets } from '../core/errors';
 import { t } from '../core/i18n';
 import { langTag } from '../core/lang-tag';
 import { loadSettings } from '../core/storage';
@@ -443,7 +444,7 @@ async function fillCard(
     if (id !== req || !body.isConnected) return;
     delete body.dataset.i18n;
     body.textContent = t('translationFailed');
-    console.log('[IBT] selection failed', err);
+    console.log('[IBT] selection failed', redactSecrets(String((err as { message?: unknown })?.message ?? err)).slice(0, 160));
   }
 }
 

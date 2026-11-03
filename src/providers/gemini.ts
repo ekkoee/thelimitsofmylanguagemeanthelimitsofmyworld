@@ -12,12 +12,12 @@ export const geminiProvider: TranslationProvider = {
     const key = settings.apiKeys.gemini?.trim();
     if (!key) throw new Error('NO_API_KEY:gemini');
     const model = settings.model || 'gemini-3.5-flash-lite';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
     const t0 = performance.now();
     const res = await fetchWithRetry(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode }) }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify({ sentences: input.sentences }) }] }],

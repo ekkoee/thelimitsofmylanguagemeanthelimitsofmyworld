@@ -1,4 +1,4 @@
-import { loadSettings } from '../core/storage';
+import { GEMINI_KEY_STORAGE, loadSettings } from '../core/storage';
 import { cacheKey, getCached, putCached } from '../core/cache';
 import { paraphraseForMT } from '../core/paraphrase';
 import { TaskQueue } from '../core/queue';
@@ -8,7 +8,7 @@ import { findTermMatches, lookupGlossary, TermMatch } from '../core/glossary';
 import { toTraditional } from '../core/st2t';
 import { LlmBatcher, isQuotaError, isUnusableResponse } from '../core/llm-batcher';
 import { AlignedPair, LookupResponse, RuntimeMessage, Settings, TranslateBatchResponse, TranslateResponse, WordLookup } from '../core/types';
-import { friendlyTranslateError } from '../core/errors';
+import { friendlyTranslateError, redactSecrets } from '../core/errors';
 import { setUiLang, t } from '../core/i18n';
 import { buildImageTextBody, echoesEnglish, parseImageText, shouldSkipImageText, translateImageSequential } from '../providers/gemini-image';
 import { normalizeGeminiKey } from '../core/gemini-key';
@@ -116,15 +116,24 @@ setQuotaAlign(async (key) => {
   bindCurrentQuota();
 });
 
+function logHost(url: string | undefined): string {
+  if (!url) return '';
+  try { return new URL(url).host; } catch { return ''; }
+}
+
+function logErr(err: unknown): string {
+  return redactSecrets(String((err as Error)?.message || err)).slice(0, 160);
+}
+
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'sync' || !changes.ibt_settings) return;
-  const prevLang = (changes.ibt_settings.oldValue as { uiLang?: string } | undefined)?.uiLang || '';
-  const nextLang = (changes.ibt_settings.newValue as { uiLang?: string } | undefined)?.uiLang || '';
-  if (prevLang !== nextLang) void ensureImageMenu();
-  const prevBag = changes.ibt_settings.oldValue as { apiKeys?: { gemini?: string } } | undefined;
-  const nextBag = changes.ibt_settings.newValue as { apiKeys?: { gemini?: string } } | undefined;
-  const prev = normalizeGeminiKey(prevBag?.apiKeys?.gemini || '');
-  const nextKey = normalizeGeminiKey(nextBag?.apiKeys?.gemini || '');
+  if (area === 'sync' && changes.ibt_settings) {
+    const prevLang = (changes.ibt_settings.oldValue as { uiLang?: string } | undefined)?.uiLang || '';
+    const nextLang = (changes.ibt_settings.newValue as { uiLang?: string } | undefined)?.uiLang || '';
+    if (prevLang !== nextLang) void ensureImageMenu();
+  }
+  if (area !== 'local' || !changes[GEMINI_KEY_STORAGE]) return;
+  const prev = normalizeGeminiKey(typeof changes[GEMINI_KEY_STORAGE].oldValue === 'string' ? changes[GEMINI_KEY_STORAGE].oldValue : '');
+  const nextKey = normalizeGeminiKey(typeof changes[GEMINI_KEY_STORAGE].newValue === 'string' ? changes[GEMINI_KEY_STORAGE].newValue : '');
   if (prev === nextKey) return;
   void fingerprintKey(nextKey).then((id) => {
     quotaState = quotaForKey(quotaState, id);
@@ -166,7 +175,7 @@ async function deliverImageClick(tabId: number, srcUrl: string): Promise<void> {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['image-inject.js'] });
     await send();
   } catch (err) {
-    console.log('[IBT] image inject failed', err);
+    console.log('[IBT] image inject failed', logErr(err));
   }
 }
 
@@ -187,27 +196,28 @@ async function handleAltA(tab: chrome.tabs.Tab | undefined): Promise<void> {
     // Prefer the content script already on the page (LinkedIn included).
     // The listener calls sendResponse; a missing script rejects instead.
     await chrome.tabs.sendMessage(tab.id, { type: 'ibt-toggle-page' });
-    console.log('[IBT] command delivered to content script', tab.url);
+    console.log('[IBT] command delivered to content script', logHost(tab.url));
     return;
   } catch (err) {
-    console.log('[IBT] command message failed', tab.url, err);
+    console.log('[IBT] command message failed', logHost(tab.url), logErr(err));
   }
   try {
     await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['bilingual.css'] });
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['universal-inject.js'] });
-    console.log('[IBT] command inject fallback', tab.url);
+    console.log('[IBT] command inject fallback', logHost(tab.url));
   } catch (e) {
-    console.log('[IBT] inject skipped:', e);
+    console.log('[IBT] inject skipped:', logErr(e));
   }
 }
 
 chrome.commands.onCommand.addListener(async (command, tab) => {
-  console.log('[IBT] command:', command, '→', tab?.url);
+  console.log('[IBT] command:', command, '→', logHost(tab?.url));
   if (command !== 'toggle-page-translation') return;
   await handleAltA(tab);
 });
 
-chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, sendResponse) => {
+  if (sender?.id !== chrome.runtime.id) return;
   if (msg?.type === 'translate') {
     handleTranslate(msg.text, { title: msg.title, mode: msg.mode })
       .then((pairs) => sendResponse({ ok: true, pairs } satisfies TranslateResponse))
@@ -227,7 +237,7 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, _sender, sendResponse
     return true;
   }
   if (msg?.type === 'ibt-capture-tab') {
-    const windowId = _sender.tab?.windowId;
+    const windowId = sender.tab?.windowId;
     chrome.tabs.captureVisibleTab(windowId ?? chrome.windows.WINDOW_ID_CURRENT, { format: 'png' }, (dataUrl) => {
       const err = chrome.runtime.lastError;
       if (err || !dataUrl) sendResponse({ ok: false, error: err?.message || 'capture failed' });
@@ -281,7 +291,7 @@ async function fetchImageBytes(url: string): Promise<{ mime: string; data: strin
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.log('[IBT] image fetch failed', res.status, url.slice(0, 120));
+      console.log('[IBT] image fetch failed', res.status, logHost(url));
       return null;
     }
     const mime = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
@@ -290,7 +300,7 @@ async function fetchImageBytes(url: string): Promise<{ mime: string; data: strin
     console.log('[IBT] image fetch ok', mime, data.length);
     return { mime, data };
   } catch (err) {
-    console.log('[IBT] image fetch blocked', String((err as Error)?.message || err).slice(0, 140), url.slice(0, 120));
+    console.log('[IBT] image fetch blocked', logErr(err), logHost(url));
     return null;
   }
 }
@@ -304,7 +314,7 @@ async function translateImageMessage(mime: string, data: string) {
   const sig = `${data.length}:${data.slice(0, 48)}:${data.slice(-24)}`;
   const hit = imageInflight.get(sig);
   if (hit) {
-    console.log('[IBT] image gemini deduped', sig.slice(0, 24));
+    console.log('[IBT] image gemini deduped');
     return hit;
   }
   const job = withImageLock(async () => {
@@ -364,7 +374,7 @@ async function translateOcrLines(lines: string[]): Promise<string[]> {
     }
     if ([...found.keys()].length === lines.length) return lines.map((_, i) => found.get(i) || '');
   } catch (err) {
-    console.log('[IBT] ocr batch translate failed', String((err as Error)?.message || err).slice(0, 160));
+    console.log('[IBT] ocr batch translate failed', logErr(err));
   }
   const out: string[] = [];
   for (const line of lines) {
@@ -445,7 +455,7 @@ async function chineseLine(en: string, zh: string, settings: Settings): Promise<
     const t = pairs.map((p) => p.t).join('').trim();
     if (t && !echoesEnglish(source, t)) return t;
   } catch (err) {
-    console.log('[IBT] image text fallback failed', String((err as Error)?.message || err).slice(0, 180));
+    console.log('[IBT] image text fallback failed', logErr(err));
   }
   return '';
 }
@@ -567,7 +577,7 @@ async function withFreeFallback<T>(
     // fallback attempt is strictly better than showing an error immediately.
     // If Microsoft fails too, its error propagates to the UI as before.
     if (settings.provider === 'google') {
-      console.warn(`[IBT] Google free endpoint failed (${String((err as Error)?.message ?? err).slice(0, 80)}) → falling back to Microsoft`);
+      console.warn(`[IBT] Google free endpoint failed (${logErr(err).slice(0, 80)}) → falling back to Microsoft`);
       return run(getProvider('microsoft'));
     }
     throw err;
@@ -812,7 +822,7 @@ async function handleTranslateBatch(texts: string[]): Promise<string[]> {
       // lower-quality text is never served later as if it were the LLM's.
       if (!isQuotaError(err) && !isUnusableResponse(err)) throw err;
       penalizeLLM();
-      console.warn('[IBT] subtitle batch fell back to the free engine:', String((err as Error)?.message ?? err).slice(0, 80));
+      console.warn('[IBT] subtitle batch fell back to the free engine:', logErr(err).slice(0, 80));
       const freeSettings = { ...settings, provider: 'google' as const, model: '' };
       const freeTarget = cacheTarget(freeSettings);
       const freeKeys = texts.map((t) => cacheKey('google', '', freeTarget, t.trim()));

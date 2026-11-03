@@ -251,7 +251,7 @@ export class UniversalTranslator {
         const rect = node.getBoundingClientRect();
         const inView = rect.bottom > 0 && rect.top < (window.innerHeight || 800) + 200 && rect.height >= 8;
         if (this.settings.translateOnVisible && !(onLinkedIn && inView)) {
-          if (onLinkedIn) console.log('[IBT] queued for view', unit.text.slice(0, 60));
+          if (onLinkedIn) console.log('[IBT] queued for view', unit.text.length);
           this.ensureIO().observe(node);
         } else this.render(node);
       }
@@ -306,7 +306,7 @@ export class UniversalTranslator {
     const text = payloadForUnit(node, raw, this.settings.targetLangCode);
     if (text == null) return;
     const sig = (node as any).__ibtSig || fingerprint(raw);
-    console.log('[IBT] request sent', text.slice(0, 80));
+    console.log('[IBT] request sent', text.length);
     const block = renderTranslationAfter(node, text, { sig });
     if (block) {
       block.classList.add('ibt-uni');

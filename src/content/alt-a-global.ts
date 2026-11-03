@@ -18,7 +18,7 @@ import { startLinkedIn } from './linkedin';
 import { startImageTranslate } from './image-translate';
 import { startSelectionTranslate } from './selection';
 
-console.log('[IBT] content script loaded', location.hostname, location.href);
+console.log('[IBT] content script loaded', location.hostname);
 watchUiLang();
 startImageTranslate();
 startSelectionTranslate();
@@ -95,7 +95,8 @@ if (AUTO_SITE_RE.test(location.href)) {
     onAltA().catch((err) => console.log('[IBT] Alt+A failed', err));
   });
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (sender?.id !== chrome.runtime.id) return;
     if (msg?.type !== 'ibt-toggle-page') return;
     console.log('[IBT] Alt+A received (popup/command)', location.hostname);
     onAltA()

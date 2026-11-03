@@ -2,6 +2,14 @@
 
 本專案版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/);格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)。
 
+## [1.5.8] — 2026-11-03
+### 修正 Fixed
+- **Gemini 金鑰只留在這台電腦。** 不再寫進 Chrome 同步。這台電腦若已同步過金鑰，下次開啟時會搬到本機並從同步設定清掉。其他電腦需要再貼一次。
+- **紀錄不印金鑰，也不印整段原文。** 頁面翻譯把金鑰放在 HTTPS 標頭，不再放進網址。
+
+### 新增 Added
+- 隱私說明（[PRIVACY.md](PRIVACY.md)）。GitHub 加上 CodeQL 與每週的 Dependabot。
+
 ## [1.5.7] — 2026-11-03
 ### 修正 Fixed
 - **圖片翻譯改由本機認字、再一次把整張圖的段落交給 Gemini。** 每一則條列各自一塊，藍色反白的字也會認。同一張圖再翻不用重送。

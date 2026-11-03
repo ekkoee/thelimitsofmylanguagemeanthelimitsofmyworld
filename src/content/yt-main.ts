@@ -17,9 +17,13 @@
 
   function decodeEntities(s: string): string {
     if (!s || s.indexOf('&') === -1) return s;
-    const ta = document.createElement('textarea');
-    ta.innerHTML = s;
-    return ta.value;
+    // Decode entities without parsing the caption as HTML. Escaping "<" first
+    // stops a subtitle from closing the textarea and injecting a tag.
+    const doc = new DOMParser().parseFromString(
+      `<!DOCTYPE html><textarea>${s.replace(/</g, '&lt;')}</textarea>`,
+      'text/html',
+    );
+    return doc.querySelector('textarea')?.value ?? s;
   }
 
   function dedupe(cues: any[]): any[] {

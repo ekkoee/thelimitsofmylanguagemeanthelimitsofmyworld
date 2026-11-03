@@ -1,6 +1,8 @@
 import { DEFAULT_SETTINGS, LEGACY_DEFAULT_COLOR, Settings, normalizeTint } from './types';
 
 const SETTINGS_KEY = 'ibt_settings';
+/** Gemini key stays on this computer. It is never written to chrome.storage.sync. */
+export const GEMINI_KEY_STORAGE = 'ibt_gemini_key';
 
 /** Retired defaults (old blue, then gold). Empty and any other color stay as the user set them. */
 const RETIRED_TEXT_COLORS = new Set([LEGACY_DEFAULT_COLOR, '#f2d492']);
@@ -73,6 +75,21 @@ function normalizeSettings(s: Settings & { linkedinExpandTranslate?: unknown; db
   };
 }
 
+function blankGemini(keys: Partial<Settings['apiKeys']> | undefined): Settings['apiKeys'] {
+  return { ...DEFAULT_SETTINGS.apiKeys, ...(keys ?? {}), gemini: '' };
+}
+
+async function readLocalGemini(): Promise<string> {
+  const raw = await chrome.storage.local.get(GEMINI_KEY_STORAGE);
+  const value = raw?.[GEMINI_KEY_STORAGE];
+  return typeof value === 'string' ? value : '';
+}
+
+async function writeLocalGemini(value: string): Promise<void> {
+  if (value) await chrome.storage.local.set({ [GEMINI_KEY_STORAGE]: value });
+  else await chrome.storage.local.remove(GEMINI_KEY_STORAGE);
+}
+
 export async function loadSettings(): Promise<Settings> {
   const raw = await chrome.storage.sync.get(SETTINGS_KEY);
   const stored = (raw?.[SETTINGS_KEY] ?? {}) as Partial<Settings> & { linkedinExpandTranslate?: unknown; transHighlightSet?: boolean; transColorSet?: boolean; slopButton?: unknown; slopApi?: unknown; slopApiKey?: unknown };
@@ -80,25 +97,33 @@ export async function loadSettings(): Promise<Settings> {
   const dropSlop = 'slopButton' in stored || 'slopApi' in stored || 'slopApiKey' in stored;
   const needColor = !colorChosen(stored) && isLegacyDefaultColor(stored.transColor);
   const needTint = !highlightChosen(stored);
-  // deep-ish merge so new default keys appear after upgrades
+  const syncKey = typeof stored.apiKeys?.gemini === 'string' ? stored.apiKeys.gemini : '';
+  let gemini = await readLocalGemini();
+  if (!gemini && syncKey) {
+    gemini = syncKey;
+    await writeLocalGemini(syncKey);
+  }
+  // deep-ish merge so new default keys appear after upgrades. The sync copy never supplies the key.
   const merged = {
     ...DEFAULT_SETTINGS,
     ...stored,
     sites: { ...DEFAULT_SETTINGS.sites, ...(stored.sites ?? {}) },
-    apiKeys: { ...DEFAULT_SETTINGS.apiKeys, ...(stored.apiKeys ?? {}) },
+    apiKeys: blankGemini(stored.apiKeys),
   } as Settings & { transHighlightSet?: boolean; linkedinExpandTranslate?: unknown };
   if (needTint) {
     merged.transHighlight = true;
     merged.transHighlightSet = true;
   }
   const next = normalizeSettings(merged);
-  // Drop a stored #6c7aff so the new default shows up, without rewriting other fields.
-  if (needColor || needTint || dropLinkedIn || dropSlop) {
+  next.apiKeys = { ...next.apiKeys, gemini };
+  // Drop a stored #6c7aff so the new default shows up, and pull any leftover key out of sync.
+  if (needColor || needTint || dropLinkedIn || dropSlop || syncKey) {
     const patched = { ...stored } as Partial<Settings> & { transHighlightSet?: boolean; transColorSet?: boolean; linkedinExpandTranslate?: unknown; slopButton?: unknown; slopApi?: unknown; slopApiKey?: unknown };
     delete patched.linkedinExpandTranslate;
     delete patched.slopButton;
     delete patched.slopApi;
     delete patched.slopApiKey;
+    patched.apiKeys = blankGemini(stored.apiKeys);
     if (needColor) {
       patched.transColor = '';
       patched.transColorSet = true;
@@ -120,14 +145,19 @@ export async function saveSettings(patch: Partial<Settings>): Promise<Settings> 
     sites: { ...current.sites, ...(patch.sites ?? {}) },
     apiKeys: { ...current.apiKeys, ...(patch.apiKeys ?? {}) },
   };
-  await chrome.storage.sync.set({ [SETTINGS_KEY]: next });
+  await writeLocalGemini(next.apiKeys.gemini || '');
+  await chrome.storage.sync.set({
+    [SETTINGS_KEY]: { ...next, apiKeys: blankGemini(next.apiKeys) },
+  });
   return next;
 }
 
 export function onSettingsChanged(cb: (s: Settings) => void): void {
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'sync' && changes[SETTINGS_KEY]) {
-      cb(normalizeSettings({ ...DEFAULT_SETTINGS, ...(changes[SETTINGS_KEY].newValue as Settings) }));
-    }
+    const syncChanged = area === 'sync' && !!changes[SETTINGS_KEY];
+    const keyChanged = area === 'local' && !!changes[GEMINI_KEY_STORAGE];
+    if (!syncChanged && !keyChanged) return;
+    // Re-read so a sync write (which stores an empty key) cannot clobber the local key.
+    void loadSettings().then(cb).catch(() => {});
   });
 }

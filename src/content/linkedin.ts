@@ -279,7 +279,7 @@ export function startLinkedIn(): void {
   const w = window as unknown as { __ibtLiWatch?: boolean };
   if (w.__ibtLiWatch) return;
   w.__ibtLiWatch = true;
-  console.log('[IBT] LinkedIn expand watcher ready', location.href);
+  console.log('[IBT] LinkedIn expand watcher ready', location.hostname);
 
   document.addEventListener('click', (e) => {
     const kind = controlFromElement(e.target as Element);
