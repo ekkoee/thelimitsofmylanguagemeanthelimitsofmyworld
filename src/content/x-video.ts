@@ -13,7 +13,7 @@ import { Settings, TranslateBatchResponse, TranslateResponse } from '../core/typ
 import { sendMessage } from '../utils/runtime';
 import { langTag } from '../core/lang-tag';
 import { el } from '../utils/dom';
-import { Rect, XCue, captionTextMatches, hidesNativeCaption, isXCaptionText, mediaIdFromUrl, overlayUsedWidth, xCaptionBox, xCaptionFontPx, xVideoView } from './x-vtt';
+import { Rect, XCue, captionVariant, hidesNativeCaption, isXCaptionText, mediaIdFromUrl, overlayUsedWidth, xCaptionBox, xCaptionFontPx, xVideoView } from './x-vtt';
 
 const CHUNK = 12;
 let settingsRef: () => Settings = () => ({} as Settings);
@@ -96,6 +96,8 @@ interface Bound {
   zh: HTMLDivElement;
   en: HTMLDivElement;
   hiddenNodes: HTMLElement[];
+  heldTracks: TextTrack[];
+  variant: string;
   lastText: string;
   lastDomText: string;
   layoutKey: string;
@@ -122,7 +124,7 @@ function bind(video: HTMLVideoElement): void {
   overlay.style.display = 'none';
   if (getComputedStyle(player).position === 'static') player.style.position = 'relative';
   player.appendChild(overlay);
-  const bound: Bound = { video, player, overlay, zh, en, hiddenNodes: [], lastText: '', lastDomText: '', layoutKey: '', resize: undefined as unknown as ResizeObserver };
+  const bound: Bound = { video, player, overlay, zh, en, hiddenNodes: [], heldTracks: [], variant: '', lastText: '', lastDomText: '', layoutKey: '', resize: undefined as unknown as ResizeObserver };
   bound.resize = new ResizeObserver(() => place(bound));
   bound.resize.observe(player);
   bound.resize.observe(video);
@@ -144,6 +146,9 @@ function adoptVideo(b: Bound, video: HTMLVideoElement): void {
   const next = area(video);
   const prev = b.video.isConnected ? area(b.video) : 0;
   if (next < prev) return;
+  releaseTextTracks(b, true);
+  b.video.classList.remove('ibt-x-hide-cue');
+  b.variant = '';
   b.resize.unobserve(b.video);
   bounds.delete(b.video);
   b.video = video;
@@ -171,24 +176,21 @@ function tick(): void {
 function paint(b: Bound): void {
   const { video } = b;
   if (!video.isConnected) {
+    clearNative(b, false);
     b.resize.disconnect();
     b.overlay.remove();
     bounds.delete(video);
     attached.delete(video);
     return;
   }
-  if (xVideoView(settingsRef().viewMode) === 'orig') {
-    clearNative(b);
-    hide(b);
-    return;
-  }
   const cues = cuesFor(video);
   const player = b.player.isConnected ? b.player : playerOf(video);
   b.player = player;
   const cc = ccState(player);
-  const trackOn = textTrackOn(video);
+  const trackOn = textTrackOn(video) || b.heldTracks.length > 0;
   // CC explicitly off: nothing, even if the "From @account" chip is on screen.
-  if (cc === false) { clearNative(b); hide(b); return; }
+  // Don't force the track back to showing — the player already turned it off.
+  if (cc === false) { clearNative(b, false); hide(b); return; }
   const domNow = findCaptionNode(player, video);
   // A fetched track is shown while CC is on. If the CC button is not in the DOM
   // (controls hidden), a real caption line or a showing TextTrack means it is on.
@@ -196,21 +198,21 @@ function paint(b: Bound): void {
     const ms = video.currentTime * 1000;
     const cue = cues.find((c) => ms >= c.start && ms < c.end) || null;
     showCue(b, cue?.text || '', translated.get(cue?.text || '') || '');
-    syncNative(b, cue?.text || '', domNow);
-    place(b, b.hiddenNodes[0] || domNow, cue?.text || '');
+    syncNative(b, true);
+    place(b, b.hiddenNodes[0] || null, cue?.text || '');
     return;
   }
   // No track. Fall back only while X is actually painting a caption line.
   const dom = domNow;
-  if (!dom) { clearNative(b); hide(b); return; }
+  if (!dom) { clearNative(b, true); hide(b); return; }
   const text = (dom.textContent || '').replace(/\s+/g, ' ').trim();
   if (text && text !== b.lastDomText) {
     b.lastDomText = text;
     void translateOne(text);
   }
   showCue(b, text, translated.get(text) || '');
-  syncNative(b, text, dom);
-  place(b, b.hiddenNodes[0] || dom, text);
+  syncNative(b, true);
+  place(b, b.hiddenNodes[0] || null, text);
 }
 
 function cuesFor(video: HTMLVideoElement): XCue[] | null {
@@ -268,22 +270,55 @@ function ccState(player: HTMLElement): boolean | null {
   return null;
 }
 
-function findCaptionNode(player: HTMLElement, video: HTMLVideoElement): HTMLElement | null {
+function captionSearchRoots(video: HTMLVideoElement, player: HTMLElement): ParentNode[] {
+  const roots: ParentNode[] = [];
+  const add = (n: ParentNode | null | undefined) => {
+    if (n && !roots.includes(n)) roots.push(n);
+  };
+  add(player);
+  add(video.closest('[data-testid="videoComponent"]'));
+  add(video.closest('[data-testid="quoteTweet"], [data-testid="card.wrapper"]'));
+  add(video.closest('article'));
+  return roots;
+}
+
+function walkElements(root: ParentNode, visit: (el: HTMLElement) => void, depth = 0): void {
+  if (depth > 4) return;
+  root.querySelectorAll('span, div, p').forEach((node) => visit(node as HTMLElement));
+  root.querySelectorAll('*').forEach((node) => {
+    const sr = (node as HTMLElement).shadowRoot;
+    if (sr) walkElements(sr, visit, depth + 1);
+  });
+}
+
+/** Caption-sized lines on the picture. Not matched by cue string — X's line is often longer. */
+function nativeCaptionNodes(video: HTMLVideoElement, player: HTMLElement): HTMLElement[] {
   const vr = video.getBoundingClientRect();
-  if (vr.width < 40 || vr.height < 40) return null;
+  if (vr.width < 40 || vr.height < 40) return [];
   const videoRect = toRect(vr);
-  let best: HTMLElement | null = null;
-  let bestLen = 0;
-  player.querySelectorAll('span, div, p').forEach((node) => {
-    const n = node as HTMLElement;
+  const found: HTMLElement[] = [];
+  const visit = (n: HTMLElement) => {
+    if (found.includes(n)) return;
     if (n.closest('.ibt-x-overlay, .ibt-block, button, [role="button"], a')) return;
-    if (n.querySelector('.ibt-x-overlay, .ibt-block, button')) return;
+    if (n.querySelector('.ibt-x-overlay, .ibt-block, button, [role="button"]')) return;
     const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
     const r = n.getBoundingClientRect();
     if (!isXCaptionText(t, toRect(r), videoRect)) return;
-    // The full caption line, not an inner word span. Width is what we anchor to.
-    if (r.width > bestLen) { best = n; bestLen = r.width; }
-  });
+    found.push(n);
+  };
+  for (const root of captionSearchRoots(video, player)) walkElements(root, visit);
+  // A word span and its line both match. Keep the outer line.
+  return found.filter((n) => !found.some((other) => other !== n && other.contains(n)));
+}
+
+function findCaptionNode(player: HTMLElement, video: HTMLVideoElement): HTMLElement | null {
+  const nodes = nativeCaptionNodes(video, player);
+  let best: HTMLElement | null = null;
+  let bestLen = 0;
+  for (const n of nodes) {
+    const w = n.getBoundingClientRect().width;
+    if (w > bestLen) { best = n; bestLen = w; }
+  }
   return best;
 }
 
@@ -295,12 +330,15 @@ function showCue(b: Bound, en: string, zh: string): void {
   b.zh.lang = langTag(settingsRef().targetLangCode);
   if (b.en.textContent !== en) b.en.textContent = en;
   if (b.zh.textContent !== zh) b.zh.textContent = zh;
-  b.zh.style.display = zh ? '' : 'none';
-  // Chinese-only is the X default: native CC already shows English. Inline
-  // !important beats the page view, which stays bilingual for tweets.
-  if (mode === 'both' && en) b.en.style.removeProperty('display');
+  // 對照 shows both lines. 只顯示譯文 / 只顯示原文 keep a single line in this box.
+  // Inline !important beats the page view, which stays bilingual for tweets.
+  const showZh = mode !== 'orig' && !!zh;
+  const showEn = mode !== 'zh' && !!en;
+  if (showZh) b.zh.style.removeProperty('display');
+  else b.zh.style.setProperty('display', 'none', 'important');
+  if (showEn) b.en.style.removeProperty('display');
   else b.en.style.setProperty('display', 'none', 'important');
-  const on = !!(en || zh);
+  const on = showZh || showEn;
   b.overlay.style.setProperty('display', on ? 'flex' : 'none', 'important');
   b.lastText = en;
 }
@@ -310,80 +348,87 @@ function hide(b: Bound): void {
 }
 
 function hideAll(): void {
-  for (const [, b] of bounds) { clearNative(b); hide(b); }
+  for (const [, b] of bounds) { clearNative(b, true); hide(b); }
 }
 
-function normCue(s: string): string {
-  return s.replace(/\s+/g, ' ').trim();
+function cueTracks(video: HTMLVideoElement): TextTrack[] {
+  const list = video.textTracks;
+  if (!list) return [];
+  const out: TextTrack[] = [];
+  for (let i = 0; i < list.length; i++) {
+    const tr = list[i];
+    if (tr.kind === 'subtitles' || tr.kind === 'captions') out.push(tr);
+  }
+  return out;
 }
 
 /**
- * Our box already contains the caption, so hide X's native line — the DOM node
- * and the browser's ::cue — in every view except 只顯示原文.
+ * Browser ::cue paints from a text track in mode "showing". "hidden" keeps the
+ * cues readable and stops that paint. Tracks the player sets to "disabled"
+ * (CC off) are left alone.
  */
-function syncNative(b: Bound, text: string, node: HTMLElement | null): void {
-  clearNative(b);
-  if (!hidesNativeCaption(settingsRef().viewMode) || !text) return;
+function suppressTextTracks(b: Bound): boolean {
+  const still: TextTrack[] = [];
+  for (const tr of cueTracks(b.video)) {
+    if (tr.mode === 'disabled') continue;
+    if (tr.mode !== 'showing' && !b.heldTracks.includes(tr)) continue;
+    try { if (tr.mode !== 'hidden') tr.mode = 'hidden'; } catch { continue; }
+    still.push(tr);
+  }
+  b.heldTracks = still;
+  return still.length > 0;
+}
+
+function releaseTextTracks(b: Bound, restore: boolean): void {
+  for (const tr of b.heldTracks) {
+    try { if (restore && tr.mode === 'hidden') tr.mode = 'showing'; } catch { /* detached */ }
+  }
+  b.heldTracks = [];
+}
+
+/**
+ * Hide X's own line while our box is up. DOM overlays (uploader captions) are
+ * the node on the picture. ASR / browser cues are the video text track. Both
+ * can be active on the same player. The track is not removed.
+ */
+function syncNative(b: Bound, active: boolean): void {
+  if (!active || !hidesNativeCaption(settingsRef().viewMode)) {
+    clearNative(b, true);
+    return;
+  }
   b.video.classList.add('ibt-x-hide-cue');
+  const cue = suppressTextTracks(b);
   const player = b.player?.isConnected ? b.player : playerOf(b.video);
-  // Captions sometimes sit in videoComponent, just outside videoPlayer.
-  const root = (b.video.closest('[data-testid="videoComponent"]') as HTMLElement) || player;
-  const hosts = captionHosts(root, b.video, text);
-  if (!hosts.length && node && node.isConnected) hosts.push(captionHost(node, root, text));
+  const hosts = nativeCaptionNodes(b.video, player);
+  for (const n of b.hiddenNodes) {
+    if (hosts.includes(n)) continue;
+    n.classList.remove('ibt-x-native-cap');
+    n.style.removeProperty('visibility');
+    n.style.removeProperty('opacity');
+  }
   for (const host of hosts) {
     host.classList.add('ibt-x-native-cap');
     host.style.setProperty('visibility', 'hidden', 'important');
     host.style.setProperty('opacity', '0', 'important');
   }
   b.hiddenNodes = hosts;
-}
-
-/** Every line-sized copy of this cue (a word span's parent, and a second duplicate). */
-function captionHosts(root: HTMLElement, video: HTMLVideoElement, cue: string): HTMLElement[] {
-  const cueN = normCue(cue);
-  const vr = video.getBoundingClientRect();
-  const seen = new Set<HTMLElement>();
-  const out: HTMLElement[] = [];
-  root.querySelectorAll('span, div, p').forEach((node) => {
-    const n = node as HTMLElement;
-    if (n.closest('.ibt-x-overlay, .ibt-block, button, [role="button"], a')) return;
-    const t = normCue(n.textContent || '');
-    if (!captionTextMatches(t, cueN) || t.length < cueN.length - 2) return;
-    const r = n.getBoundingClientRect();
-    if (r.width < 8 || r.height < 4) return;
-    if (r.bottom < vr.top || r.top > vr.bottom + 24) return;
-    const host = captionHost(n, root, cue);
-    if (seen.has(host)) return;
-    seen.add(host);
-    out.push(host);
-  });
-  out.sort((a, c) => c.getBoundingClientRect().width - a.getBoundingClientRect().width);
-  return out;
-}
-
-/** Climb to the wrapper that still holds only this cue (word spans share a parent). */
-function captionHost(node: HTMLElement, player: HTMLElement, cue: string): HTMLElement {
-  const cueN = normCue(cue);
-  let host = node;
-  let parent = node.parentElement;
-  while (parent && parent !== player && parent !== document.body && parent !== document.documentElement) {
-    if (parent.classList.contains('ibt-x-overlay') || parent.classList.contains('ibt-block')) break;
-    if (parent.querySelector(':scope > button, :scope > [role="button"]')) break;
-    if (!captionTextMatches(normCue(parent.textContent || ''), cueN)) break;
-    host = parent;
-    parent = parent.parentElement;
+  const kind = captionVariant(hosts.length > 0, cue);
+  if (kind !== b.variant) {
+    b.variant = kind;
+    console.log('[IBT] X 字幕原生層', kind);
   }
-  return host;
 }
 
-function clearNative(b: Bound): void {
+function clearNative(b: Bound, restore: boolean): void {
   for (const n of b.hiddenNodes) {
     n.classList.remove('ibt-x-native-cap');
     n.style.removeProperty('visibility');
     n.style.removeProperty('opacity');
   }
   b.hiddenNodes = [];
+  releaseTextTracks(b, restore);
   b.video.classList.remove('ibt-x-hide-cue');
+  b.variant = '';
 }
 
 function place(b: Bound, native?: HTMLElement | null, cueText?: string): void {

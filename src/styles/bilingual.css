@@ -556,10 +556,12 @@
 video.ibt-x-hide-cue::-webkit-media-text-track-container,
 video.ibt-x-hide-cue::-webkit-media-text-track-display {
   display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
 }
 video.ibt-x-hide-cue::cue {
-  visibility: hidden;
-  opacity: 0;
+  visibility: hidden !important;
+  opacity: 0 !important;
 }
 
 .ibt-yt-line {
@@ -593,7 +595,6 @@ video.ibt-x-hide-cue::cue {
 /* orig: hide every translation we added → only the page's own original text */
 :root[data-ibt-view="orig"] .ibt-block,
 :root[data-ibt-view="orig"] .ibt-yt-overlay,
-:root[data-ibt-view="orig"] .ibt-x-overlay,
 :root[data-ibt-view="orig"] .ibt-nf-overlay,
 :root[data-ibt-view="orig"] .ibt-yt-line { display: none !important; }
 

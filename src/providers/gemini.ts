@@ -1,8 +1,5 @@
 import { Settings } from '../core/types';
 import { TranslateInput, TranslationProvider, buildSystemPrompt, coerceTranslations, fetchWithRetry } from './base';
-import { GeminiFallbackError, geminiGuard, isGeminiFallbackError } from './gemini-guard';
-
-export { GEMINI_COOLDOWN_MS, GEMINI_SOFT_TIMEOUT_MS, GEMINI_TIMEOUT_STREAK, createGeminiGuard, geminiGuard, isGeminiFallbackError } from './gemini-guard';
 
 /** Gemini 3 family model ids support thinkingLevel (v3 API shape). */
 function isGemini3(model: string): boolean {
@@ -18,10 +15,9 @@ export const geminiProvider: TranslationProvider = {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
 
     const t0 = performance.now();
-    const res = await geminiGuard.run((signal) => fetchWithRetry(url, {
+    const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: buildSystemPrompt(input.targetLang, input.sourceLang, { pageTitle: input.pageTitle, mode: input.mode }) }] },
         contents: [{ role: 'user', parts: [{ text: JSON.stringify({ sentences: input.sentences }) }] }],
@@ -37,24 +33,8 @@ export const geminiProvider: TranslationProvider = {
           ...(isGemini3(model) ? { thinkingConfig: { thinkingLevel: 'minimal' } } : {}),
         },
       }),
-    }, { label: 'gemini', maxRetries: 1, noRetry429: true })).catch((err: unknown) => {
-      if (isGeminiFallbackError(err)) throw err;
-      if (isNetworkError(err)) {
-        console.warn('[IBT] gemini network → google');
-        throw new GeminiFallbackError('network');
-      }
-      throw err;
-    });
-    if (!res.ok) {
-      const detail = await safeBody(res);
-      // 429 already fell back. 5xx and a forbidden/quota 403 do too. A 400 is a
-      // bad request or key and still surfaces to the user.
-      if (res.status === 429 || res.status === 403 || res.status >= 500) {
-        console.warn(`[IBT] gemini ${res.status} → google`);
-        throw new GeminiFallbackError('http', `Gemini ${res.status}: ${detail}`);
-      }
-      throw new Error(`Gemini ${res.status}: ${detail}`);
-    }
+    }, { label: 'gemini', maxRetries: 1, noRetry429: true });
+    if (!res.ok) throw new Error(`Gemini ${res.status}: ${await safeBody(res)}`);
     const data = await res.json();
     // Timing log for diagnosing latency: ms/sent/tokens. If `ms` is large but
     // `out` is small, time went to pacing/queue, not the model. `think` > 0
@@ -70,12 +50,4 @@ export const geminiProvider: TranslationProvider = {
 
 async function safeBody(res: Response): Promise<string> {
   try { return (await res.text()).slice(0, 300); } catch { return ''; }
-}
-
-function isNetworkError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
-  const name = (err as { name?: string }).name || '';
-  if (name === 'AbortError') return false;
-  const msg = String((err as { message?: unknown }).message ?? err);
-  return name === 'TypeError' || /failed to fetch|networkerror|fetch failed|econnreset|enotfound|eai_again/i.test(msg);
 }

@@ -35,7 +35,6 @@ export async function fetchWithRetry(
   const maxRetries = opts?.maxRetries ?? 3;
   let last: Response | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (init.signal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError');
     const res = await fetch(url, init);
     // Gemini free-tier 429s take tens of seconds to clear — retrying within a
     // few seconds is pointless and only delays the batch fallback to the free
@@ -48,25 +47,9 @@ export async function fetchWithRetry(
     const base = Number.isFinite(retryAfter) && retryAfter > 0
       ? retryAfter * 1000
       : Math.min(8000, 1000 * 2 ** attempt); // 1s, 2s, 4s, cap 8s
-    await waitForRetry(base * (0.8 + Math.random() * 0.4), init.signal);
+    await new Promise((r) => setTimeout(r, base * (0.8 + Math.random() * 0.4)));
   }
   return last as Response;
-}
-
-function waitForRetry(ms: number, signal?: AbortSignal | null): Promise<void> {
-  if (!signal) return new Promise((r) => setTimeout(r, ms));
-  if (signal.aborted) return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(new DOMException('The operation was aborted.', 'AbortError'));
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
 }
 
 export function buildSystemPrompt(

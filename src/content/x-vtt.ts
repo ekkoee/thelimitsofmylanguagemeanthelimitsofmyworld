@@ -125,17 +125,27 @@ export function isXCaptionText(text: string, node: Rect, video: Rect): boolean {
 /**
  * What a video draws. Chinese and English share one caption box (order comes
  * from 影片字幕順序). An explicit translation-only / original-only view still wins.
- * Unset stays bilingual so the native line can be hidden instead of leaving
- * a second caption under ours.
+ * Unset stays bilingual. In every view the box replaces X's own caption line.
  */
 export function xVideoView(explicit: string | undefined | null): 'zh' | 'both' | 'orig' {
   if (explicit === 'zh' || explicit === 'both' || explicit === 'orig') return explicit;
   return 'both';
 }
 
-/** Our box is on screen, so the player's own text track must not also show. */
-export function hidesNativeCaption(explicit: string | undefined | null): boolean {
-  return xVideoView(explicit) !== 'orig';
+/**
+ * Our box replaces X's own caption in every view (對照、只顯示譯文、只顯示原文).
+ * The text track stays enabled so cue text can still be read.
+ */
+export function hidesNativeCaption(_explicit: string | undefined | null): boolean {
+  return true;
+}
+
+/** Which native renderer we had to hide. Logged once per change. */
+export function captionVariant(dom: boolean, cue: boolean): 'dom' | 'cue' | 'dom+cue' | 'none' {
+  if (dom && cue) return 'dom+cue';
+  if (dom) return 'dom';
+  if (cue) return 'cue';
+  return 'none';
 }
 
 /**

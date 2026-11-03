@@ -5,7 +5,7 @@ execSync(
   'npx esbuild src/content/x-vtt.ts --bundle --platform=node --format=esm --outfile=/tmp/x-vtt.test.mjs --log-level=error',
   { cwd: new URL('..', import.meta.url).pathname, stdio: 'inherit' },
 );
-const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth, isPlayerChromeText, isXCaptionText, xVideoView, captionTextMatches, nativeCueFontPx, nativeCueReservePx, cueLineCount, overlayBottomClearingCue } = await import('/tmp/x-vtt.test.mjs');
+const { parseXVtt, stripXTags, mediaIdFromUrl, subtitleUris, xCaptionBox, xCaptionFontPx, overlayBottomAbove, overlayUsedWidth, isPlayerChromeText, isXCaptionText, xVideoView, captionTextMatches, hidesNativeCaption, captionVariant, nativeCueFontPx, nativeCueReservePx, cueLineCount, overlayBottomClearingCue } = await import('/tmp/x-vtt.test.mjs');
 
 let failures = 0;
 function check(name, cond) {
@@ -87,6 +87,12 @@ check('x video default is bilingual', xVideoView(undefined) === 'both' && xVideo
 check('explicit bilingual wins', xVideoView('both') === 'both');
 check('explicit chinese wins', xVideoView('zh') === 'zh');
 check('explicit original wins', xVideoView('orig') === 'orig');
+check('native caption hidden in every view', hidesNativeCaption('both') && hidesNativeCaption('zh') && hidesNativeCaption('orig') && hidesNativeCaption(''));
+check('variant names', captionVariant(true, false) === 'dom' && captionVariant(false, true) === 'cue' && captionVariant(true, true) === 'dom+cue' && captionVariant(false, false) === 'none');
+const nativeLine = 'you want to be able to verify';
+const ourCue = 'able to verify that';
+check('longer native line is not an exact cue match', !captionTextMatches(nativeLine, ourCue));
+check('longer native line is still a caption by place', isXCaptionText(nativeLine, centered, picture));
 const cue = 'Pete Hegseth, everybody knows that guy from the locker room';
 check('full cue matches', captionTextMatches(cue, cue));
 check('word span matches', captionTextMatches('everybody', cue));
