@@ -369,6 +369,8 @@ class TrackCaptions {
     s.setProperty('right', 'auto', 'important');
     s.setProperty('top', 'auto', 'important');
     s.setProperty('max-width', `${Math.round(vr.width * 0.9)}px`, 'important');
+    s.setProperty('font-size', `${size}px`, 'important');
+    s.setProperty('padding', '0.2em 0.75em', 'important');
     if (this.zhEl) this.zhEl.style.fontSize = `${size}px`;
     if (this.enEl) this.enEl.style.fontSize = `${size}px`;
   }
@@ -459,9 +461,9 @@ class TrackCaptions {
     const v = this.video();
     const vr = v?.getBoundingClientRect();
     const base = vr && vr.width > 20
-      ? xCaptionFontPx(vr.width, vr.height, 1)
-      : Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
-    const size = Math.round(base * this.settings.fontScale);
+      ? xCaptionFontPx(vr.width, vr.height, this.settings.fontScale || 1)
+      : xCaptionFontPx(this.player.clientWidth, this.player.clientHeight, this.settings.fontScale || 1);
+    const size = base;
     if (this.enEl) this.enEl.style.fontSize = `${size}px`;
     if (this.zhEl) {
       this.zhEl.style.fontSize = `${size}px`;
@@ -601,8 +603,8 @@ class DomCaptions {
     const tag = langTag(this.settings.targetLangCode);
     this.spanEl.lang = tag;
     if (this.lineEl) this.lineEl.lang = tag;
-    const base = Math.min(46, Math.max(16, this.player.clientHeight * 0.036));
-    this.spanEl.style.fontSize = `${Math.round(base * this.settings.fontScale)}px`;
+    const base = xCaptionFontPx(this.player.clientWidth, this.player.clientHeight, this.settings.fontScale || 1);
+    this.spanEl.style.fontSize = `${base}px`;
   }
   private setText(t: string): void {
     if (this.spanEl && this.spanEl.textContent !== t) this.spanEl.textContent = t || '';

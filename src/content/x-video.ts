@@ -479,6 +479,8 @@ function place(b: Bound, native?: HTMLElement | null, cueText?: string): void {
   s.setProperty('top', 'auto', 'important');
   s.setProperty('z-index', '5', 'important');
   s.setProperty('font-size', `${size}px`, 'important');
+  s.setProperty('padding', '0.15em 0.55em', 'important');
+  s.setProperty('max-width', `${maxW}px`, 'important');
   applyCaptionWidth(b, maxW, size);
 }
 

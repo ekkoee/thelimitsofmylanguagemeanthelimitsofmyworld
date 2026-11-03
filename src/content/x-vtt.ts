@@ -199,14 +199,17 @@ export function overlayBottomClearingCue(letterbox: number, controlsOverlap: num
 }
 
 /**
- * Font size from the rendered video box. A portrait clip is tall and narrow,
- * so the width drives the size; height only caps it. 310px-wide timeline
- * players stay near X's own caption size instead of covering the face.
+ * Caption type size as a fraction of the picture. 32px on a 1080p frame is the
+ * fullscreen size that already looks right; the same fraction is used for the
+ * default player, theater, and the mini player. The shorter side is the basis
+ * so a portrait clip does not size type from its height. fontScale multiplies
+ * the whole scale, including the readable floor and the 4K ceiling.
  */
 export function xCaptionFontPx(width: number, height: number, fontScale = 1): number {
+  const scale = fontScale > 0 ? fontScale : 1;
   const basis = Math.min(Math.max(0, width), Math.max(0, height));
-  const px = Math.min(32, Math.max(12, basis * 0.046));
-  return Math.round(px * (fontScale || 1));
+  const px = basis * (32 / 1080) * scale;
+  return Math.round(Math.min(72 * scale, Math.max(11 * scale, px)));
 }
 
 /**

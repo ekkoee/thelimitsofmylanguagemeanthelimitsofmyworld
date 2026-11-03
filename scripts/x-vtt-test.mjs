@@ -48,11 +48,11 @@ check('clears letterbox and controls', box.bottom === (480 - 440) + Math.round(M
 check('width follows the video', box.maxWidth === Math.round(640 * 0.92));
 
 // 310×560 timeline player: width drives the size, not the tall portrait height.
-check('small portrait font', xCaptionFontPx(310, 560) === 14);
-check('font ignores the tall side', xCaptionFontPx(310, 560) === xCaptionFontPx(310, 2000));
-check('fullscreen font caps', xCaptionFontPx(1280, 720) === 32);
-check('tiny player floor', xCaptionFontPx(180, 320) === 12);
-check('font scale after clamp', xCaptionFontPx(310, 560, 1.5) === 21);
+check('portrait uses the short side', xCaptionFontPx(310, 560) === xCaptionFontPx(310, 2000));
+check('1080p keeps the fullscreen size', xCaptionFontPx(1920, 1080) === 32);
+check('720p is the same fraction of the picture', xCaptionFontPx(1280, 720) === 21);
+check('360p stays readable', xCaptionFontPx(640, 360) === 11);
+check('font scale multiplies the 1080p size', xCaptionFontPx(1920, 1080, 1.5) === 48);
 
 // Chinese line sits a fixed gap above the native caption. A taller English
 // line moves captionTop up, and the CSS bottom grows by the same amount.
